@@ -54,10 +54,14 @@ func init() {
 	}
 }
 
-const wakeHelp = `The Totem keeps Bluetooth off to save power. To make it connectable,
-double-press the power button: the crystal breathes blue while it
-advertises. A Totem that was recently connected also advertises in short
-bursts for fast reconnects.
+const wakeHelp = `The Totem keeps Bluetooth off to save power and switches it off again
+after every session. To make it connectable, double-press the power button:
+the crystal breathes blue while it advertises. The double-press toggles, so
+if it doesn't breathe blue, press again.
+
+A Totem connected to another device, such as the Totem phone app, stops
+advertising and can't be found. Close the app (or turn off the phone's
+Bluetooth) before using totemctl.
 
 On macOS the first run asks for Bluetooth access for your terminal
 (System Settings → Privacy & Security → Bluetooth).`
@@ -75,7 +79,7 @@ func usage() {
 func main() {
 	g := &globals{out: &printer{out: os.Stdout}}
 	flag.StringVar(&g.device, "d", os.Getenv("TOTEM_DEVICE"), "Totem to use: name or address substring (default: first found; env TOTEM_DEVICE)")
-	flag.DurationVar(&g.scanTimeout, "scan-timeout", 20*time.Second, "how long to look for the Totem")
+	flag.DurationVar(&g.scanTimeout, "scan-timeout", 60*time.Second, "how long to look for the Totem")
 	flag.BoolVar(&g.out.json, "json", false, "print results as JSON lines")
 	flag.BoolVar(&g.out.quiet, "q", false, "suppress progress messages")
 	flag.BoolVar(&g.trace, "trace", false, "print every BLE frame to stderr")

@@ -139,7 +139,9 @@ func Find(ctx context.Context, match string) (Device, error) {
 		if match != "" {
 			what = fmt.Sprintf("a Totem matching %q", match)
 		}
-		return Device{}, fmt.Errorf("did not find %s: its Bluetooth is probably asleep; double-press the power button so the crystal breathes blue", what)
+		return Device{}, fmt.Errorf("did not find %s. A Totem is only visible while its crystal breathes blue: "+
+			"double-press the power button (it toggles Bluetooth, so press again if it doesn't breathe blue). "+
+			"If the Totem phone app is open nearby, close it: a connected Totem stops advertising", what)
 	}
 	return *dev, nil
 }
