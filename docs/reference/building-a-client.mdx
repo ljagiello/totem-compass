@@ -196,20 +196,23 @@ coordinates for 2 h (v5.0.3; 4 h in v5.0.2).
 ## ESP-NOW mesh client
 
 To join the mesh peer-to-peer instead of going through a phone, send/receive raw ESP-NOW
-frames on the fleet's channel.
+frames on the fleet's channel. The repository's Go `mesh` package encodes and decodes these
+frames, and the `emulator` package plus `cmd/totememu` run a complete Totem on an ESP32 with
+TinyGo: see [ESP32 emulator](/reference/esp32-emulator).
 
 ### Radio setup
 
 | Item | Value |
 | --- | --- |
-| Channel | **6** (`self.channel = 6` default; also settable at runtime via `set_channel`) |
-| PHY | `WIFI_PROTOCOL_LR` (Espressif Long Range, protocol bit 8) in ESP-NOW-only / BLE modes |
+| Channel | **6** (`self.channel = 6`, the only write to it; there is no `set_channel`) |
+| Interface | WiFi station; the ESP-NOW address is the STA MAC (`machine.unique_id()`) |
+| PHY | `WIFI_PROTOCOL_LR` only (protocol bitmap `0x08`), in every mode 5.0.3 uses |
 | LR rate | **250 K**: `EspConn` calls `e.config(rate=41)` (`WIFI_PHY_RATE_LORA_250K`) |
+| TX power | `txpower=21` dBm (the driver caps it at 20) |
 | Encryption | none — `add_peer(mac)` with no `lmk` |
 
-The fleet is pinned to a single channel; ESP-IDF drops off-channel frames, so a mesh client
-**must** match it. Channel 6 is the built-in default (**Confirmed**), but the live value can
-be changed at runtime (**Partial**) — see [what to confirm on-device](#still-missing--confirm-on-device).
+The fleet is pinned to channel 6 (**Confirmed**, and on hardware); ESP-IDF drops off-channel
+frames, so a mesh client **must** match it.
 
 ### Frame layout
 
@@ -253,9 +256,10 @@ Every payload leads with the echoed `(cat_id, cmd_id)` as `BB`.
 | `(7,0)` | `<BBffbbbHbbH` | 19 B |
 | `(7,1)` | `<BBHbffb` | 14 B |
 
-`EXTENDED` schema-versioned variants — `(cat, cmd) → {schema_id → fmt}`:
+`EXTENDED` longer variants — `(cat, cmd) → {frame length → fmt}`. The keys are total frame
+lengths including the SyncWord, not schema ids (for `(0,0)`, 72 means "72 bytes or more"):
 
-| `(cat, cmd)` | Schema id | Format | Size |
+| `(cat, cmd)` | Frame length | Format | Size |
 | --- | --- | --- | --- |
 | `(0,0)` | 25 | `<BBffbbhbbb6B` | 23 B |
 | `(0,0)` | 59 | `<BBffbbhbbb6Bhii4BhHehhffbB` | 57 B |
@@ -264,9 +268,10 @@ Every payload leads with the echoed `(cat_id, cmd_id)` as `BB`.
 | `(1,6)` | 29 | `<BBbb9BBB3i` | 27 B |
 | `(2,0)` | 45 | `<BB6BffbbHbbbhhBBiffh` | 43 B |
 
-The `(0,*)` 23-byte family is the mesh peer beacon: two floats (lat/lon), flags, and a
-6-byte MAC. Field-by-field mesh semantics beyond the struct layout are **Partial** — the
-byte layouts are recovered, but individual fields are not fully labelled.
+Every field is now labelled (**Confirmed**): see the peer, locate and Smart Group tables in
+[message format](/protocols/message-format#peer-frame-0-cmd). The 6-byte MAC in the `(0,*)`
+frames is a target MAC that 5.0.3 always leaves zero; the sender is identified by its ESP-NOW
+source address. Bonding and timing are in [ESP-NOW mesh](/protocols/espnow-mesh#pairing-p2p-bond).
 
 ## Custom OTA server
 
@@ -330,10 +335,11 @@ before relying on them:
 
 | Item | Status | How to confirm |
 | --- | --- | --- |
-| Home channel | default 6 (**Confirmed**), runtime-settable (**Partial**) | sniff the fleet — the live channel can be changed via `set_channel` |
+| Home channel | 6 (**Confirmed**, hardware-tested); no `set_channel` exists | — |
 | `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl --trace info`, or add `--half-duplex` to compare |
 | Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl --half-duplex --trace watch` on such a host |
-| Mesh payload field semantics | struct layouts **Confirmed**, per-field meaning **Partial** | correlate captured frames against known device state |
+| Mesh payload field semantics | **Confirmed**; peer frames and the pairing handshake hardware-tested with the ESP32 emulator | — |
+| Locate relay and Smart Group on the air | **Confirmed** from bytecode, not yet hardware-tested | run the emulator with `pos` set, far enough from the Totem for its peer to go stale |
 | Demi-god OTA frame | **Partial / missing** | `(cat, cmd)` + struct not recovered — do not fabricate |
 | Runtime-only values | **Partial** | venue code, group id, and device name live in runtime state / bytecode, not the static image |
 

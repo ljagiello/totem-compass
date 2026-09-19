@@ -258,9 +258,9 @@ with the corrected `>>3` decode (**Confirmed**):
 | `(7,0)` | `<BBffbbbHbbH` | 19 B |
 | `(7,1)` | `<BBHbffb` | 14 B |
 
-`EXTENDED` (schema-versioned variants, `(cat, cmd) → {schema_id → fmt}`):
+`EXTENDED` holds the longer variants, `(cat, cmd) → {frame length → fmt}`:
 
-| `(cat, cmd)` | schema | Format | Size |
+| `(cat, cmd)` | key | Format | Size |
 | --- | --- | --- | --- |
 | `(0,0)` | 25 | `<BBffbbhbbb6B` | 23 B |
 | `(0,0)` | 59 | `<BBffbbhbbb6Bhii4BhHehhffbB` | 57 B |
@@ -269,10 +269,104 @@ with the corrected `>>3` decode (**Confirmed**):
 | `(1,6)` | 29 | `<BBbb9BBB3i` | 27 B |
 | `(2,0)` | 45 | `<BB6BffbbHbbbhhBBiffh` | 43 B |
 
-Every `<BB…` format leads with the echoed `(cat_id, cmd_id)`. The `(0,*)` 23-B family
-(`<BBffbbhbbb6B`) is the **mesh peer beacon**: two floats (lat/lon) + flags + 6-byte MAC —
-the ESP-NOW analogue of the BLE Peer records. A BLE-only client ignores this table.
-Field-by-field mesh semantics are **Partial** (not fully labelled).
+The keys are **total frame lengths including the SyncWord**, not schema ids: `Parser.aread`
+picks `EXTENDED[key][len(frame)]` on an exact match, and for command 0 any frame of at least 72
+bytes uses the 72 variant (`Non-extended payload being used` otherwise). `compass_mesh` only
+upgrades a `(2,0)` frame to the 45 variant on an exact length match. Commands 1 and 2 of
+category 0 have no `EXTENDED` entry, so a receiver decodes only the first 23 bytes of a bond
+frame. The struct is unpacked from `frame[2:]`, so its leading `BB` is the echoed
+`(cat_id, cmd_id)` at frame offsets 2-3.
+
+The field tables below give **frame offsets** (SyncWord at 0), as the firmware's `pack_into`
+calls use them. All are **Confirmed** from the builders in `espnow_conn_v2.Messages` and the
+readers in `Parser`, and the peer and locate layouts are exercised on hardware by the
+[ESP32 emulator](/reference/esp32-emulator), whose Go codec (`mesh` package) matches frames
+packed by CPython's `struct` with these formats byte for byte.
+
+### Peer frame `(0, cmd)`
+
+`gen_peer_msg` fills `ENOW_PEER_BUFF = bytearray(108)` and always sends all **108 bytes**.
+Command 0 is the status, 1 a bond request or confirmation, 2 an unbond notice.
+
+| Offset | Code | Field | Source |
+| --- | --- | --- | --- |
+| 4 | `f` | latitude | `gnss_data.location[0]`, 0 without a fix |
+| 8 | `f` | longitude | `gnss_data.location[1]`, 0 without a fix |
+| 12 | `b` | position accuracy (m) | `min(max(int(p_acc), -1), 127)`, −1 without a fix |
+| 13 | `b` | speed (km/h) | `gnss_data.speed`, not clamped |
+| 14 | `h` | compass azimuth (deg) | `int(fusion.avg_azimuth)` |
+| 16 | `b` | SOS | `config.is_sos` |
+| 17 | `b` | orientation | `fusion.orientation`: 1 upright, 2 lying flat |
+| 18 | `b` | ack | bond confirmation (command 1) |
+| 19 | `6B` | target MAC | always zero: no caller passes `target_mac` |
+| 25 | `h` | unscheduled | always 0; a receiver that sees non-zero does not predict the sender's next window |
+| 27 | `i` | time of day (ms since midnight) | `rtc.itod` if the clock came from GNSS, else −1 |
+| 31 | `i` | Unix time (s) | `rtc.unix()` likewise, else −1 |
+| 35 | `B` | flags | bit 0: the phone is connected over BLE |
+| 36 | `3B` | firmware major, minor, patch | `modes.release_*` |
+| 39 | `h` | altitude (m) | `gnss_data.altitude`, −500 unknown |
+| 41 | `H` | uptime (min) | `modes.uptime_sec // 60` |
+| 43 | `e` | battery voltage | half float, MicroPython's encoder (rounds ties up) |
+| 45 | `h` | heading of motion (deg) | `get_heading_mot()`, −1 until 10 m travelled |
+| 47 | `h` | odometer (m) | `round(gnss_data.odometer / 1000)` of an odometer in mm |
+| 49-69 | `ffbBBiiBB` | reserved | constants 0.0, 0.0, −1, then zeros; never read |
+| 70 | `b` | name length *n* | UTF-8 bytes of the device name |
+| 71 | *n* bytes | name | `get_device_name()` |
+| 71+*n* | `b` | GNSS solution | 0 none or poor, 1 within 3.5 m, 2 within 15 m |
+| 72+*n* | `b` | position source | 1 the Totem's receiver, 2 the phone |
+| 73+*n* | `H` | release id | `syst.release_id` |
+| 75+*n* | `b` | battery % | `modes.batt_pct` |
+
+A name longer than 32 bytes does not leave room for the fields after it, and `gen_peer_msg`
+fails. The buffer is reused, so bytes after the battery field can hold leftovers of a longer
+earlier name.
+
+### Locate `(2,0)`
+
+`gen_mesh_msg` fills `ENOW_MESH_BUFF = bytearray(45)`: the 45-byte `EXTENDED` variant.
+
+| Offset | Code | Field | Source |
+| --- | --- | --- | --- |
+| 4 | `6B` | origin MAC | the originating Totem |
+| 10 | `f` | origin latitude | |
+| 14 | `f` | origin longitude | |
+| 18 | `b` | origin position accuracy (m) | |
+| 19 | `b` | SOS | |
+| 20 | `H` | UID | `randint(1, 65534)`; relays keep it |
+| 22 | `b` | reply requested (`is_ack`) | 1 locate request, 0 reply |
+| 23 | `b` | minimum RSSI | −127: a receiver outside `[min, max]` ignores the frame |
+| 24 | `b` | maximum RSSI | 0 |
+| 25 | `h` | minimum distance | −1, never read |
+| 27 | `h` | maximum distance | −1, never read |
+| 29 | `B` | hop count | 0 at the origin, +1 per relay |
+| 30 | `B` | maximum hops | 99 |
+| 31 | `i` | expiry (Unix s) | origin time + 120 |
+| 35 | `f` | last-hop latitude | each relay writes its own position |
+| 39 | `f` | last-hop longitude | |
+| 43 | `h` | relay minimum distance (m) | `MESH_RELAY_MIN_DIST` = 10 |
+
+### Smart Group beacon `(7,0)`
+
+`gen_auto_bond_grp` builds `21 + 16 × n` bytes: `<ffbbbHbbH` at offset 4, then one 16-byte
+record per member.
+
+| Offset | Code | Field |
+| --- | --- | --- |
+| 4 | `f` | host latitude |
+| 8 | `f` | host longitude |
+| 12 | `b` | host position accuracy (m) |
+| 13 | `b` | colour id: 0 while advertising, the host's colour on finalize |
+| 14 | `b` | instruction: 1 advertise, 3 finalize, −1 abandon |
+| 15 | `H` | group UID (`smart_grp_uid`) |
+| 17 | `b` | member count *n* |
+| 18 | `b` | reserved: always 8, never read |
+| 19 | `H` | time left in the host's window (ms), 0 on finalize or abandon |
+| 21 + 16*i* | `6B` + `<ffbb` | member MAC, then latitude, longitude, accuracy, colour id |
+
+### Smart Group reply `(7,1)`
+
+16 bytes built in `Parser._smart_group`: `<Hbffb` at offset 4 = group UID, join flag (+1 join,
+−1 leave), latitude, longitude, position accuracy.
 
 ### ESP-NOW frame envelope
 
@@ -292,16 +386,21 @@ path.) A mesh dedup UID (`uint16`) sits at mesh-frame offset 20.
 
 ## Message identity & lifetime
 
-Mesh/peer messages are de-duplicated and expired:
+Only the locate frame `(2,0)` floods the mesh, so only it carries an identity. Peer frames
+have no UID or sequence number; a receiver keys them on the ESP-NOW source MAC and the receive
+time.
 
 | Symbol | Role |
 | --- | --- |
-| `gen_msg_uid` | generate a unique id per message (`uint16 randint(1, 65534)`) |
-| `MSG_EXP_MSECS` | message expiry window (150000 ms) |
-| `MSG_IN_BUFF`, `MSG_OUT_BUFF` | inbound / outbound message buffers |
-| `msg_interval_ms`, `msg_offset_ms` | send scheduling |
-| `MESH_PEER_MSG_LIMIT` | per-peer message cap |
+| locate UID (offset 20) | `gen_mesh_msg`: `randint(1, 65534)` per new frame; relays and the one reply repeat keep it |
+| `Parser.recent` / `add_recent` | UIDs seen, each kept for its expiry + 15 s (clamped to 15-400 s), at most 512 |
+| `MSG_EXP_MSECS` | default lifetime of a `recent` entry (150000 ms) |
+| `MESH_PEER_MSG_LIMIT` | locate requests per stale peer (999) |
+| `msg_offset_ms` | per-peer estimate of the sender's radio-window phase, from peer frame receive times |
 | `last_msg_rx`, `last_msg_tx`, `last_msg_ticks` | liveness tracking |
+
+`gen_msg_uid`, `MSG_IN_BUFF` and `MSG_OUT_BUFF` belong to the chat module (`chat_msg`), which
+no module imports in 5.0.3.
 
 This lets a message flood the mesh once and be dropped as a duplicate on re-receipt
 (`Demi-god command ignored, already received` is the same idea in the command path).

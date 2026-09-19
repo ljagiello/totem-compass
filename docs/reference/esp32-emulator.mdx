@@ -1,0 +1,115 @@
+---
+title: "ESP32 emulator"
+description: "An ESP32 running TinyGo that joins the ESP-NOW mesh as another Totem."
+---
+
+`cmd/totememu` turns a stock ESP32 into a Totem on the [ESP-NOW mesh](/protocols/espnow-mesh).
+It pairs with a real Totem over the air, and from then on the two exchange peer status every
+radio window like any two bonded Totems. It is written in Go and built with TinyGo and
+[`tinygo.org/x/espradio`](https://github.com/tinygo-org/espradio).
+
+**Hardware-tested** on 2026-09-19: an ESP32-D0WD-V3 bonded with a Totem on firmware 5.0.3
+through the normal Touch Crystal pairing. The Totem then unicast its status to the emulator
+every second, and it acknowledged every status frame the emulator sent.
+
+## Layout
+
+| Package | Role |
+| --- | --- |
+| `mesh` | codec for the peer `(0, cmd)`, locate `(2,0)` and Smart Group `(7,x)` frames, field by field as in [message format](/protocols/message-format#peer-frame-0-cmd). Tested against frames packed by CPython's `struct` with the firmware's own formats, and fuzzed. |
+| `emulator` | the Totem itself: pairing handshake, radio windows, clock sync, locate reply and relay, Smart Group member. Pure Go that takes frames and the time, and returns frames to send, so it is tested on the host with scenario tests and a fuzz target. |
+| `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && esp32` build tags). |
+
+## Build and flash
+
+```bash
+tinygo flash -target esp32-generic -port /dev/cu.usbserial-0001 \
+  -ldflags "-X main.owned=8c94df7b0478" ./cmd/totememu
+```
+
+`main.owned` lists the ESP-NOW (WiFi station) MACs of your own Totems, comma-separated. It is
+the MAC that `totemctl info` shows. `main.name` sets the name other Totems display (default
+`emu_totem_` plus the last four hex digits of the board's MAC, such as `emu_totem_abb0`).
+
+To pair, put the Totem next to the board and hold its Touch Crystal until the pairing
+animation starts (about 1.2 s). The emulator notices the Totem's bond request and pairs
+back. Bonding needs **RSSI ≥ −25 dBm** on both sides, so the two must nearly touch. The board
+has no flash storage for peers. After a reboot it takes the bond back as soon as the Totem,
+which kept it in `config.json`, sends it a status frame.
+
+## Watching the mesh
+
+`totemctl mesh` talks to the board over USB serial and decodes on the host, with the same
+`mesh` package, every frame your Totem sends it:
+
+```bash
+totemctl mesh watch          # decoded frames and events until Ctrl-C
+totemctl mesh watch --raw    # plus each frame's bytes
+totemctl mesh watch --tx     # plus the frames the emulator sends
+totemctl mesh watch --json   # one JSON object per frame, every field
+totemctl mesh status         # the emulator and its peers
+totemctl mesh pair           # wait for a bond while you hold the Touch Crystal
+totemctl mesh send sos on    # any console command below
+```
+
+```text
+14:10:14 ← 8c94df7b0478  -15 dBm  status "LCFs totem"  37.586700,-122.007362 ±1m alt 24m  azimuth 121° flat  batt 53% 3.81V  fw 5.0.3  up 20h59m0s  clock 14:10:15.100
+```
+
+The commands pick the only USB serial port with an ESP32 bridge chip (CP210x, CH34x, FTDI or
+Espressif USB), or take `--port`. They open it with DTR and RTS asserted and leave them so: on
+ESP32 boards the auto-reset circuit pulls EN low when RTS is set without DTR, so a monitor that
+clears both on open (pyserial's `dtr=False, rts=False`) reboots the emulator. The commands
+switch the console to JSON lines with `format json` and back to text when they exit. With
+`--trace` they log every console line.
+
+The ESP32 only receives frames addressed to itself or broadcast. Status frames your Totem
+unicasts to its other peers do not reach it.
+
+## Console
+
+The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo monitor
+-port <port>` shows it directly:
+
+| Command | Effect |
+| --- | --- |
+| `pair` | open a 6 s pairing window, as a long hold does |
+| `status` | this device and each peer: name, RSSI, last heard, position, battery |
+| `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix, or none (the default) |
+| `heading <deg>` | compass azimuth to report |
+| `sos on\|off` | the SOS flag |
+| `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
+| `log debug\|info` | log level; `debug` logs every frame heard and sent, as hex |
+| `format text\|json` | log lines as slog text or as JSON (what `totemctl mesh` uses) |
+| `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
+
+## Radio setup
+
+`espradio` starts the WiFi station, and the firmware then applies the Totem's settings from
+`EspConn.power_on` through the WiFi blob functions that `espradio` links but does not wrap:
+`esp_wifi_set_protocol(STA, WIFI_PROTOCOL_LR)`, `esp_wifi_set_channel(6)`,
+`esp_wifi_set_max_tx_power(84)` (21 dBm) and `esp_wifi_config_espnow_rate(STA,
+WIFI_PHY_RATE_LORA_250K)`. The send reports confirm rate `0x29`.
+
+<Warning>
+`espradio` v0.3.0's ESP-NOW receive trampoline passes nine arguments to Go, and clang
+adjusts the stack around that call with `MOVSP`. When the Go side has spilled the caller's
+register window, the `MOVSP` raises `AllocaCause` (EXCCAUSE 5). TinyGo's ESP32 exception vector
+treats that as fatal; ESP-IDF handles it in `_xt_alloca_exc`. The board crashed this way about
+12 s after the first bond (`EXC 00000005 401906e4 …`). The firmware therefore registers its own
+receive callback. That callback only copies each frame into a ring buffer, without calling Go
+from the WiFi task, and the main loop drains the buffer every 5 ms. The UART receive interrupt
+also stops firing once the WiFi blob runs, so the console polls the UART FIFO.
+</Warning>
+
+## Scope
+
+The emulator only listens to and talks to the Totems in `main.owned`:
+
+- Frames from any other sender are dropped unread.
+- Unicasts go only to owned Totems. `emulator` checks every outgoing frame in one place, and
+  the tests assert this for every frame.
+- It relays only locate frames that an owned Totem originated.
+- It never hosts a Smart Group, because a host's finalize makes every member delete its
+  existing peers.
+- It never sends demi-god commands.
