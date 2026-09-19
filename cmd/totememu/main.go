@@ -185,41 +185,16 @@ func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet 
 		return nil
 	}
 	now := time.Now()
-	switch c.Op {
-	case emulator.OpPair:
-		return n.Pair(now)
-	case emulator.OpUnbond:
-		return n.Unbond(now, c.MAC)
-	case emulator.OpPos:
-		n.SetPosition(c.Position)
-		if p := c.Position; p != nil {
-			log.Info("position set", "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM)
-		} else {
-			log.Info("position cleared")
-		}
-	case emulator.OpHeading:
-		n.SetHeading(c.Heading)
-		log.Info("heading set", "deg", c.Heading)
-	case emulator.OpSOS:
-		n.SetSOS(c.On)
-		log.Info("sos", "on", c.On)
-	case emulator.OpFlat:
-		n.SetFlat(c.On, now)
-		log.Info("orientation", "flat", c.On)
-	case emulator.OpBattery:
-		n.SetBattery(c.Percent, c.On, now)
-		log.Info("battery set", "percent", c.Percent, "charging", c.On)
-	case emulator.OpClock:
-		if err := n.SetClock(time.UnixMilli(c.ClockMs), now); err != nil {
+	if out, handled, err := n.Apply(c, now); handled {
+		switch {
+		case err != nil:
 			log.Warn("bad command", "err", err)
+		default:
+			log.Info(string(c.Op), "cmd", c.String())
 		}
-	case emulator.OpSim:
-		if c.On {
-			n.StartSim(c.Motion, c.Heading, now)
-		} else {
-			n.StopSim(now)
-		}
-		log.Info("simulation", "running", c.On, "motion", c.Motion, "bearing", c.Heading)
+		return out
+	}
+	switch c.Op {
 	case emulator.OpStatus:
 		cfg := n.Config()
 		sense := n.Sensors()

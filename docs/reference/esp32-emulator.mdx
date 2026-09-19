@@ -141,6 +141,19 @@ from the WiFi task, and the main loop drains the buffer every 5 ms. The UART rec
 also stops firing once the WiFi blob runs, so the console polls the UART FIFO.
 </Warning>
 
+## Untrusted input
+
+Everything that reaches the emulator from outside is fuzzed, and the fuzz targets run in CI:
+
+| Input | Where | Target |
+| --- | --- | --- |
+| ESP-NOW frames off the air | `mesh.Parse` | `FuzzParse`, `FuzzHalf` |
+| Frames, signal strength and timing into the device logic | `emulator.Node` | `FuzzNode`, which also interleaves console commands |
+| Console command text | `emulator.ParseCommand` | `FuzzParseCommand` |
+| Raw serial bytes | `emulator.LineReader` | `FuzzLineReader` |
+| The board's own output, read by the CLI | `totemctl mesh` | `FuzzConsoleLine` |
+| Frames arriving in the C receive ring | `cmd/totememu/ring.h` | `FuzzRing`, which compiles the same header for the host |
+
 ## Scope
 
 The emulator only listens to and talks to the Totems in `main.owned`:

@@ -7,6 +7,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
 )
@@ -264,6 +265,40 @@ func (c Command) String() string {
 }
 
 func formatDegrees(d float32) string { return strconv.FormatFloat(float64(d), 'g', -1, 32) }
+
+// Apply runs the commands that change the device: pairing, peers, the
+// sensors and the clock. The firmware handles the rest (status, log,
+// format, selftest, help), which touch its console rather than the node.
+// It reports whether the command belonged here.
+func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err error) {
+	switch c.Op {
+	case OpPair:
+		return n.Pair(now), true, nil
+	case OpUnbond:
+		return n.Unbond(now, c.MAC), true, nil
+	case OpPos:
+		n.SetPosition(c.Position)
+	case OpHeading:
+		n.SetHeading(c.Heading)
+	case OpSOS:
+		n.SetSOS(c.On)
+	case OpFlat:
+		n.SetFlat(c.On, now)
+	case OpBattery:
+		n.SetBattery(c.Percent, c.On, now)
+	case OpSim:
+		if c.On {
+			n.StartSim(c.Motion, c.Heading, now)
+		} else {
+			n.StopSim(now)
+		}
+	case OpClock:
+		return nil, true, n.SetClock(time.UnixMilli(c.ClockMs), now)
+	default:
+		return nil, false, nil
+	}
+	return n.flush(), true, nil
+}
 
 // MaxCommandLine is the longest console line the emulator runs.
 const MaxCommandLine = 128
