@@ -141,19 +141,23 @@ offset 2 (69 B). Fields in order:
 | 17 | `h` | azimuth, ° |
 | 18 | `b` | speed (cap 127, −1 = None) |
 | 19 | `i` | odometer |
-| 20-21 | `ff` | reserved ×2 |
-| 22 | `b` | reserved |
+| 20-21 | `ff` | reserved ×2 (always 0) |
+| 22 | `b` | reserved (always −1) |
 | 23 | `i` | uptime, s |
 | 24 | `i` | age |
-| 25 | `i` | reserved |
-| 26 | `b` | power_level |
-| 27 | `H` | reserved |
+| 25 | `i` | reserved (always 0) |
+| 26 | `b` | power_level: battery health, 2 = low |
+| 27 | `H` | reserved (always 0) |
 | 28 | `B` | flags |
-| 29 | `B` | reserved |
+| 29 | `B` | reserved (always 0) |
 | 30 | `b` | batt_pct |
 
 The `flags` byte (field 28) is `pack_flags(is_sos, is_eco, led_brt ≥ GLOBAL_BRT,
-gnss_location_set, power_level == 2, is_charging, 0, is_mag_cal_needed)`.
+gnss_location_set, power_level == 2, is_charging, 0, is_mag_cal_needed)`: bit 2 is normal
+(undimmed) brightness and bit 4 is low battery.
+
+The reserved fields hold these constants in every published firmware (3.2.12 to 5.0.3), and
+the official app reads and discards them, so a client can ignore them.
 
 **Static Data `(0x01, 0x02)`** — `gen_static_data`. `buff[2] = total_len & 255`,
 `buff[3:9] = MAC` (6 B), then `struct <biHBBBbBBBbhhiiibbb` at offset 9 (34 B), then three
@@ -164,25 +168,26 @@ are the struct's last three fields.
 | --- | --- |
 | `buff[2]` | total_len & 255 |
 | `buff[3:9]` | device MAC (6 B) |
-| struct @9: `b` | release_id |
+| struct @9: `b` | reserved (always 0) |
 | `i` | age |
-| `H` | release_id16 |
+| `H` | release_id |
 | `B B B` | ver_major, ver_minor, ver_patch |
 | `b` | color_id |
-| `B` | settings_flags |
-| `B` | flags (bit0 = 1) |
+| `B` | settings_flags (bit0 persistent north, bit1 compass lock; the app reads bit3 as bond chat) |
+| `B` | capabilities (bit0 = half-duplex loop; 1 in 5.x, 0 in 4.1.3) |
 | `B` | service_id |
-| `bhhiii` | 6× reserved |
+| `bhhiii` | 6× reserved (always 0; the app discards them) |
 | `b b b` | len(device_name), len(branch), len(wifi_ssid) |
 | strings @43 | device_name, git branch (`N/A`), wifi_ssid (`""`) |
 
 **Peer Ping `(0x06, 0x02)`** — `gen_peer_ping`. `buff[2]` = total length, `buff[3:9]` =
 peer MAC (6 B), `buff[9]` = mesh hops, then `struct <ffbbh4BHbb4BiihBbf` at offset 10 (40 B):
-lat, lon, p_acc, speed, bearing, flag byte A, r, g, b, 0, name length, rssi, msg_rx, msg_tx,
+lat, lon, p_acc, speed, bearing, flag byte A, r, g, b, 0 (the app's `dtim`), name length, rssi, msg_rx, msg_tx,
 mesh_rx, mesh_send_count, last_update, last_coords_unix, distance_diff, flag byte B,
 orientation, volts. Then the peer name (from offset 50) and `<bH` = (batt_pct, release_id).
 A = `pack_flags(sos, is_poi, is_mesh, is_stale, is_collected, 0, is_unknown, 0)`,
-B = `pack_flags(is_hidden, is_locked, 0×6)`. `is_unknown` is set once a peer has had no
+B = `pack_flags(is_hidden, is_locked, 0×6)`. The app reads A's bit 5 as `isIdle`; the
+firmware always sends 0 there. `is_unknown` is set once a peer has had no
 coordinates for 2 h (v5.0.3; 4 h in v5.0.2).
 
 **Peer Sync `(0x06, 0x07)`** — `gen_peer_sync`: a peer-MAC list,
@@ -326,8 +331,8 @@ before relying on them:
 | Item | Status | How to confirm |
 | --- | --- | --- |
 | Home channel | default 6 (**Confirmed**), runtime-settable (**Partial**) | sniff the fleet — the live channel can be changed via `set_channel` |
-| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl -trace info`, or add `-half-duplex` to compare |
-| Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl -half-duplex -trace watch` on such a host |
+| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl --trace info`, or add `--half-duplex` to compare |
+| Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl --half-duplex --trace watch` on such a host |
 | Mesh payload field semantics | struct layouts **Confirmed**, per-field meaning **Partial** | correlate captured frames against known device state |
 | Demi-god OTA frame | **Partial / missing** | `(cat, cmd)` + struct not recovered — do not fabricate |
 | Runtime-only values | **Partial** | venue code, group id, and device name live in runtime state / bytecode, not the static image |

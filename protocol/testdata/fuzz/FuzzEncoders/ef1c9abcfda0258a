@@ -1,0 +1,11 @@
+go test fuzz v1
+string("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&")
+string("0")
+string("0")
+string("0")
+string("0")
+int8(-27)
+int16(-54)
+float32(50.0671)
+float32(19.9124)
+[]byte("0")

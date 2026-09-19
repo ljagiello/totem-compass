@@ -1,0 +1,39 @@
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - errorlint
+    - gocritic
+    - misspell
+    - nolintlint
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # wire structs mirror the firmware's struct layouts
+        - shadow # `if err := ...; err != nil` is idiomatic
+    misspell:
+      locale: US
+      ignore-rules:
+        - colour # the CLI accepts both spellings
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: unused-parameter
+        - name: context-as-argument
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

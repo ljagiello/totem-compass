@@ -70,7 +70,7 @@ both handlers (**Confirmed**; identical in v5.0.2 and v5.0.3 except where marked
 | `(6,1)` | — | request Peer Sync (`peer_cmd_id = 1`) |
 | `(6,3)` | `mac(6)`, `<BBB` rgb, flags (bit0 delete, bit2 hidden) | edit or delete a peer / POI |
 | `(6,5)` | peer MAC as lowercase hex string | open peer management on that peer |
-| `(6,6)` | 1 byte, `mac(6)`, `<ffbBBBhiiBBbbbhhiiib` (44 B), name | add a peer / point of interest (`add_new_bond`; flags: sos, is_poi, is_sticky_heading, is_hidden, is_locked) |
+| `(6,6)` | frame length, `mac(6)`, `<ffbBBBhiiBBbbbhhiiib` (44 B), name | add a peer / point of interest (`add_new_bond`; flags: sos, is_poi, is_sticky_heading, is_hidden, is_locked). Index 6 (`h`) is the app's `azimuth`, which the firmware ignores; the trailing `bbb hh iii` are zeros from the app and never read |
 | `(6,8)` | none (all peers) or count, 0, `mac(6)`… | queue Peer Pings (`Controller needs Peer details sent`) |
 | `(6,9)` | 1 byte, `mac(6)`, `<iff3bB` = unix, lat, lon, p_acc, 0, speed, flags(bit0 sos) | update a peer's position from the cloud; v5.0.3 also marks the phone as online |
 | `(7,3)` | `<b` 0, flags(bit0 persistent north, bit1 compass lock), flags(bit2 peer blink), flags, power byte (bits0-2: 1 eco, 2 normal, 0 unchanged) | compass settings (all at once) |
@@ -113,7 +113,7 @@ in this exact order:
 | 5 | `f` | `location[1]` | **longitude, degrees** |
 | 6 | `f` | `modes.batt_volts` (0 = None) | battery voltage (V) |
 | 7 | `b` | `enow_v2.channel` | ESP-NOW Wi-Fi channel |
-| 8 | `B` | `power_bits` | power_mode in bits[0:3] |
+| 8 | `B` | `power_bits` | power_mode in bits[0:3]; 5.x sets bits 3–7 |
 | 9 | `B` | `enow_v2.max_hop_cnt` (0..255) | mesh max hop count |
 | 10 | `B` | `modes.mesh_rx` (0..255) | mesh RX counter |
 | 11 | `B` | `modes.mesh_relayed` (0..255) | mesh relayed counter |
@@ -125,20 +125,30 @@ in this exact order:
 | 17 | `h` | `fusion.avg_azimuth` (0 if falsy) | **compass azimuth (deg)** |
 | 18 | `b` | `min(gnss_data.speed, 127)` (−1 = None) | speed (capped 127) |
 | 19 | `i` | `gnss_data.odometer` | odometer |
-| 20 | `f` | 0 | reserved |
-| 21 | `f` | 0 | reserved |
-| 22 | `b` | −1 | reserved |
+| 20 | `f` | 0 | reserved (frame offset 44) |
+| 21 | `f` | 0 | reserved (offset 48) |
+| 22 | `b` | −1 | reserved (offset 52) |
 | 23 | `i` | `modes.uptime_sec` | uptime (s) |
 | 24 | `i` | `config.age` | device age |
-| 25 | `i` | 0 | reserved |
-| 26 | `b` | `modes.power_level` | power level |
-| 27 | `H` | 0 | reserved |
+| 25 | `i` | 0 | reserved (offset 61) |
+| 26 | `b` | `modes.power_level` | battery health: 0, or 2 below ~3.45 V (4.1.3 packs `modes.power_mode`) |
+| 27 | `H` | 0 | reserved (offset 66) |
 | 28 | `B` | `flags` (`pack_flags`, see below) | status bitfield |
-| 29 | `B` | 0 | reserved |
+| 29 | `B` | 0 | reserved (offset 69) |
 | 30 | `b` | `modes.batt_pct` | **battery %** |
 
-Flags byte #28 = `pack_flags(is_sos, is_eco_mode, led_brt≥GLOBAL_BRT, gnss_location_set, power_level==2, is_charging, 0, is_mag_cal_needed)` in that bit order. Byte #8 `power_bits`
-encodes `config.power_mode` in bits[0:3].
+Flags byte #28 = `pack_flags(is_sos, is_eco_mode, led_brt≥GLOBAL_BRT, gnss_location_set, power_level==2, is_charging, 0, is_mag_cal_needed)` in that bit order. Bit 2 is set at normal brightness
+(`GLOBAL_BRT` = 0.6; eco dims to 0.1). Bit 4 means low battery (`change_power_level` logs
+`Changing battery health to: {}`). Byte #8 `power_bits` encodes `config.power_mode` in bits[0:3].
+
+**The reserved slots are constants in every published firmware.** 3.2.12, 4.1.3, 5.0.2 and
+5.0.3 all pass the literals above to `struct.pack_into`. The official app (2.3.0,
+`useLiveDataParser`) reads each one at the offset shown and discards it. It also runs offset 69
+through `unpackFlags` and uses no bit. Neither side gives them a name. `gen_live_data` still
+computes `len(config.peers)`, `config.closest_peer`, `config.furthest_peer`, the ms since
+`config.last_peer_msg` and `gc.mem_free()` and never packs them, which suggests these slots once
+carried such statistics. (The app labels flag bits 2–4 `isDimLeds`, `isGnssLock` and
+`isLowBatt`; the firmware sets bit 2 at *full* brightness.)
 
 ### Static Data — `(0x01, 0x02)` `gen_static_data`
 
@@ -149,23 +159,28 @@ UTF-8 strings concatenated from offset 43 (no per-string prefix; the lengths are
 
 | # | code | Field | Meaning |
 | --- | --- | --- | --- |
-| 1 | `b` | `release_id` (0 if falsy) | firmware release id |
+| 1 | `b` | 0 | reserved (frame offset 9) |
 | 2 | `i` | `config.age` | device age |
-| 3 | `H` | `release_id` (16-bit) | release id |
+| 3 | `H` | `syst.release_id` (0 if falsy) | firmware release id |
 | 4 | `B` | `modes.release_major` | version major |
 | 5 | `B` | `modes.release_minor` | version minor |
 | 6 | `B` | `modes.release_patch` | version patch |
 | 7 | `b` | `config.color_id` | colour id |
-| 8 | `B` | `pack_flags(is_persistent_north, is_compass_lock, 0×6)` | settings flags |
-| 9 | `B` | `pack_flags(1, 0×7)` | flags (bit0 = 1 const) |
+| 8 | `B` | `pack_flags(is_persistent_north, is_compass_lock, 0×6)` | settings flags; the app reads bit 3 as "enable bond chat" |
+| 9 | `B` | `pack_flags(1, 0×7)` in 5.x, 0 in 4.1.3 | capabilities: bit 0 = half-duplex loop (`send_data_v2`) present |
 | 10 | `B` | `modes.service_id` | service id |
-| 11–16 | `b h h i i i` | reserved `(0,0,0,0,0,0)` | placeholders |
+| 11–16 | `b h h i i i` | reserved `(0,0,0,0,0,0)` | placeholders (offsets 23–39) |
 | 17 | `b` | `len(device_name)` | string #1 length |
 | 18 | `b` | `len(branch)` | string #2 length |
 | 19 | `b` | `len(wifi_ssid)` | string #3 length |
 
 Then, from offset 43, the three strings back to back: `device_name`, git `branch`
 (`'N/A'` if none), `wifi_ssid` (`''`).
+
+Field 9 is a capability byte. 4.1.3, which has no `send_data_v2`, packs 0; 5.x packs 1. The
+official app (2.3.0, `useStaticDataParser`) reads bit 0 as `isHalfDuplex` and switches to the TX
+handoff when it is set. The app reads fields 1 and 11–16 and discards them; every published
+firmware packs them as 0.
 
 ### Peer Ping — `(0x06, 0x02)` `gen_peer_ping`
 
@@ -190,7 +205,7 @@ name is given.)
 | 7 | `B` | `peer.rgb[0]` | colour R |
 | 8 | `B` | `peer.rgb[1]` | colour G |
 | 9 | `B` | `peer.rgb[2]` | colour B |
-| 10 | `H` | 0 | reserved |
+| 10 | `H` | 0 | `dtim` in the app (frame offset 26); the firmware always sends 0 |
 | 11 | `b` | peer-name length | bytes of the name packed at offset 50 |
 | 12 | `b` | `peer.rssi` (100 if None) | last RSSI |
 | 13 | `B` | `peer.msg_rx` | messages received |
@@ -206,7 +221,7 @@ name is given.)
 
 | Flag byte | `pack_flags` bit order |
 | --- | --- |
-| A (field 6) | `sos, is_poi, is_mesh, is_stale, is_collected, 0, is_unknown, 0` |
+| A (field 6) | `sos, is_poi, is_mesh, is_stale, is_collected, 0, is_unknown, 0`; the app reads bit 5 as `isIdle` |
 | B (field 20) | `is_hidden, is_locked, 0×6` |
 
 Log: `Sending BLE | DataTransfer (0x06, 0x02) for {}`.
