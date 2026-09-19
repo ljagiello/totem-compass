@@ -18,6 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"go.bug.st/serial/enumerator"
 
 	"github.com/ljagiello/totem-compass/client"
 	"github.com/ljagiello/totem-compass/protocol"
@@ -39,6 +40,11 @@ type globals struct {
 	// replace them.
 	connect func(ctx context.Context, opts client.Options) (*client.Client, error)
 	scan    func(ctx context.Context, all bool, found func(client.Device)) error
+	// port is the mesh emulator's serial port (--port); openPort opens it and
+	// ports lists the serial ports. Tests replace both.
+	port     string
+	openPort func(name string) (io.ReadWriteCloser, error)
+	ports    func() ([]*enumerator.PortDetails, error)
 	// timeScale shrinks every wait for the device (tests); 0 means 1.
 	timeScale float64
 }
@@ -114,6 +120,8 @@ func realMain() int {
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
 	g.scan = client.Scan
+	g.openPort = openSerial
+	g.ports = func() ([]*enumerator.PortDetails, error) { return enumerator.GetDetailedPortsList() }
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {
 		msg := err.Error()
@@ -196,6 +204,7 @@ and power must send.
 		newScanCmd(g), newInfoCmd(g), newWatchCmd(g), newPeersCmd(g),
 		newNameCmd(g), newCompassCmd(g), newPowerCmd(g), newWiFiCmd(g),
 		newPeerCmd(g), newPOICmd(g), newLocationCmd(g), newOTACmd(g), newRawCmd(g),
+		newMeshCmd(g),
 	)
 	return root
 }
@@ -217,6 +226,13 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 		}
 	}
 	g.device = v.GetString("device")
+	// --port belongs to the mesh commands only.
+	if f := cmd.Flags().Lookup("port"); f != nil {
+		if err := v.BindPFlag("port", f); err != nil {
+			return err
+		}
+	}
+	g.port = v.GetString("port")
 	// viper (via spf13/cast) reads a number without a unit as nanoseconds,
 	// so `scan-timeout: 30` would end every scan at once: require a real
 	// duration.

@@ -110,6 +110,16 @@ func (m MAC) Pretty() string {
 // MarshalText encodes the MAC as in String, for JSON output.
 func (m MAC) MarshalText() ([]byte, error) { return []byte(m.String()), nil }
 
+// UnmarshalText accepts any form ParseMAC does.
+func (m *MAC) UnmarshalText(b []byte) error {
+	v, err := ParseMAC(string(b))
+	if err != nil {
+		return err
+	}
+	*m = v
+	return nil
+}
+
 // ParseMAC accepts "a1b2c3d4e5f6", "A1:B2:C3:D4:E5:F6" or "a1-b2-...".
 func ParseMAC(s string) (MAC, error) {
 	var m MAC
