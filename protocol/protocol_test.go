@@ -22,7 +22,7 @@ var golden = map[string]string{
 	"wifi":          "02025b22686f6d65222c202263616665225d",
 	"chunk":         "020200010100020000000000000010000000000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f0c6576656e74732d312e62696e00",
 	"update_peer":   "0603a1b2c3d4e5f60a141e04",
-	"add_poi":       "060600a1b2c3d4e5f600004a420000884000ff8000000000000000000000000006000000000000000000000000000000000000000a4d61696e205374616765",
+	"add_poi":       "06063fa1b2c3d4e5f600004a420000884000ff8000000000000000000000000006000000000000000000000000000000000000000a4d61696e205374616765",
 	"peer_location": "060900a1b2c3d4e5f68015966a008040420000384107001e01",
 	"compass_prefs": "07030003040002",
 	"phone_fix":     "0c0300002342000093c20c048015966afa00",
@@ -82,7 +82,7 @@ func TestRealDeviceFrames(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := StaticData{MAC: MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, 0x78}, ReleaseID: 339, Version: "5.0.3",
-			Age: 192, ColorID: 8, Name: "LCFs totem", Branch: "totem", WiFiSSID: "Domek_5G"}
+			Age: 192, ColorID: 8, HalfDuplex: true, Name: "LCFs totem", Branch: "totem", WiFiSSID: "Domek_5G"}
 		if !reflect.DeepEqual(m, want) {
 			t.Errorf("got  %+v\nwant %+v", m, want)
 		}
@@ -108,7 +108,8 @@ func TestRealDeviceFrames(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if s := m.(StaticData); s.Version != "4.1.3" || s.ReleaseID != 264 || s.Name != "mytotem_0478" || s.ColorID != 5 {
+		// 4.1.3 has no half-duplex loop and leaves the capability bit clear.
+		if s := m.(StaticData); s.Version != "4.1.3" || s.ReleaseID != 264 || s.Name != "mytotem_0478" || s.ColorID != 5 || s.HalfDuplex {
 			t.Errorf("got %+v", s)
 		}
 	})
@@ -145,7 +146,7 @@ func TestParseLiveData(t *testing.T) {
 		t.Errorf("nav fields: %+v", d)
 	}
 	wantFlags := [7]bool{false, true, false, true, false, true, true}
-	gotFlags := [7]bool{d.SOS, d.Eco, d.FullBright, d.HasLocation, d.HighPower, d.Charging, d.MagCalNeeded}
+	gotFlags := [7]bool{d.SOS, d.Eco, d.FullBright, d.HasLocation, d.LowBattery, d.Charging, d.MagCalNeeded}
 	if gotFlags != wantFlags {
 		t.Errorf("flags = %v, want %v", gotFlags, wantFlags)
 	}
@@ -158,7 +159,7 @@ func TestParseStaticData(t *testing.T) {
 	}
 	want := StaticData{
 		MAC: testMAC, ReleaseID: 335, Version: "5.0.2", Age: 42, ColorID: 12,
-		PersistentNorth: true, ServiceID: 3, Name: "Lukasz", Branch: "totem", WiFiSSID: "home",
+		PersistentNorth: true, HalfDuplex: true, ServiceID: 3, Name: "Lukasz", Branch: "totem", WiFiSSID: "home",
 	}
 	if !reflect.DeepEqual(m, want) {
 		t.Errorf("got  %+v\nwant %+v", m, want)

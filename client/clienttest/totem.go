@@ -68,7 +68,7 @@ func New() *Totem {
 	return &Totem{
 		Static: protocol.StaticData{
 			MAC:       protocol.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, 0x78},
-			ReleaseID: 339, Version: "5.0.3", Age: 192, ColorID: 8,
+			ReleaseID: 339, Version: "5.0.3", Age: 192, ColorID: 8, HalfDuplex: true,
 			Name: "Test Totem", Branch: "totem",
 		},
 		Live: protocol.LiveData{

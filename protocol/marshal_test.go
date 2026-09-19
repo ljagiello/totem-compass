@@ -53,6 +53,36 @@ func TestMarshalRoundTrip(t *testing.T) {
 	}
 }
 
+// The fields named from app 2.3.0's parsers sit at the frame offsets the app
+// reads them from, and survive a round trip.
+func TestFieldsAtAppOffsets(t *testing.T) {
+	check := func(name string, m encoding.BinaryMarshaler, off int, want ...byte) {
+		t.Helper()
+		b, err := m.MarshalBinary()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := b[off : off+len(want)]; !bytes.Equal(got, want) {
+			t.Errorf("%s: bytes at %d = % x, want % x", name, off, got, want)
+		}
+		again, err := Parse(Data, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(again, m) {
+			t.Errorf("%s: round trip\n got %+v\nwant %+v", name, again, m)
+		}
+	}
+	// useStaticDataParser: settings flags at 20 (bit 3 bond chat), capability
+	// flags at 21 (bit 0 isHalfDuplex).
+	check("static", StaticData{Version: "5.0.3", BondChat: true, HalfDuplex: true}, 20, 0x08, 0x01)
+	// usePeerDataParser: flags at 22 (bit 5 isIdle), dtim as UInt16LE at 26.
+	check("peer ping", PeerPing{Idle: true, DTIM: 0x1234}, 22, 0x20)
+	check("peer ping", PeerPing{DTIM: 0x1234}, 26, 0x34, 0x12)
+	// useLiveDataParser: flags at 68 (bit 4 isLowBatt).
+	check("live", LiveData{LowBattery: true}, 68, 0x10)
+}
+
 func TestMarshalRejectsBadInput(t *testing.T) {
 	if _, err := (StaticData{Version: "five"}).MarshalBinary(); err == nil {
 		t.Error("static data with an unparsable version encoded")

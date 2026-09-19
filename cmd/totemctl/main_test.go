@@ -175,7 +175,7 @@ func TestConfigFileEnvAndFlags(t *testing.T) {
 func TestInfo(t *testing.T) {
 	h := newHarness()
 	h.mustRun(t, "info")
-	for _, want := range []string{"Test Totem", "5.0.3 (release 339, branch totem)", "97% (4.10 V)", "normal", "37.586700, -122.0073"} {
+	for _, want := range []string{"Test Totem", "5.0.3 (release 339, branch totem)", "97% (4.10 V)", "normal", "37.586700, -122.0073", "Half duplex       supported"} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("info output lacks %q:\n%s", want, h.out.String())
 		}

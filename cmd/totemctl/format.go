@@ -123,7 +123,7 @@ func liveLine(v protocol.LiveData) string {
 	if !v.Time.IsZero() {
 		fmt.Fprintf(&b, "  clock %s", v.Time.Format("15:04:05"))
 	}
-	b.WriteString(flagList("sos", v.SOS, "charging", v.Charging, "eco", v.Eco, "mag-cal-needed", v.MagCalNeeded))
+	b.WriteString(flagList("sos", v.SOS, "charging", v.Charging, "low-battery", v.LowBattery, "eco", v.Eco, "mag-cal-needed", v.MagCalNeeded))
 	return b.String()
 }
 
@@ -171,8 +171,10 @@ func (p *printer) info(st protocol.StaticData, live *protocol.LiveData) {
 	row("Compass lock", onOff(st.CompassLock))
 	row("Persistent north", onOff(st.PersistentNorth))
 	row("WiFi network", orNone(st.WiFiSSID))
+	row("Half duplex", map[bool]string{true: "supported (--half-duplex)", false: "not supported"}[st.HalfDuplex])
 	if live != nil {
-		row("Battery", fmt.Sprintf("%d%% (%.2f V)%s", live.BattPct, live.BattVolts, map[bool]string{true: ", charging"}[live.Charging]))
+		row("Battery", fmt.Sprintf("%d%% (%.2f V)%s%s", live.BattPct, live.BattVolts,
+			map[bool]string{true: ", charging"}[live.Charging], map[bool]string{true: ", low"}[live.LowBattery]))
 		row("Power mode", reportedPower(live.PowerMode))
 		if live.HasLocation {
 			pos := fmt.Sprintf("%.6f, %.6f", live.Lat, live.Lon)

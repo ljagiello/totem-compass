@@ -21,51 +21,67 @@ type LiveData struct {
 	BattPct      int8
 	Channel      int8 // ESP-NOW home channel
 	PowerMode    PowerMode
-	PowerLevel   int8
-	MaxHopCnt    uint8
-	MeshRx       uint8
-	MeshRelayed  uint8
-	Time         time.Time // zero when the device RTC is not set
-	ColorID      int8
-	Orientation  int8
-	SolutionID   int8 // GNSS fix type
-	HeadingMot   int16
-	Azimuth      int16
-	SpeedKPH     *int8
-	Odometer     int32
-	Uptime       time.Duration
-	Age          int32
-	SOS          bool
-	Eco          bool
-	FullBright   bool
-	HasLocation  bool
-	HighPower    bool
+	// PowerLevel is modes.power_level, the battery health: 0, or 2 below
+	// about 3.45 V (compass.battery_volt). 4.1.3 packs modes.power_mode here.
+	PowerLevel  int8
+	MaxHopCnt   uint8
+	MeshRx      uint8
+	MeshRelayed uint8
+	Time        time.Time // zero when the device RTC is not set
+	ColorID     int8
+	Orientation int8
+	SolutionID  int8 // GNSS fix type
+	HeadingMot  int16
+	Azimuth     int16
+	SpeedKPH    *int8
+	Odometer    int32
+	Uptime      time.Duration
+	Age         int32
+	SOS         bool
+	Eco         bool
+	// FullBright is config.led_brt >= GLOBAL_BRT (0.6), i.e. not dimmed by
+	// eco mode. App 2.3.0 labels this bit isDimLeds.
+	FullBright  bool
+	HasLocation bool
+	// LowBattery is modes.power_level == 2 (see PowerLevel).
+	LowBattery   bool
 	Charging     bool
 	MagCalNeeded bool
 }
 
-// liveDataWire is '<bfi3fb4Bi3b2hbiffb3ibHBBb' (69 bytes) at offset 2.
+// liveDataWire is '<bfi3fb4Bi3b2hbiffb3ibHBBb' (69 bytes) at offset 2, as
+// ble_manager.gen_live_data packs it.
+//
+// The Reserved fields are named by their frame offset. They carry fixed
+// values in every published firmware (3.2.12, 4.1.3, 5.0.2, 5.0.3): the
+// struct.pack_into call passes constants for them. App 2.3.0
+// (useLiveDataParser) reads each one and discards it, and runs Reserved69
+// through unpackFlags without using a bit. Neither side names them.
+// gen_live_data also computes len(config.peers), config.closest_peer,
+// config.furthest_peer, the ms since config.last_peer_msg and
+// gc.mem_free(), then never packs them, which suggests these slots once
+// carried such statistics.
 type liveDataWire struct {
 	SatCount                       int8
 	PAcc                           float32
 	Altitude                       int32
 	Lat, Lon, BattVolts            float32
 	Channel                        int8
-	PowerBits                      uint8
+	PowerBits                      uint8 // bits 0-2 config.power_mode; 5.x sets bits 3-7
 	MaxHopCnt, MeshRx, MeshRelayed uint8
 	Unix                           int32
 	ColorID, Orientation, Solution int8
 	HeadingMot, Azimuth            int16
 	Speed                          int8
 	Odometer                       int32
-	_                              [2]float32
-	Reserved                       int8 // firmware packs -1
+	Reserved44, Reserved48         float32 // always 0
+	Reserved52                     int8    // always -1
 	Uptime, Age                    int32
-	_                              int32
+	Reserved61                     int32 // always 0
 	PowerLevel                     int8
-	_                              uint16
+	Reserved66                     uint16 // always 0
 	Flags                          uint8
-	_                              uint8
+	Reserved69                     uint8 // always 0
 	BattPct                        int8
 }
 
@@ -78,38 +94,53 @@ type StaticData struct {
 	ColorID         int8
 	PersistentNorth bool
 	CompassLock     bool
-	ServiceID       uint8
-	Name            string
-	Branch          string
-	WiFiSSID        string
+	// BondChat is settings bit 3, which makes app 2.3.0 enable bond chat.
+	// Firmware up to 5.0.3 always sends 0.
+	BondChat bool
+	// HalfDuplex means the device has the half-duplex (TX handoff) loop,
+	// send_data_v2. 5.x sets it; 4.1.3, which has no such loop, does not.
+	// App 2.3.0 switches to TX handoff when it is set.
+	HalfDuplex bool
+	ServiceID  uint8
+	Name       string
+	Branch     string
+	WiFiSSID   string
 }
 
-// staticDataWire is '<biHBBBbBBBbhhiiibbb' (34 bytes) at offset 9.
+// staticDataWire is '<biHBBBbBBBbhhiiibbb' (34 bytes) at offset 9, as
+// ble_core.gen_static_data packs it. The Reserved fields, named by frame
+// offset, are 0 in every published firmware: the first is a literal 0 and
+// the rest are unpacked from the literal tuple (0, 0, 0, 0, 0, 0). App 2.3.0
+// (useStaticDataParser) reads each one and discards it.
 type staticDataWire struct {
-	ReleaseID8              int8
-	Age                     int32
-	ReleaseID               uint16
-	Major, Minor, Patch     uint8
-	ColorID                 int8
-	Settings                uint8
-	Const                   uint8 // pack_flags(1, 0...): 1 in v5.0.x, 0 in 4.1.3
-	ServiceID               uint8
-	_                       int8
-	_                       [2]int16
-	_                       [3]int32
-	NameLen, BranchLen, SSL int8
+	Reserved9                          int8
+	Age                                int32
+	ReleaseID                          uint16
+	Major, Minor, Patch                uint8
+	ColorID                            int8
+	Settings                           uint8 // bit0 persistent north, bit1 compass lock, bit3 bond chat
+	Caps                               uint8 // bit0 half duplex
+	ServiceID                          uint8
+	Reserved23                         int8
+	Reserved24, Reserved26             int16
+	Reserved28, Reserved32, Reserved36 int32
+	NameLen, BranchLen, SSL            int8
 }
 
 // PeerPing is (0x06,0x02): one bonded peer (or POI) and its last known state.
 type PeerPing struct {
-	MAC           MAC
-	Name          string
-	MeshHops      uint8
-	Lat, Lon      float32
-	PosAccuracyM  int8 // -1 = unknown
-	SpeedKPH      int8 // -1 = unknown
-	Bearing       int16
-	Color         RGB
+	MAC          MAC
+	Name         string
+	MeshHops     uint8
+	Lat, Lon     float32
+	PosAccuracyM int8 // -1 = unknown
+	SpeedKPH     int8 // -1 = unknown
+	Bearing      int16
+	Color        RGB
+	// DTIM is what app 2.3.0 reads as the peer's dtim. Firmware up to 5.0.3
+	// always sends 0; the firmware's DTIM is an ESP-NOW message parameter
+	// (espnow_conn_v2.gen_peer_msg), not stored per peer.
+	DTIM          uint16
 	RSSI          int8 // 100 = unknown
 	MsgRx, MsgTx  uint8
 	MeshRx        uint8
@@ -126,18 +157,22 @@ type PeerPing struct {
 	ViaMesh       bool
 	Stale         bool
 	Collected     bool
-	Unknown       bool
-	Hidden        bool
-	Locked        bool
+	// Idle is flags bit 5, which app 2.3.0 reads as isIdle. Firmware up to
+	// 5.0.3 always sends 0.
+	Idle    bool
+	Unknown bool
+	Hidden  bool
+	Locked  bool
 }
 
-// peerPingWire is '<ffbbh4BHbb4BiihBbf' (40 bytes) at offset 10.
+// peerPingWire is '<ffbbh4BHbb4BiihBbf' (40 bytes) at offset 10, as
+// ble_manager.gen_peer_ping packs it.
 type peerPingWire struct {
 	Lat, Lon                            float32
 	PAcc, Speed                         int8
 	Azimuth                             int16
 	FlagsA, R, G, B                     uint8
-	_                                   uint16
+	DTIM                                uint16
 	NameLen, RSSI                       int8
 	MsgRx, MsgTx, MeshRx, MeshSendCount uint8
 	LastUpdate, LastCoordsUnix          int32
@@ -278,7 +313,7 @@ func parseLiveData(b []byte) (Message, error) {
 		HeadingMot: w.HeadingMot, Azimuth: w.Azimuth, Odometer: w.Odometer,
 		Uptime: time.Duration(w.Uptime) * time.Second, Age: w.Age,
 		SOS: bit(w.Flags, 0), Eco: bit(w.Flags, 1), FullBright: bit(w.Flags, 2), HasLocation: bit(w.Flags, 3),
-		HighPower: bit(w.Flags, 4), Charging: bit(w.Flags, 5), MagCalNeeded: bit(w.Flags, 7),
+		LowBattery: bit(w.Flags, 4), Charging: bit(w.Flags, 5), MagCalNeeded: bit(w.Flags, 7),
 	}
 	if w.PAcc != -1 {
 		d.PosAccuracyM = &w.PAcc
@@ -300,7 +335,8 @@ func parseStaticData(b []byte) (Message, error) {
 	d := StaticData{
 		ReleaseID: w.ReleaseID, Age: w.Age, ColorID: w.ColorID, ServiceID: w.ServiceID,
 		Version:         fmt.Sprintf("%d.%d.%d", w.Major, w.Minor, w.Patch),
-		PersistentNorth: bit(w.Settings, 0), CompassLock: bit(w.Settings, 1),
+		PersistentNorth: bit(w.Settings, 0), CompassLock: bit(w.Settings, 1), BondChat: bit(w.Settings, 3),
+		HalfDuplex: bit(w.Caps, 0),
 	}
 	copy(d.MAC[:], b[3:9])
 	off := 9 + binary.Size(w)
@@ -324,12 +360,12 @@ func parsePeerPing(b []byte) (Message, error) {
 	}
 	p := PeerPing{
 		MeshHops: b[9], Lat: w.Lat, Lon: w.Lon, PosAccuracyM: w.PAcc, SpeedKPH: w.Speed,
-		Bearing: w.Azimuth, Color: RGB{w.R, w.G, w.B}, RSSI: w.RSSI,
+		Bearing: w.Azimuth, Color: RGB{w.R, w.G, w.B}, DTIM: w.DTIM, RSSI: w.RSSI,
 		MsgRx: w.MsgRx, MsgTx: w.MsgTx, MeshRx: w.MeshRx, MeshSendCount: w.MeshSendCount,
 		LastUpdate: w.LastUpdate, LastCoords: unixTime(w.LastCoordsUnix), DistanceDiff: w.DistanceDiff,
 		Orientation: w.Orientation, Volts: w.Volts,
 		SOS: bit(w.FlagsA, 0), POI: bit(w.FlagsA, 1), ViaMesh: bit(w.FlagsA, 2), Stale: bit(w.FlagsA, 3),
-		Collected: bit(w.FlagsA, 4), Unknown: bit(w.FlagsA, 6),
+		Collected: bit(w.FlagsA, 4), Idle: bit(w.FlagsA, 5), Unknown: bit(w.FlagsA, 6),
 		Hidden: bit(w.FlagsB, 0), Locked: bit(w.FlagsB, 1),
 	}
 	copy(p.MAC[:], b[3:9])

@@ -148,26 +148,36 @@ type POI struct {
 	Locked bool
 }
 
-// poiWire is '<ffbBBBhiiBBbbbhhiiib' as unpacked by ble_manager.add_new_bond.
+// poiWire is '<ffbBBBhiiBBbbbhhiiib' as unpacked by ble_manager.add_new_bond
+// and written by app 2.3.0's genNewBondPayload.
+//
+// Azimuth is what the app writes at index 6, the slot gen_peer_ping fills
+// with peer_azimuth; add_new_bond reads it into a local it never uses. The
+// Reserved fields, named by frame offset, are written as 0 by the app and
+// never read by any published firmware (3.2.12 to 5.0.3).
 type poiWire struct {
-	Lat, Lon    float32
-	PAcc        int8
-	R, G, B     uint8
-	_           int16
-	Eat, Nbt    int32
-	AnimationID uint8
-	Flags       uint8 // sos, is_poi, is_sticky_heading, is_hidden, is_locked
-	_           [3]int8
-	_           [2]int16
-	_           [3]int32
-	NameLen     int8
+	Lat, Lon                           float32
+	PAcc                               int8
+	R, G, B                            uint8
+	Azimuth                            int16
+	Eat, Nbt                           int32
+	AnimationID                        uint8
+	Flags                              uint8 // sos, is_poi, is_sticky_heading, is_hidden, is_locked
+	Reserved33, Reserved34, Reserved35 int8
+	Reserved36, Reserved38             int16
+	Reserved40, Reserved44, Reserved48 int32
+	NameLen                            int8
 }
 
-// maxPOIName is what fits after the 53-byte header in one GATT write.
-const maxPOIName = DataBufferSize - 53
+// poiHeader is the POI frame up to its name: cat, cmd, length, id, poiWire.
+const poiHeader = 53
+
+// maxPOIName is what fits after the header in one GATT write.
+const maxPOIName = DataBufferSize - poiHeader
 
 // AddPOI builds (6,6), which registers a point of interest the compass can
-// point to. The device stores it in its peer table under p.ID.
+// point to. The device stores it in its peer table under p.ID. Byte 2 is the
+// frame length, as the app writes it; the firmware does not check it.
 func AddPOI(p POI) (Frame, error) {
 	name := []byte(p.Name)
 	if len(name) > maxPOIName {
@@ -179,7 +189,7 @@ func AddPOI(p POI) (Frame, error) {
 		Flags:   packFlags(false, true, p.Sticky, p.Hidden, p.Locked),
 		NameLen: int8(len(name)),
 	}
-	return dataFrame(CatPeer, 0x06, uint8(0), p.ID[:], w, name)
+	return dataFrame(CatPeer, 0x06, uint8(poiHeader+len(name)), p.ID[:], w, name)
 }
 
 // PeerLocation feeds a bonded peer's position obtained out-of-band (the app
@@ -208,6 +218,8 @@ type CompassPrefs struct {
 }
 
 // SetCompassPrefs builds (7,3): [0, flags(north, lock), flags(_, _, blink), 0, power_mode].
+// App 2.3.0 puts the crystal colour id in the first byte and more flags in
+// the fourth; handle_compass_pref reads neither.
 func SetCompassPrefs(p CompassPrefs) Frame {
 	return mustData(CatCompassPref, 0x03, int8(0),
 		packFlags(p.PersistentNorth, p.CompassLock),

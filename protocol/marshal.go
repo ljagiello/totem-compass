@@ -22,8 +22,8 @@ func (d LiveData) MarshalBinary() ([]byte, error) {
 		MaxHopCnt: d.MaxHopCnt, MeshRx: d.MeshRx, MeshRelayed: d.MeshRelayed,
 		ColorID: d.ColorID, Orientation: d.Orientation, Solution: d.SolutionID,
 		HeadingMot: d.HeadingMot, Azimuth: d.Azimuth, Speed: -1, Odometer: d.Odometer,
-		Reserved: -1, Uptime: int32(d.Uptime.Seconds()), Age: d.Age, PowerLevel: d.PowerLevel,
-		Flags:   packFlags(d.SOS, d.Eco, d.FullBright, d.HasLocation, d.HighPower, d.Charging, false, d.MagCalNeeded),
+		Reserved52: -1, Uptime: int32(d.Uptime.Seconds()), Age: d.Age, PowerLevel: d.PowerLevel,
+		Flags:   packFlags(d.SOS, d.Eco, d.FullBright, d.HasLocation, d.LowBattery, d.Charging, false, d.MagCalNeeded),
 		BattPct: d.BattPct,
 	}
 	if d.PosAccuracyM != nil {
@@ -55,9 +55,9 @@ func (d StaticData) MarshalBinary() ([]byte, error) {
 	}
 	w := staticDataWire{
 		Age: d.Age, ReleaseID: d.ReleaseID, Major: major, Minor: minor, Patch: patch,
-		ColorID: d.ColorID, Settings: packFlags(d.PersistentNorth, d.CompassLock), Const: 1,
-		ServiceID: d.ServiceID,
-		NameLen:   int8(len(d.Name)), BranchLen: int8(len(d.Branch)), SSL: int8(len(d.WiFiSSID)),
+		ColorID: d.ColorID, Settings: packFlags(d.PersistentNorth, d.CompassLock, false, d.BondChat),
+		Caps: packFlags(d.HalfDuplex), ServiceID: d.ServiceID,
+		NameLen: int8(len(d.Name)), BranchLen: int8(len(d.Branch)), SSL: int8(len(d.WiFiSSID)),
 	}
 	var buf bytes.Buffer
 	buf.Write([]byte{CatStaticData, 0x02, 0})
@@ -78,8 +78,8 @@ func (p PeerPing) MarshalBinary() ([]byte, error) {
 	}
 	w := peerPingWire{
 		Lat: p.Lat, Lon: p.Lon, PAcc: p.PosAccuracyM, Speed: p.SpeedKPH, Azimuth: p.Bearing,
-		FlagsA: packFlags(p.SOS, p.POI, p.ViaMesh, p.Stale, p.Collected, false, p.Unknown),
-		R:      p.Color.R, G: p.Color.G, B: p.Color.B,
+		FlagsA: packFlags(p.SOS, p.POI, p.ViaMesh, p.Stale, p.Collected, p.Idle, p.Unknown),
+		R:      p.Color.R, G: p.Color.G, B: p.Color.B, DTIM: p.DTIM,
 		NameLen: int8(len(p.Name)), RSSI: p.RSSI,
 		MsgRx: p.MsgRx, MsgTx: p.MsgTx, MeshRx: p.MeshRx, MeshSendCount: p.MeshSendCount,
 		LastUpdate: p.LastUpdate, DistanceDiff: p.DistanceDiff,
