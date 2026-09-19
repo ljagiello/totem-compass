@@ -53,19 +53,15 @@ const (
 	recentMax      = 512
 )
 
-// Position is a GNSS fix.
-type Position struct {
-	Lat, Lon  float32
-	AccuracyM int8
-	AltitudeM int16
-}
-
 // Config describes the emulated Totem.
 type Config struct {
 	MAC   mesh.MAC   // the ESP-NOW (station) address of this device
 	Owned []mesh.MAC // the only Totems this node listens and talks to
 	Name  string     // default DefaultName(MAC)
-	// Position is the fix to report; nil means no fix, as indoors.
+	// Sensors reads the GNSS receiver, magnetometer, motion sensor and
+	// power chip. Without one the node reports the fixed Position, Heading
+	// and battery below, as a board with no sensors does.
+	Sensors      SensorSource
 	Position     *Position
 	Heading      int16 // compass azimuth, degrees
 	BattVolts    float32
@@ -148,9 +144,14 @@ type Node struct {
 	peers map[mesh.MAC]*peer
 	order []mesh.MAC // bond order
 
-	// clock is set from a peer (rtc_method 2): wall = local + clockOffset.
+	// clock is the device's own (rtc_method 1, from GNSS) or a peer's
+	// (rtc_method 2): wall = local + clockOffset.
 	clockSet    bool
+	gnssClock   bool
 	clockOffset time.Duration
+
+	source  SensorSource
+	sensors Sensors
 
 	pairing  bool
 	pairEnd  time.Time
@@ -210,6 +211,14 @@ func New(cfg Config, now time.Time) *Node {
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
 		meshGrp: meshGroup(cfg.MAC),
 	}
+	n.source = cfg.Sensors
+	if n.source == nil {
+		n.source = &staticSensors{Sensors{
+			Fix: cfg.Position, Orientation: cfg.Orientation, Azimuth: cfg.Heading,
+			Battery: Battery{Volts: cfg.BattVolts, Percent: cfg.BattPct},
+		}}
+	}
+	n.read(now)
 	n.scheduleWindow(now)
 	return n
 }
@@ -243,6 +252,7 @@ func cmpJob(a, b job) int {
 
 // Poll runs every timer due at now and returns the frames to send.
 func (n *Node) Poll(now time.Time) []Packet {
+	n.read(now)
 	for {
 		i := -1
 		for j, jb := range n.jobs {
@@ -315,6 +325,7 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	if !slices.Contains(n.cfg.Owned, rx.Src) {
 		return nil
 	}
+	n.read(now)
 	n.log.Debug("rx", "src", rx.Src, "dst", rx.Dst, "rssi", rx.RSSI, "len", len(rx.Data), "frame", fmt.Sprintf("%x", rx.Data))
 	m, err := mesh.Parse(rx.Data)
 	if err != nil {
@@ -338,24 +349,52 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	return n.flush()
 }
 
-// ---- time --------------------------------------------------------------
+// ---- sensors and time ------------------------------------------------------
+
+// read takes a new sensor reading. A GNSS fix carries the time, which the
+// firmware treats as its own clock (rtc_method 1) and advertises to peers.
+// minClock is the earliest time the node treats as a real clock. A board
+// with no wall clock counts from 1970, and advertising that to a peer that
+// has no clock of its own would set its RTC to 1970 too.
+var minClock = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func (n *Node) read(now time.Time) {
+	n.sensors = n.source.Read(now)
+	if f := n.sensors.Fix; f != nil && f.Time.After(minClock) {
+		n.clockOffset = f.Time.Sub(now)
+		if !n.gnssClock {
+			n.gnssClock = true
+			n.log.Info("clock from GNSS", "wall", f.Time.UTC().Format(time.RFC3339Nano))
+			n.startAligned(now)
+		}
+		n.clockSet = true
+	}
+}
+
+// fix is the current GNSS solution, or nil.
+func (n *Node) fix() *Fix { return n.sensors.Fix }
 
 func (n *Node) wall(now time.Time) time.Time { return now.Add(n.clockOffset) }
+
+// startAligned moves the radio windows and the mesh tick onto wall-clock
+// slots, once the node has a clock.
+func (n *Node) startAligned(now time.Time) {
+	n.jobs = slices.DeleteFunc(n.jobs, func(j job) bool { return j.kind != jobOnce })
+	n.scheduleWindow(now)
+	n.scheduleMeshTick(now)
+}
 
 // adoptClock is the RTC block of Parser._peer: a Totem without a clock
 // takes the time from a peer whose clock came from GNSS.
 func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
-	if n.clockSet || p.TimeOfDayMs <= 0 || p.Unix <= 0 || now.Sub(n.boot) < rtcSyncDelay {
+	if n.clockSet || n.gnssClock || p.TimeOfDayMs <= 0 || p.Unix <= 0 || now.Sub(n.boot) < rtcSyncDelay {
 		return
 	}
 	wall := time.UnixMilli(int64(p.Unix)*1000 + int64(p.TimeOfDayMs%1000))
 	n.clockOffset = wall.Sub(now)
 	n.clockSet = true
 	n.log.Info("RTC set via peer", "wall", wall.UTC().Format(time.RFC3339Nano))
-	// The radio windows move to wall-clock slots.
-	n.jobs = slices.DeleteFunc(n.jobs, func(j job) bool { return j.kind != jobOnce })
-	n.scheduleWindow(now)
-	n.scheduleMeshTick(now)
+	n.startAligned(now)
 }
 
 // scheduleMeshTick arms the next one_sec_mesh_coro wake-up, 200 ms before
@@ -378,7 +417,7 @@ func (n *Node) period() time.Duration {
 	if !n.clockSet {
 		return noSatPeriod
 	}
-	if n.cfg.Orientation == mesh.OrientationHorizontal {
+	if n.sensors.Orientation == mesh.OrientationHorizontal {
 		return time.Second
 	}
 	for _, p := range n.peers {
@@ -484,24 +523,28 @@ func (n *Node) sendOutbox(now time.Time) {
 
 // status is Messages.gen_peer_msg.
 func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
-	c := n.cfg
+	c, sense := n.cfg, n.sensors
 	p := mesh.Peer{
-		Command: cmd, PosAccuracyM: -1, SpeedKPH: -1, Azimuth: c.Heading, SOS: c.SOS,
-		Orientation: c.Orientation, Ack: ack,
-		// rtc_method is 2 (clock from a peer), so no time is advertised.
+		Command: cmd, PosAccuracyM: -1, SpeedKPH: -1, Azimuth: sense.Azimuth, SOS: c.SOS,
+		Orientation: sense.Orientation, Ack: ack,
+		// Time goes out only with the device's own GNSS clock
+		// (rtc_method 1); a clock borrowed from a peer is not passed on.
 		TimeOfDayMs: -1, Unix: -1,
 		Major: c.Version[0], Minor: c.Version[1], Patch: c.Version[2],
-		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute), BattVolts: c.BattVolts,
-		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID, BattPct: c.BattPct,
+		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute), BattVolts: sense.Battery.Volts,
+		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID,
+		BattPct: sense.Battery.Percent,
 	}
-	if pos := c.Position; pos != nil {
-		p.Lat, p.Lon, p.PosAccuracyM, p.SpeedKPH, p.AltitudeM = pos.Lat, pos.Lon, pos.AccuracyM, 0, pos.AltitudeM
-		switch {
-		case pos.AccuracyM >= 0 && pos.AccuracyM <= 3:
-			p.SolutionID = 1
-		case pos.AccuracyM >= 0 && pos.AccuracyM <= 15:
-			p.SolutionID = 2
-		}
+	if f := sense.Fix; f != nil {
+		p.Lat, p.Lon, p.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
+		p.SpeedKPH, p.AltitudeM, p.SolutionID = f.SpeedKPH, f.AltitudeM, f.SolutionID
+		p.HeadingOfMotion = f.HeadingOfMotion
+		p.OdometerM = int16(min(f.OdometerM, math.MaxInt16))
+	}
+	if n.gnssClock {
+		w := n.wall(now).UTC()
+		p.Unix = int32(w.Unix())
+		p.TimeOfDayMs = int32(w.Hour()*3600000 + w.Minute()*60000 + w.Second()*1000 + w.Nanosecond()/1e6)
 	}
 	return p
 }
@@ -713,9 +756,9 @@ func (n *Node) locate(now time.Time, request bool, uid uint16) mesh.Locate {
 		MinRSSI: mesh.DefaultMinRSSI, MinDistM: -1, MaxDistM: -1, MaxHops: mesh.DefaultMaxHops,
 		Expiry: int32(n.wall(now).Unix()) + mesh.LocateLifetimeSec, RelayMinDistM: mesh.DefaultRelayMinDist,
 	}
-	if pos := n.cfg.Position; pos != nil {
-		l.Lat, l.Lon, l.PosAccuracyM = pos.Lat, pos.Lon, pos.AccuracyM
-		l.LastHopLat, l.LastHopLon = pos.Lat, pos.Lon
+	if f := n.fix(); f != nil {
+		l.Lat, l.Lon, l.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
+		l.LastHopLat, l.LastHopLon = f.Lat, f.Lon
 	}
 	return l
 }
@@ -724,7 +767,7 @@ func (n *Node) locate(now time.Time, request bool, uid uint16) mesh.Locate {
 // heard from an owned Totem.
 func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 	switch {
-	case n.cfg.Position == nil:
+	case n.fix() == nil:
 		return // a Totem without a fix ignores the mesh
 	case n.seen(now, m.UID):
 		return
@@ -777,7 +820,7 @@ func (n *Node) relay(now time.Time, frame []byte, m mesh.Locate) bool {
 	if int(m.Hops)+1 >= int(m.MaxHops) || (m.Expiry != 0 && n.wall(now).Unix() > int64(m.Expiry)) {
 		return false
 	}
-	pos := n.cfg.Position
+	pos := n.fix()
 	if m.RelayMinDistM > 0 && distance(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
 		return false
 	}
@@ -822,7 +865,7 @@ func (n *Node) addRecent(now time.Time, uid uint16, expiry int32) {
 // for bonded peers we have lost.
 func (n *Node) meshTick(now time.Time) {
 	n.scheduleMeshTick(now)
-	if n.cfg.Position == nil || len(n.peers) == 0 || n.lastTX.IsZero() || n.wall(now).Second()%5 != n.meshGrp {
+	if n.fix() == nil || len(n.peers) == 0 || n.lastTX.IsZero() || n.wall(now).Second()%5 != n.meshGrp {
 		return
 	}
 	if _, queued := n.outbox[mesh.Broadcast]; queued {
@@ -894,10 +937,11 @@ func (n *Node) updateStale(now time.Time, p *peer) {
 }
 
 func (n *Node) peerDistance(p *peer) float64 {
-	if n.cfg.Position == nil || !p.hasCoords {
+	f := n.fix()
+	if f == nil || !p.hasCoords {
 		return -1
 	}
-	return distance(n.cfg.Position.Lat, n.cfg.Position.Lon, p.lat, p.lon)
+	return distance(f.Lat, f.Lon, p.lat, p.lon)
 }
 
 func (n *Node) furthestPeer() float64 {
@@ -949,8 +993,8 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 			return
 		}
 		join := mesh.SmartGroupReply{UID: g.UID, PosAccuracyM: -1}
-		if pos := n.cfg.Position; pos != nil {
-			join.Lat, join.Lon, join.PosAccuracyM = pos.Lat, pos.Lon, pos.AccuracyM
+		if f := n.fix(); f != nil {
+			join.Lat, join.Lon, join.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
 		}
 		n.send(mesh.Broadcast, join)
 		n.at(now.Add(joinGap), func(time.Time) { n.send(mesh.Broadcast, join) })
@@ -997,14 +1041,143 @@ func (n *Node) Peers() []PeerInfo {
 // Pairing reports whether the pairing window is open.
 func (n *Node) Pairing() bool { return n.pairing }
 
+// SetClock gives the node the wall time, as a GNSS lock does. It is how a
+// board without a clock of its own gets one, from totemctl mesh clock.
+func (n *Node) SetClock(wall, now time.Time) error {
+	if !wall.After(minClock) {
+		return fmt.Errorf("clock %s is before %s", wall.UTC().Format(time.RFC3339), minClock.Format("2006"))
+	}
+	if s := n.sim(); s != nil {
+		s.SetClock(wall, now)
+	} else if f := n.static(); f != nil && f.s.Fix != nil {
+		f.s.Fix.Time = wall
+	}
+	n.clockOffset = wall.Sub(now)
+	n.clockSet, n.gnssClock = true, true
+	n.log.Info("clock set", "wall", wall.UTC().Format(time.RFC3339Nano))
+	n.startAligned(now)
+	n.read(now)
+	return nil
+}
+
+// SetSensors replaces the sensor source, such as a simulated Totem or a
+// board's own drivers.
+func (n *Node) SetSensors(src SensorSource, now time.Time) {
+	n.source = src
+	n.cfg.Sensors = src
+	n.read(now)
+}
+
+// static is the fixed sensor reading the pos, heading and battery commands
+// change. It returns nil once a real source is installed.
+func (n *Node) static() *staticSensors {
+	f, _ := n.source.(*staticSensors)
+	return f
+}
+
+// sim is the running simulation, or nil when the readings come from
+// somewhere else.
+func (n *Node) sim() *Sim {
+	s, _ := n.source.(*Sim)
+	return s
+}
+
+// StartSim runs a simulated Totem: it walks a track from wherever the node
+// is now, keeping its battery and orientation.
+func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
+	if s := n.sim(); s != nil {
+		s.SetMotion(m, bearing)
+		n.read(now)
+		return
+	}
+	cfg := SimConfig{
+		Motion: m, Bearing: bearing, NoFix: n.sensors.Fix == nil,
+		Percent: n.sensors.Battery.Percent, Charging: n.sensors.Battery.Charging,
+		Flat: n.sensors.Orientation == mesh.OrientationHorizontal, Rand: n.rng,
+	}
+	if f := n.sensors.Fix; f != nil {
+		cfg.Lat, cfg.Lon = f.Lat, f.Lon
+	}
+	n.SetSensors(NewSim(cfg, now), now)
+	n.log.Info("simulation started", "motion", m, "bearing", bearing)
+	if cfg.NoFix {
+		n.log.Warn("the simulation has no position to walk from: set one with pos <lat> <lon>")
+	}
+}
+
+// StopSim freezes the readings where the simulation left them.
+func (n *Node) StopSim(now time.Time) {
+	if n.sim() == nil {
+		return
+	}
+	held := n.sensors
+	if f := held.Fix; f != nil {
+		frozen := *f
+		frozen.SpeedKPH, frozen.Time = 0, time.Time{}
+		held.Fix = &frozen
+	}
+	n.SetSensors(NewStatic(held), now)
+	n.log.Info("simulation stopped")
+}
+
+// SetFlat reports the Totem lying down or upright, which changes how often
+// peers expect its status.
+func (n *Node) SetFlat(flat bool, now time.Time) {
+	o := mesh.OrientationVertical
+	if flat {
+		o = mesh.OrientationHorizontal
+	}
+	if s := n.sim(); s != nil {
+		s.SetFlat(flat)
+	} else if f := n.static(); f != nil {
+		f.s.Orientation = o
+	}
+	n.cfg.Orientation = o
+	n.read(now)
+}
+
+// SetBattery sets the charge level and whether the Totem is charging.
+func (n *Node) SetBattery(percent int8, charging bool, now time.Time) {
+	if s := n.sim(); s != nil {
+		s.SetBattery(percent, charging)
+	} else if f := n.static(); f != nil {
+		f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10}
+	}
+	n.cfg.BattPct, n.cfg.BattVolts = percent, voltsFor(percent)
+	n.read(now)
+}
+
 // SetPosition changes the reported fix; nil means none.
-func (n *Node) SetPosition(p *Position) { n.cfg.Position = p }
+func (n *Node) SetPosition(p *Position) {
+	if s := n.sim(); s != nil {
+		if p != nil {
+			s.SetFix(p.Lat, p.Lon, true)
+		} else {
+			s.SetFix(0, 0, false)
+		}
+		return
+	}
+	if f := n.static(); f != nil {
+		f.s.Fix = p
+		n.sensors.Fix = p
+		n.cfg.Position = p
+	}
+}
 
 // SetSOS switches SOS on or off.
 func (n *Node) SetSOS(on bool) { n.cfg.SOS = on }
 
 // SetHeading changes the reported compass azimuth.
-func (n *Node) SetHeading(deg int16) { n.cfg.Heading = deg }
+func (n *Node) SetHeading(deg int16) {
+	if f := n.static(); f != nil {
+		f.s.Azimuth = deg
+		n.sensors.Azimuth = deg
+		n.cfg.Heading = deg
+	}
+}
+
+// Sensors is the last sensor reading.
+func (n *Node) Sensors() Sensors { return n.sensors }
 
 // Config returns the node's current settings.
 func (n *Node) Config() Config { return n.cfg }

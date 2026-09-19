@@ -47,7 +47,7 @@ func openSerial(name string) (io.ReadWriteCloser, error) {
 
 func newMeshCmd(g *globals) *cobra.Command {
 	c := group("mesh", "Watch and drive the ESP32 mesh emulator (cmd/totememu) over USB serial",
-		newMeshWatchCmd(g), newMeshStatusCmd(g), newMeshPairCmd(g), newMeshSendCmd(g))
+		newMeshWatchCmd(g), newMeshStatusCmd(g), newMeshPairCmd(g), newMeshClockCmd(g), newMeshSendCmd(g))
 	c.Long = `The mesh commands talk to an ESP32 running cmd/totememu, which joins the
 Totem ESP-NOW mesh as another Totem, over its USB serial console. watch
 decodes every frame your Totem sends the board.
@@ -180,6 +180,39 @@ answers the Totem's bond request by itself; bonding needs a signal of
 	}
 	c.Flags().DurationVar(&dur, "for", time.Minute, "give up after this long")
 	return c
+}
+
+func newMeshClockCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "clock",
+		Short: "Give the emulator this computer's time, as a GNSS lock would",
+		Long: `The board has no clock of its own: it counts from 1970 until a peer or a
+GNSS receiver gives it the time. clock sets it from this computer, so the
+emulator can hold wall-clock radio windows and advertise the time to peers
+the way a Totem with a fix does.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			e, err := openEmulator(cmd.Context(), g, false)
+			if err != nil {
+				return err
+			}
+			defer e.close()
+			if err := e.send(fmt.Sprintf("clock %d", time.Now().UnixMilli())); err != nil {
+				return err
+			}
+			l, err := e.await(cmd.Context(), g.wait(consoleReply), func(l consoleLine) bool {
+				return l.Msg == "clock set" || l.Msg == "bad command"
+			})
+			if err != nil {
+				return fmt.Errorf("clock: %w", err)
+			}
+			g.out.meshEvent(l.event())
+			if l.Msg == "bad command" {
+				return fmt.Errorf("the emulator rejected the clock: %v", l.attrs["err"])
+			}
+			return nil
+		},
+	}
 }
 
 func newMeshSendCmd(g *globals) *cobra.Command {

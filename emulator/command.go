@@ -26,11 +26,17 @@ const (
 	OpFormat   Op = "format"
 	OpSelfTest Op = "selftest"
 	OpHelp     Op = "help"
+	OpSim      Op = "sim"
+	OpClock    Op = "clock"
+	OpFlat     Op = "flat"
+	OpBattery  Op = "batt"
 )
 
 // Help is the console's command summary.
 const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos off | heading <deg> | " +
-	"sos on|off | status | log debug|info|warn|error | format text|json | selftest"
+	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
+	"clock <unix ms> | " +
+	"status | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -40,10 +46,13 @@ type Command struct {
 	Op       Op
 	MAC      mesh.MAC   // unbond
 	Position *Position  // pos; nil clears the fix
-	Heading  int16      // heading, 0-359
-	On       bool       // sos
+	Heading  int16      // heading and sim bearing, 0-359
+	On       bool       // sos, flat, batt charging
 	Level    slog.Level // log
 	JSON     bool       // format
+	Motion   Motion     // sim
+	Percent  int8       // batt
+	ClockMs  int64      // clock, milliseconds since the Unix epoch
 }
 
 // defaultAccuracyM is the accuracy pos reports when none is given.
@@ -96,6 +105,21 @@ func ParseCommand(line string) (Command, error) {
 		if err = want(1); err == nil {
 			err = c.Level.UnmarshalText([]byte(args[0]))
 		}
+	case OpFlat:
+		if err = want(1); err == nil {
+			c.On, err = parseChoice(args[0], "on", "off")
+		}
+	case OpSim:
+		c.Motion, c.Heading, c.On, err = parseSim(args)
+	case OpBattery:
+		c.Percent, c.On, err = parseBattery(args)
+	case OpClock:
+		if err = want(1); err == nil {
+			c.ClockMs, err = strconv.ParseInt(args[0], 10, 64)
+			if err != nil || c.ClockMs <= 0 {
+				err = fmt.Errorf("%q: want milliseconds since the Unix epoch", args[0])
+			}
+		}
 	default:
 		return Command{}, fmt.Errorf("%w %q", ErrUnknownCommand, f[0])
 	}
@@ -103,6 +127,53 @@ func ParseCommand(line string) (Command, error) {
 		return Command{}, fmt.Errorf("%s: %w", c.Op, err)
 	}
 	return c, nil
+}
+
+// parseSim reads "still|walk|drive [bearing]" or "off"; on reports whether
+// the simulation runs.
+func parseSim(args []string) (m Motion, bearing int16, on bool, err error) {
+	if len(args) == 1 && args[0] == "off" {
+		return Still, 0, false, nil
+	}
+	if len(args) < 1 || len(args) > 2 {
+		return 0, 0, false, errors.New("want still|walk|drive [bearing] or off")
+	}
+	switch args[0] {
+	case "still":
+		m = Still
+	case "walk":
+		m = Walk
+	case "drive":
+		m = Drive
+	default:
+		return 0, 0, false, fmt.Errorf("%q: want still, walk, drive or off", args[0])
+	}
+	if len(args) == 2 {
+		d, err := strconv.ParseInt(args[1], 10, 16)
+		if err != nil || d < 0 || d > 359 {
+			return 0, 0, false, fmt.Errorf("bearing %q: want 0-359 degrees", args[1])
+		}
+		bearing = int16(d)
+	}
+	return m, bearing, true, nil
+}
+
+// parseBattery reads "<0-100> [charging]".
+func parseBattery(args []string) (percent int8, charging bool, err error) {
+	if len(args) < 1 || len(args) > 2 {
+		return 0, false, errors.New("want <0-100> [charging]")
+	}
+	v, err := strconv.ParseInt(args[0], 10, 8)
+	if err != nil || v < 0 || v > 100 {
+		return 0, false, fmt.Errorf("%q: want 0-100 percent", args[0])
+	}
+	if len(args) == 2 {
+		if args[1] != "charging" {
+			return 0, false, fmt.Errorf("%q: want charging", args[1])
+		}
+		charging = true
+	}
+	return int8(v), charging, nil
 }
 
 func parseChoice(s, yes, no string) (bool, error) {
@@ -130,7 +201,7 @@ func parsePosition(args []string) (*Position, error) {
 	if err != nil {
 		return nil, fmt.Errorf("longitude: %w", err)
 	}
-	p := &Position{Lat: lat, Lon: lon, AccuracyM: defaultAccuracyM, AltitudeM: -500}
+	p := &Position{Lat: lat, Lon: lon, AccuracyM: defaultAccuracyM, AltitudeM: -500, HeadingOfMotion: -1}
 	if len(args) == 3 {
 		acc, err := strconv.ParseInt(args[2], 10, 8)
 		if err != nil || acc < 0 {
@@ -138,6 +209,7 @@ func parsePosition(args []string) (*Position, error) {
 		}
 		p.AccuracyM = int8(acc)
 	}
+	p.SolutionID = solutionFor(p.AccuracyM)
 	return p, nil
 }
 
@@ -173,6 +245,20 @@ func (c Command) String() string {
 		return "log " + strings.ToLower(c.Level.String())
 	case OpFormat:
 		return "format " + map[bool]string{true: "json", false: "text"}[c.JSON]
+	case OpFlat:
+		return "flat " + map[bool]string{true: "on", false: "off"}[c.On]
+	case OpSim:
+		if !c.On {
+			return "sim off"
+		}
+		return fmt.Sprintf("sim %s %d", c.Motion, c.Heading)
+	case OpBattery:
+		if c.On {
+			return fmt.Sprintf("batt %d charging", c.Percent)
+		}
+		return fmt.Sprintf("batt %d", c.Percent)
+	case OpClock:
+		return fmt.Sprintf("clock %d", c.ClockMs)
 	}
 	return string(c.Op)
 }

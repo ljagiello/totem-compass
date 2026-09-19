@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -303,6 +304,42 @@ func TestMeshSend(t *testing.T) {
 	err := h.run(t, "mesh", "send", "fly")
 	if err == nil || !strings.Contains(err.Error(), `does not know "fly"`) {
 		t.Errorf("unknown command: err = %v", err)
+	}
+}
+
+func TestMeshClock(t *testing.T) {
+	var got string
+	f := &fakeEmulator{reply: func(cmd string) []string {
+		if !strings.HasPrefix(cmd, "clock ") {
+			return nil
+		}
+		got = cmd
+		return []string{`{"up":1,"level":"INFO","msg":"clock set","wall":"2026-09-19T22:30:00Z"}`}
+	}}
+	h := meshHarness(f)
+	h.mustRun(t, "mesh", "clock")
+	ms, err := strconv.ParseInt(strings.TrimPrefix(got, "clock "), 10, 64)
+	if err != nil {
+		t.Fatalf("sent %q", got)
+	}
+	if d := time.Since(time.UnixMilli(ms)).Abs(); d > time.Minute {
+		t.Errorf("sent a clock %v off this computer's", d)
+	}
+	if !strings.Contains(h.out.String(), "clock set") {
+		t.Errorf("output = %q", h.out.String())
+	}
+}
+
+func TestMeshClockRejected(t *testing.T) {
+	f := &fakeEmulator{reply: func(cmd string) []string {
+		if strings.HasPrefix(cmd, "clock ") {
+			return []string{`{"up":1,"level":"WARN","msg":"bad command","err":"clock 1970-01-01T00:00:07Z is before 2020"}`}
+		}
+		return nil
+	}}
+	h := meshHarness(f)
+	if err := h.run(t, "mesh", "clock"); err == nil || !strings.Contains(err.Error(), "rejected the clock") {
+		t.Errorf("err = %v", err)
 	}
 }
 

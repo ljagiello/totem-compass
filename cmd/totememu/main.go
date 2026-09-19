@@ -203,11 +203,32 @@ func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet 
 	case emulator.OpSOS:
 		n.SetSOS(c.On)
 		log.Info("sos", "on", c.On)
+	case emulator.OpFlat:
+		n.SetFlat(c.On, now)
+		log.Info("orientation", "flat", c.On)
+	case emulator.OpBattery:
+		n.SetBattery(c.Percent, c.On, now)
+		log.Info("battery set", "percent", c.Percent, "charging", c.On)
+	case emulator.OpClock:
+		if err := n.SetClock(time.UnixMilli(c.ClockMs), now); err != nil {
+			log.Warn("bad command", "err", err)
+		}
+	case emulator.OpSim:
+		if c.On {
+			n.StartSim(c.Motion, c.Heading, now)
+		} else {
+			n.StopSim(now)
+		}
+		log.Info("simulation", "running", c.On, "motion", c.Motion, "bearing", c.Heading)
 	case emulator.OpStatus:
 		cfg := n.Config()
-		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS, "heading", cfg.Heading, "color", cfg.ColorID}
-		if p := cfg.Position; p != nil {
-			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM)
+		sense := n.Sensors()
+		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS,
+			"heading", sense.Azimuth, "color", cfg.ColorID, "flat", sense.Orientation == mesh.OrientationHorizontal,
+			"batt", sense.Battery.Percent, "volts", sense.Battery.Volts, "charging", sense.Battery.Charging}
+		if p := sense.Fix; p != nil {
+			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM,
+				"speed", p.SpeedKPH, "sats", p.SatCount, "odometer_m", p.OdometerM)
 		}
 		log.Info("self", self...)
 		for _, p := range n.Peers() {

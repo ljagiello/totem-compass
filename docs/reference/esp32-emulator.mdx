@@ -77,6 +77,10 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `status` | this device and each peer: name, RSSI, last heard, position, battery |
 | `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix (latitude ±90, longitude ±180, accuracy 0-127 m, default 5), or none (the default) |
 | `heading <deg>` | compass azimuth to report, 0-359 |
+| `sim still\|walk\|drive [bearing]`, `sim off` | run or stop the simulated hardware |
+| `flat on\|off` | report the Totem lying down or upright |
+| `batt <0-100> [charging]` | battery level |
+| `clock <unix ms>` | set the wall clock (`totemctl mesh clock` sends this computer's) |
 | `sos on\|off` | the SOS flag |
 | `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
 | `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |
@@ -86,6 +90,37 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 The console is parsed by `emulator.ParseCommand`, which rejects values out of range (and
 `NaN` or `Inf` coordinates) with a `bad command` warning rather than put them on the air. It is
 fuzzed on the host.
+
+## Simulated hardware
+
+A Totem has a GNSS receiver, a magnetometer, a motion sensor and a power chip. On a board
+without them the `emulator` package provides a `Sim` that behaves like one, so the emulator
+reports what a Totem in someone's hand would:
+
+```bash
+totemctl mesh send pos 37.5868 -122.0074 3   # where the walk starts
+totemctl mesh clock                          # the board has no clock of its own
+totemctl mesh send sim walk 90               # walk east; drive is 50 km/h, still holds position
+totemctl mesh send flat on                   # lying down: peers then expect status every second
+totemctl mesh send batt 40                   # battery level, and "batt 40 charging"
+```
+
+```text
+→ 8c94df7b0478  status "emu_totem_abb0"  37.586800,-122.002060 ±5m alt 12m 50km/h  azimuth 90° heading 89° upright  batt 94% 4.14V  fw 5.0.3  clock 15:30:35.142
+```
+
+The simulation moves the position along the bearing (a walk wanders, a drive holds its
+course), keeps the odometer, derives the heading of motion from the last 10 m as
+`get_heading_mot` does, drains the battery and reports satellites and a solution id.
+
+**The clock matters for more than the display.** With one, the node holds wall-clock radio
+windows and advertises the time to peers the way a Totem with a GNSS lock does
+(`rtc_method` 1); without one it borrows a peer's clock and stays quiet about it
+(`rtc_method` 2). A board that has just booted counts from 1970, so the node refuses any
+clock before 2020 rather than push that at a peer whose own clock is not set.
+
+`SensorSource` is the seam: `Sim` on a board with no sensors, and a board's own GNSS,
+magnetometer, motion sensor and power chip where they exist.
 
 ## Radio setup
 
