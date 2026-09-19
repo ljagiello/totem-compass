@@ -15,6 +15,7 @@ import (
 type session struct {
 	ctx context.Context
 	c   *client.Client
+	g   *globals
 	out *printer
 
 	static *protocol.StaticData
@@ -32,6 +33,7 @@ func open(ctx context.Context, g *globals) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
+	g.phase("found")
 	g.out.status("connecting to %s (%s, %d dBm)…", orUnnamed(dev.Name), dev.Address, dev.RSSI)
 	opts := client.Options{HalfDuplex: g.halfDuplex, AutoGrant: true}
 	if g.trace {
@@ -43,11 +45,13 @@ func open(ctx context.Context, g *globals) (*session, error) {
 	if err != nil {
 		return nil, err
 	}
+	g.phase("connected and subscribed")
 	if err := c.Start(); err != nil {
 		_ = c.Close()
 		return nil, err
 	}
-	return &session{ctx: ctx, c: c, out: g.out, peers: map[protocol.MAC]protocol.PeerPing{}}, nil
+	g.phase("handshake sent")
+	return &session{ctx: ctx, c: c, g: g, out: g.out, peers: map[protocol.MAC]protocol.PeerPing{}}, nil
 }
 
 func describeMatch(m string) string {
@@ -64,7 +68,11 @@ func orUnnamed(s string) string {
 	return s
 }
 
-func (s *session) close() { _ = s.c.Close() }
+func (s *session) close() {
+	s.g.phase("done")
+	_ = s.c.Close()
+	s.g.phase("disconnected")
+}
 
 func (s *session) send(frames ...protocol.Frame) error {
 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)

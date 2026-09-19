@@ -482,11 +482,14 @@ func (c *Client) Close() error {
 		return nil
 	default:
 	}
+	// The request is written with response, so the device has it before we
+	// drop the link; the OS tears the connection down even if we exit before
+	// its disconnect callback, so don't wait long for that.
 	_ = c.write(protocol.DisconnectRequest())
 	err := c.dev.Disconnect()
 	select {
 	case <-c.gone:
-	case <-time.After(2 * time.Second):
+	case <-time.After(250 * time.Millisecond):
 	}
 	disconnects.Delete(c.Device.Address.String())
 	return err

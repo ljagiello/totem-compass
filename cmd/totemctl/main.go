@@ -27,6 +27,15 @@ type globals struct {
 	trace       bool
 	halfDuplex  bool
 	out         *printer
+	start       time.Time
+}
+
+// phase reports elapsed time since startup with -trace, to show where a
+// command spends its time.
+func (g *globals) phase(name string) {
+	if g.trace {
+		fmt.Fprintf(os.Stderr, "%s +%.2fs %s\n", time.Now().Format("15:04:05.000"), time.Since(g.start).Seconds(), name)
+	}
 }
 
 type command struct {
@@ -77,7 +86,7 @@ func usage() {
 }
 
 func main() {
-	g := &globals{out: &printer{out: os.Stdout}}
+	g := &globals{out: &printer{out: os.Stdout}, start: time.Now()}
 	flag.StringVar(&g.device, "d", os.Getenv("TOTEM_DEVICE"), "Totem to use: name or address substring (default: first found; env TOTEM_DEVICE)")
 	flag.DurationVar(&g.scanTimeout, "scan-timeout", 60*time.Second, "how long to look for the Totem")
 	flag.BoolVar(&g.out.json, "json", false, "print results as JSON lines")
