@@ -96,7 +96,10 @@ tinygo flash -target esp32-generic -ldflags "-X main.owned=<your Totem's MAC>" .
 totemctl mesh pair                # hold the Totem's Touch Crystal next to the board
 totemctl mesh watch               # decode every frame the Totem sends it (--raw, --tx, --json)
 totemctl mesh status              # the emulator and its peers
-totemctl mesh send pos 50.0671 19.9124 3   # any console command: pos, sos, heading, unbond, selftest
+totemctl mesh clock               # give the board this computer's time
+totemctl mesh send pos 50.0671 19.9124 3   # where it is
+totemctl mesh send sim walk 90             # and where it goes: walk, drive or still
+totemctl mesh send batt 40                 # also: sos, heading, flat, unbond, selftest
 ```
 
 The `mesh` commands find the board's USB serial port by itself (or take `--port`,
@@ -106,7 +109,7 @@ board does not reboot, and they decode the raw frames on the host with the `mesh
 | Package | Contents |
 | --- | --- |
 | [`mesh/`](mesh/) | ESP-NOW frame codec (peer, locate, Smart Group), tested against frames packed with the firmware's own `struct` formats |
-| [`emulator/`](emulator/) | the Totem logic: pairing, radio windows, clock sync, locate reply and relay, Smart Group member; host-tested |
+| [`emulator/`](emulator/) | the Totem logic: pairing, radio windows, clock sync, locate reply and relay, Smart Group member, and a model of the GNSS receiver, compass, motion sensor and battery; host-tested |
 | [`cmd/totememu/`](cmd/totememu/) | the ESP32 firmware and its serial console |
 
 ## Scope & ethics

@@ -8,9 +8,20 @@ It pairs with a real Totem over the air, and from then on the two exchange peer 
 radio window like any two bonded Totems. It is written in Go and built with TinyGo and
 [`tinygo.org/x/espradio`](https://github.com/tinygo-org/espradio).
 
-**Hardware-tested** on 2026-09-19: an ESP32-D0WD-V3 bonded with a Totem on firmware 5.0.3
-through the normal Touch Crystal pairing. The Totem then unicast its status to the emulator
-every second, and it acknowledged every status frame the emulator sent.
+A Totem's GNSS receiver, magnetometer, motion sensor and power chip are modelled too, so the
+emulator reports a position that moves, a compass, a battery that drains and a clock
+(see [simulated hardware](#simulated-hardware)). On a board that has those parts, its own
+drivers replace the model.
+
+**Hardware-tested** on 2026-09-19 with an ESP32-D0WD-V3 and a Totem on firmware 5.0.3:
+
+- the bond completed through the normal Touch Crystal pairing;
+- the Totem unicast its status to the emulator every second, and acknowledged every frame the
+  emulator sent;
+- a walk at 5 km/h and a drive at 50 km/h arrived with the position, speed, compass, heading of
+  motion and clock the firmware expects, including the duplicate status a Totem sends once a
+  peer is more than 30 m away;
+- the bond came back by itself after the board rebooted.
 
 ## Layout
 
@@ -18,7 +29,9 @@ every second, and it acknowledged every status frame the emulator sent.
 | --- | --- |
 | `mesh` | codec for the peer `(0, cmd)`, locate `(2,0)` and Smart Group `(7,x)` frames, field by field as in [message format](/protocols/message-format#peer-frame-0-cmd). Tested against frames packed by CPython's `struct` with the firmware's own formats, and fuzzed. |
 | `emulator` | the Totem itself: pairing handshake, radio windows, clock sync, locate reply and relay, Smart Group member. Pure Go that takes frames and the time, and returns frames to send, so it is tested on the host with scenario tests and a fuzz target. |
+| `emulator` (sensors) | `SensorSource`, and a `Sim` that walks or drives a track, keeps an odometer, drains a battery and points a compass. |
 | `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && esp32` build tags). |
+| `cmd/totememu/ring` | the receive ring's C (`ring.h`) compiled for the host, so it can be tested and fuzzed. |
 
 ## Build and flash
 
@@ -49,6 +62,7 @@ totemctl mesh watch --tx     # plus the frames the emulator sends
 totemctl mesh watch --json   # one JSON object per frame, every field
 totemctl mesh status         # the emulator and its peers
 totemctl mesh pair           # wait for a bond while you hold the Touch Crystal
+totemctl mesh clock          # give the board this computer's time
 totemctl mesh send sos on    # any console command below
 ```
 
@@ -86,6 +100,7 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |
 | `format text\|json` | log lines as slog text or as JSON (what `totemctl mesh` uses) |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
+| `help` | list the commands |
 
 The console is parsed by `emulator.ParseCommand`, which rejects values out of range (and
 `NaN` or `Inf` coordinates) with a `bad command` warning rather than put them on the air. It is
