@@ -5,7 +5,7 @@ description: "The ESP32 application image: header, segments, footer, and build m
 
 ## Image format
 
-`firmware_v5.0.2.bin` is a standard **ESP-IDF application image** (`esp_image_header_t`),
+`firmware_v5.0.3.bin` is a standard **ESP-IDF application image** (`esp_image_header_t`),
 not a raw binary. By the ESP-IDF format it begins with the magic byte `0xE9` and is loaded
 by the second-stage bootloader into the OTA app partition.
 
@@ -36,14 +36,14 @@ The application descriptor sits at the start of the first mapped segment.
 | --- | --- | --- |
 | `magic_word` | `0xABCD5432` | ESP-IDF app descriptor |
 | `project_name` | *(blank)* | not set (all-zero) at build time |
-| `version` | *(blank)* | field is empty (all-zero); the `5.0.2` version appears as a standalone string in DROM (a Python module constant), not in the OTA descriptor |
-| `time` / `date` | `15:08:47`, `Aug 27 2026` | build timestamp |
+| `version` | *(blank)* | field is empty (all-zero); the `5.0.3` version appears as a standalone string in DROM (`f_ota/system.py` `release_code`), not in the OTA descriptor |
+| `time` / `date` | `16:11:34`, `Sep 12 2026` | build timestamp (v5.0.2: `15:08:47`, `Aug 27 2026`) |
 | `idf_ver` | `v5.4-dirty` | ESP-IDF v5.4 with local modifications |
 | `secure_version` | `0` | anti-rollback secure version counter is unused |
 | `min_efuse_blk_rev_full` | `0` | minimum eFuse block revision (value confirmed from bytes; semantics per ESP-IDF layout) |
 | `max_efuse_blk_rev_full` | `99` (`0x0063`) | maximum eFuse block revision 0.99 (value confirmed from bytes; semantics inferred) |
 | `mmu_page_size` | `16` → 64 KiB | flash MMU page size; the 64-KiB page matches the `+0x20`-into-a-page flash mapping (value confirmed from bytes; semantics inferred) |
-| `app_elf_sha256` | `31122473…e5dd0638` | hash of the source ELF (not the .bin file) |
+| `app_elf_sha256` | `97a29359…a37b5777` | hash of the source ELF (not the .bin file) |
 
 <Note>
 `v5.4-dirty` means the ESP-IDF tree had uncommitted local changes when the image was
@@ -54,15 +54,16 @@ built. This is normal for vendor firmware and does not indicate tampering.
 
 The image carries two integrity mechanisms, both validated with `esptool`:
 
-- A one-byte **XOR checksum** over the segment data: `0x1f` (valid).
-- An appended **SHA-256** (`hash_appended` set): `2a01e0f5…31058c` (valid), which the
+- A one-byte **XOR checksum** over the segment data: `0xb2` (valid).
+- An appended **SHA-256** (`hash_appended` set): `a6c392bf…3e622dcd` (valid), which the
   bootloader verifies before boot. This is an image-integrity hash, not a cryptographic
   signature; no Secure Boot signature block was observed in this image.
 
 <Note>
-These three hashes are distinct: the **image-file** SHA-256 (`a6d05597…`, the whole `.bin`,
-listed by the release API), the **appended validation** hash (`2a01e0f5…`, inside the image),
-and the **app ELF** hash (`311224…`, in `esp_app_desc_t`, pinning the source ELF).
+These three hashes are distinct: the **image-file** SHA-256 (`bfe1f5a4…`, the whole `.bin`,
+listed by the release API), the **appended validation** hash (`a6c392bf…`, inside the image),
+and the **app ELF** hash (`97a29359…`, in `esp_app_desc_t`, pinning the source ELF).
+For v5.0.2 they were `a6d05597…`, `2a01e0f5…` and `311224…`.
 </Note>
 
 ## Runtime: MicroPython
@@ -72,8 +73,8 @@ interpreter plus ESP-IDF components (WiFi, NimBLE Bluetooth, mbedTLS, FreeRTOS,
 LittleFS/VFS). Totem's application is written in Python and frozen into the image.
 
 ```text
-MicroPython v1.25.0-dirty on 2026-09-10
-MPY version : v1.25.0-dirty on 2026-09-10
+MicroPython v1.25.0-dirty on 2026-09-16
+MPY version : v1.25.0-dirty on 2026-09-16
 ```
 
 The presence of `webrepl.py`, `upysh.py`, and `mip` (the MicroPython package installer)

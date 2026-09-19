@@ -28,7 +28,9 @@ flowchart TD
 - `boot.py` (a VFS file on flash, distinct from the frozen `_boot.py`) runs on every boot,
   including wake from deep sleep, immediately before `main.py`.
 - `main.py` / `project_main.py` bring up the application: event bus, task manager,
-  LEDs, radios, GNSS, and the compass state machine.
+  LEDs, radios, GNSS, and the compass state machine. In v5.0.3 `compass.start` launches
+  the ESP-NOW comms task via `enow_v2.communicate_supervised`, which restarts it on a
+  crash (v5.0.2: `communicate_v2` directly).
 
 ## Power / boot modes
 
@@ -89,8 +91,11 @@ value of the battery-health enum above.
 
 `wdt_manager.py` is not a plain task-WDT wrapper but a condition/blocker engine
 (`WdtManager` / `WdtConditions` / `WdtBlockers`): an async feed loop (`Starting WDT feed loop`)
-feeds the native task watchdog (`mpy_machine_wdt` / `task_wdt`) only while the conditions are met
-and no blocker is active (`[WDT {}] cond=[{}] blk=[{}]`). It supports dynamic threshold changes
+feeds the native task watchdog (`mpy_machine_wdt` / `task_wdt`), and is disabled while any
+condition or blocker is active — `_should_enable` returns False (`[WDT {}] cond=[{}] blk=[{}]`).
+The v5.0.3 blockers are `('log rotate', 'vfs write', 'wlan kick')`; `WLAN_KICK = 2` is new,
+set and cleared by `ble_manager` around its WiFi-driver "kick" (v5.0.2 had only the first
+two). It supports dynamic threshold changes
 (`Updating WDT threshold from: {} to {}`) and drives a recovery/reboot path
 (`Performing immediate WDT Recovery`, `restore_wdt_reboot`) that ties into the boot-failure
 counters above.

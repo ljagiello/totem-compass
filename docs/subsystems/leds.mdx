@@ -15,7 +15,7 @@ behavior in `leds.py` and `animations.py`.
 | Transport | RMT bit-stream via `machine.bitstream` — imported as `bitstream` in `neopixel.py` / `f_lib/neopixel_v2.py` (**confirmed**; there is no `bitstream_channel` symbol) |
 | Pixel count | **`RING_PX_COUNT` = 60**, **`CRYSTAL_PX_COUNT` = 7** — module-level ints in `project_data.py` (**confirmed**). The ring/crystal split matches the `_ring_leds`/`is_ring` and `_crystal_leds`/`is_crystal` symbol pairs |
 | Palette | `Colors` class (13 named colors, `project_data.py`). `COLOR_LIST` is a *separate*, OTA-BLE-only 3-color gradient `((200,0,200),(100,0,200),(0,0,200))` in `ota_ble.py`, not the main palette |
-| Controller | `DeviceLeds` (`peripherals.py`) owns `_ring_leds` / `_crystal_leds`; the low-level strip driver class is `LightStrip` (`leds.py`). Rotation uses `_spin_deg`, which is an `imu_fusion` attribute, not an LED-module symbol |
+| Controller | `DeviceLeds` (`peripherals.py`) owns `_ring_leds` / `_crystal_leds`; the low-level strip driver class is `LightStrip` (`leds.py`). Rotation uses `_spin_deg`, which is defined in `imu_fusion_auto` (the fusion engine), not an LED-module symbol |
 
 APA106 is driven via the ESP32 RMT peripheral as a precise bit-stream, the standard
 technique for these single-wire addressable LEDs.
@@ -79,11 +79,13 @@ matching effect:
 | `demi_god_blink`, `demi_god_countdown` | a [demi-god](/protocols/demigod) command landed |
 | downloading / progress ring (`PROGRESS_RGB`) | OTA in progress |
 | spin / rotation (`_spin_deg`, `Dial rotation`) | dial/heading feedback |
+| Vibe Mode (`new_vibe.new_vibe`, task `'sound_react'`) | sound-reactive ring effect: microphone samples (`mic.read_u16`) written straight into the ring buffer (`ring.buf`) — see [Vibe Mode](/subsystems/power#vibe-mode-sound-reactive-leds) |
 
 All rows above are **confirmed symbol names**; the exact frame data and timings live in
 undisassembled frozen bytecode. The underlying effect primitives (confirmed qstrs) are
 `breathe_effect` / `breathe_gen` / `breathe_v2`, `twinkle` / `twinkle_crystal`, and
-`fade_step`.
+`fade_step`. Vibe Mode's v5.0.3 tuning (`newvibe-1.10`) lowers its brightness base from
+0.1 to 0.07 — about 30% dimmer (inferred) — and raises the auto-gain up rate from 13 to 25.
 
 The compass heading itself is rendered as a lit point on the ring that rotates to point
 toward the target (`_spin_deg`, `Dial rotation cancelled`).
@@ -106,6 +108,9 @@ also mapped per bonded peer**, not derived from `__version__`:
 | `Change default crystal color: {}` | that default is user-changeable (log string) |
 | `PEER_CRYSTAL_MAP` = (1, 2, 4, 6) | crystal color is mapped per bonded peer — a 4-tuple of color-list indices (→ orange, yellow, green, teal), **value confirmed** |
 | `Can't change color - in bond group` | color changes are blocked while in a bond group |
+
+In v5.0.3, when `compass.start_peer_management` runs while the device is vertical it now
+sleeps 300 ms and then restores the default crystal colour (`crystal_default()`).
 
 OTA/update state→color mappings are described in the [WiFi OTA](/protocols/wifi-ota) guide.
 The disassembly of `ota_callback.py` resolves the two color constants (previously "values
@@ -131,7 +136,10 @@ suspension is an inference rather than a confirmed binding.
 
 Brightness is independently controllable: `GLOBAL_BRT`, `dim_leds`, `toggle_brightness`
 (with `toggle_brightness_timeout`), `update_brightness`, and the log `Revert to full
-brightness`. Note that the binary's **low-battery mode is evidenced for touch sensitivity,
-not LED brightness** — the low-battery symbols (`_low_batt_sensitivity`, `_LOW_BATT_FLOOR`,
-`_LOW_BATT_MULTIPLIER`) and logs (`[touch] Low battery mode ON | base_sens: {:.3f}`) all
+brightness`. `toggle_brightness` is wired to a single tap of the physical power button
+(`sw_power.cb_single_tap`, **confirmed**; see
+[physical buttons](/subsystems/power#physical-buttons-power--sos)). Note that the binary's
+**low-battery mode is evidenced for touch sensitivity, not LED brightness** — the
+low-battery symbols (`_low_batt_sensitivity`, `_LOW_BATT_FLOOR`, `_LOW_BATT_MULTIPLIER`)
+and logs (`[touch] Low battery mode ON | base_sens: {:.3f}`) all
 tie to touch, with nothing linking low-battery state to LED brightness in the evidence.

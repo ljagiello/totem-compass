@@ -38,6 +38,13 @@ The **Frame format after SyncWord** column is the `struct` format applied at `fr
 entry. `send_msg` broadcasts to the all-ones MAC `FF:FF:FF:FF:FF:FF` (`manager` adds it as a
 peer), repeated `send_count` (default 10) times at 200 ms spacing.
 
+`demi_god.py` is byte-identical between v5.0.2 and v5.0.3, but the ESP-NOW transport under
+it changed: in v5.0.3 `send_now` (reached via `enow_v2.broadcast` → `send`) drops a send
+locally, counting it as `tx_skipped`, when the estimated free driver TX buffers
+(`_tx_free()`) are ≤ 0. Under TX back-pressure an individual repetition of a demi-god
+broadcast can therefore be skipped (each of the `send_count` repetitions goes through this
+check on its own).
+
 ## Lifecycle
 
 ```mermaid

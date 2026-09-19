@@ -21,20 +21,25 @@ firmware. The device itself resolves releases through the templates
 `{base}/package/{}/{}/{}.json` (package manifest) and `{base}/devices/{mac}/ota`.
 </Note>
 
-Response (abridged) at time of analysis:
+Response (abridged) at time of analysis. The API lists one current release per branch; after
+the 5.0.3 rollout release 335 (v5.0.2) was no longer listed:
 
 ```json
 {
   "body": {
     "releases": {
-      "335": {
-        "release_id": "335",
+      "339": {
+        "release_id": "339",
+        "release_date": null,
+        "endpoint_id": "2",
         "s3_bucket": "datapeak-developer",
         "s3_product_dir": "totem_compass",
         "s3_branch_dir": "totem",
-        "release_code": "5.0.2",
-        "size_bytes": "1692352",
-        "sha256_hash": "a6d05597f0f88f64313ba512287f89af25b9c31e2cd80dc85c8cf426c7bf8896"
+        "release_name": "Totem",
+        "release_code": "5.0.3",
+        "size_bytes": "1699872",
+        "sha256_hash": "bfe1f5a4c39790d068ab4f041a6a56766f4b21f48289518d83d831b323450dc4",
+        "release_badge": null
       },
       "240": {
         "release_code": "3.2.12",
@@ -71,11 +76,13 @@ url = "https://" + s3_bucket + ".s3.us-east-1.amazonaws.com/"
       + filename
 ```
 
-For release 335 (v5.0.2):
+For release 339 (v5.0.3):
 
 ```text
-https://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.2/firmware_v5.0.2.bin
+https://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.3/firmware_v5.0.3.bin
 ```
+
+Release 335 (v5.0.2) followed the same pattern (`…/totem/5.0.2/firmware_v5.0.2.bin`).
 
 The construction order was confirmed from the raw Hermes opcodes (a `HermesInternal.concat`
 call of exactly ten operands ending in the filename), not only the decompiler output.
@@ -105,8 +112,8 @@ local "repo" rather than pulling a single `firmware_v<code>.bin` by URL.
 
 The `firmware_v<code>.bin` filename does **not** appear anywhere in the firmware image (no
 `firmware_v` literal in any segment or the ELF); it is a phone-app construction. It is
-corroborated instead by the actual downloaded artifact — the repo file `firmware_v5.0.2.bin`
-is byte-identical to the object at the constructed URL.
+corroborated instead by the actual downloaded artifact — the downloaded `firmware_v5.0.3.bin`
+(and earlier `firmware_v5.0.2.bin`) is byte-identical to the object at the constructed URL.
 
 ## Verification
 
@@ -114,14 +121,17 @@ The downloaded object matched the API's own integrity fields exactly:
 
 | Field | API value | Downloaded file |
 | --- | --- | --- |
-| Size | 1,692,352 B | 1,692,352 B |
-| SHA-256 | `a6d05597…c7bf8896` | `a6d05597…c7bf8896` |
+| Size | 1,699,872 B | 1,699,872 B |
+| SHA-256 | `bfe1f5a4…23450dc4` | `bfe1f5a4…23450dc4` |
+
+The v5.0.2 download (release 335) matched its record the same way (1,692,352 B,
+`a6d05597…c7bf8896`).
 
 The image begins with `0xE9` and carries the ESP-IDF app-descriptor magic `0xABCD5432`,
 confirming a genuine ESP32 application image.
 
 <Note>
-The path is scoped by `release_code` (the `/5.0.2/` segment), but the object is a plain
+The path is scoped by `release_code` (the `/5.0.3/` segment), but the object is a plain
 static S3 key with no content-hash or immutable prefix — so that fixed per-version URL
 keeps serving whatever bytes currently sit at the key (it is mutable) until the object is
 replaced. Release metadata (including the `pre_alpha` branch) is served openly by the app's

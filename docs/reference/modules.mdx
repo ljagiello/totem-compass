@@ -1,16 +1,20 @@
 ---
 title: "Module reference"
-description: "All 96 frozen MicroPython modules in the v5.0.2 image, with inferred roles."
+description: "All 94 frozen MicroPython modules in the v5.0.3 image, with inferred roles."
 ---
 
 Every module below is frozen into the firmware. Names are exact (from the frozen module
 registry); roles are inferred from symbols, string constants, and log lines.
 
 <Note>
-  The frozen-module registry (`mp_frozen_names`) holds exactly **96** entries — the
+  The v5.0.3 frozen-module registry (`mp_frozen_names`) holds exactly **94** entries — the
   modules listed on this page. Two more `.py` files, `boot.py` and `webrepl_cfg.py`,
   exist only as on-flash VFS filesystem paths (`./boot.py`, `./webrepl_cfg.py`) and are
-  **not** frozen, which is why some tallies of the image reach 98.
+  **not** frozen, which is why some tallies of the image reach 96.
+
+  v5.0.2 had **96** frozen modules (98 with the two VFS files). v5.0.3 removed two that
+  nothing imported: `imu_fusion.py` (an older, unused Madgwick `Fusion`/`Cal`
+  implementation) and `io_mgr.py` (only `import io`).
 </Note>
 
 ## Top-level application
@@ -19,10 +23,10 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | --- | --- |
 | `main.py` | application entry after boot |
 | `project_main.py` | project-specific top-level orchestration |
-| `project_data.py` | project constants / configuration data |
+| `project_data.py` | project constants / configuration data; `ActiveModes` flags (v5.0.3 adds `ble_ticks_app_internet`, `is_ble_log_upload`, `is_file_upload_test`, `is_nav_log_fast_rotate`) |
 | `compass.py` | top-level compass state machine |
 | `compassing.py` | compass math (heading, 2D/3D, bias) |
-| `new_vibe.py` | Vibe Mode passive calibration |
+| `new_vibe.py` | Vibe Mode — microphone-driven sound-reactive ring LED effect (`mic.read_u16` → `ring.buf`; `newvibe-1.10`, v5.0.2: `newvibe-1.9`). Not magnetometer calibration |
 | `chat_msg.py` | peer-to-peer chat messages |
 | `stats.py` | runtime statistics |
 | `debugger.py` | on-device debug hooks |
@@ -42,9 +46,8 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | --- | --- |
 | `ubx_gnss.py` | u-blox UBX GNSS driver |
 | `nav_helpers.py` | navigation math helpers |
-| `nav_logger.py` | navigation event logging |
-| `imu_fusion.py` | accel/gyro sensor fusion |
-| `imu_fusion_auto.py` | automatic fusion mode selection |
+| `nav_logger.py` | navigation event logging (v5.0.3: fast `events.bin` rotation at ≥1024 B when `is_nav_log_fast_rotate`) |
+| `imu_fusion_auto.py` | accel/gyro sensor fusion and 2D/3D magnetometer calibration; the sole fusion module in v5.0.3 (byte-identical to v5.0.2), defines `_spin_deg` |
 | `mag_wmm_data.py` | World Magnetic Model data |
 | `task_mag_declination.py` | periodic declination recompute |
 
@@ -61,9 +64,8 @@ registry); roles are inferred from symbols, string constants, and log lines.
 
 | Module | Role |
 | --- | --- |
-| `button.py` | SOS/physical button (`AsyncButton`) |
+| `button.py` | both physical buttons, power and SOS (`AsyncButton`); v5.0.3 replaces the 50 ms `debounce` coroutine with a 30 ms `_edge_ms` lockout |
 | `touch_button_v2.py` | capacitive Touch Crystal |
-| `io_mgr.py` | GPIO / IO management |
 | `peripherals.py` | peripheral bring-up |
 | `ds18x20.py` | DS18B20 temperature sensor |
 | `onewire.py` | 1-Wire bus |
@@ -76,7 +78,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | `ble_core.py` | core BLE glue |
 | `ble_manager.py` | connection/session manager (`BleManager`, `send_data_v2`, `gen_live_data`) |
 | `svc_ble_transfer.py` | chunked transfer GATT service |
-| `ota_ble.py` | OTA over BLE |
+| `ota_ble.py` | OTA over BLE (v5.0.3 imports `CHUNK_HDR_FMT` / `CHUNK_HDR_SZ` from `f_ble.chunking`) |
 
 ## ESP-NOW mesh & peers
 
@@ -87,7 +89,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | `espnow_msg.py` | ESP-NOW message builders (`*_gen_*` payload generators, `pack_flags`, `rot13`) |
 | `aioespnow.py` | asyncio ESP-NOW (`AIOESPNow`) |
 | `peer_auto_bond.py` | automatic peer bonding |
-| `peer_helpers.py` | peer utilities |
+| `peer_helpers.py` | peer utilities (`is_peer_stale`: 7200 s in v5.0.3, v5.0.2: 14400 s) |
 | `peer_management.py` | peer registry / lifecycle |
 
 ## Upload & OTA
@@ -104,7 +106,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | Module | Role |
 | --- | --- |
 | `device_power.py` | power state machine, battery health |
-| `wdt_manager.py` | watchdog management |
+| `wdt_manager.py` | watchdog management (conditions/blockers; v5.0.3 adds the `WLAN_KICK` blocker) |
 | `event_manager.py` | pub/sub event bus |
 
 ## `f_ble/` package
@@ -115,7 +117,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | `f_ble/peripheral.py` | GATT peripheral + advertising |
 | `f_ble/ble_lite.py` | lightweight message model |
 | `f_ble/ble_data.py` | message (de)serialization |
-| `f_ble/chunking.py` | payload fragmentation (`CHUNK_HDR_FMT`) |
+| `f_ble/chunking.py` | payload fragmentation (`CHUNK_HDR_FMT = '<HHiH'`, `CHUNK_HDR_SZ = 12`) |
 | `f_ble/file_upload.py` | resumable chunked file transfer |
 
 ## `f_ota/` package
@@ -127,7 +129,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | `f_ota/hotspot.py` | WiFi hotspot updater |
 | `f_ota/install_ota.py` | write + activate new slot |
 | `f_ota/config.py` | OTA configuration |
-| `f_ota/system.py` | system helpers |
+| `f_ota/system.py` | system helpers; `release_code` `5.0.3`, `release_id` 339 (v5.0.2: 335) |
 | `f_ota/f_assets.py` | asset fetch/apply |
 
 ## `f_lib/` package
@@ -141,7 +143,7 @@ registry); roles are inferred from symbols, string constants, and log lines.
 | `f_lib/async_helpers.py` | async utilities |
 | `f_lib/generators.py` | generator helpers |
 | `f_lib/rtc_mem.py`, `f_lib/rtc_v2.py` | RTC-retained memory |
-| `f_lib/file_mgr.py` | file management |
+| `f_lib/file_mgr.py` | file management; v5.0.3 adds async SHA-256 `gen_file_hash(path, buff=None, yield_every=4)` and `get_oldest_file(prefix)` (used by `remove_oldest_log`) |
 | `f_lib/gzip.py`, `f_lib/tarfile.py`, `f_lib/unpack.py` | archive handling for `.tgz` OTA |
 | `f_lib/firmware_ota.py` | OTA slot writing |
 | `f_lib/firmware_rollback.py` | rollback logic |

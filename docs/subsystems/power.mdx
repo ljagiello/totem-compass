@@ -1,6 +1,6 @@
 ---
 title: "Power, input & sensors"
-description: "Battery/sleep management, the Touch Crystal, the SOS button, Vibe Mode, and the temperature sensor."
+description: "Battery/sleep management, the Touch Crystal, the power and SOS buttons, Vibe Mode, and the temperature sensor."
 ---
 
 ## Power & battery
@@ -14,13 +14,34 @@ description: "Battery/sleep management, the Touch Crystal, the SOS button, Vibe 
 | Battery health | `Changing battery health to: {}`, `BATT_POOR_TOUCH` |
 | Low-voltage cutoff | `Voltages too low, powering down \| {}v` |
 | OTA gate | `Battery too low for OTA update` (guard confirmed; the numeric threshold is not present in the binary) |
+| Battery % | `peripherals.get_batt_pct` — piecewise voltage table (below) |
+
+### Battery percentage
+
+`peripherals.get_batt_pct` maps cell voltage to a percentage with a piecewise-linear
+voltage table, optionally rescaled by a learned maximum voltage. v5.0.3 recalibrated it
+(**confirmed** from the disassembly):
+
+- The table's top segment (4.38–4.13 V) was removed, so **4.12 V now reads 100%**
+  (v5.0.2: 61%). The curve was renormalised (`/605`).
+- The learned-max rescale applies only when the learned maximum is **below 4.12 V**.
+
+| Cell voltage (no learned max) | v5.0.3 | v5.0.2 |
+| --- | --- | --- |
+| 3.8 V | 50% | 31% |
+| 4.0 V | 86% | 52% |
+| 4.12 V | 100% | 61% |
+
+Battery % therefore reads noticeably higher on v5.0.3 and reaches 100% at a normal full
+charge.
 
 ### Sleep
 
 The device uses aggressive sleep to extend battery life. A specific "~12 h for v5.0"
 endurance figure is not evidenced in the binary (it comes from the v5.0 release
 notes/marketing); the only `12`-hour literal, `[activation_check] Activation doesn't start for 12hrs`,
-concerns activation timing, not battery endurance.
+concerns promo-activation timing (see [Navigation](/subsystems/navigation#promo-activation)),
+not battery endurance.
 
 <CardGroup cols={2}>
   <Card title="Light sleep" icon="moon">
@@ -40,28 +61,50 @@ completes before the device drops power.
 
 ### Watchdogs
 
-`wdt_manager.py` runs a condition/blocker model: the watchdog fires only when its
-conditions are met **and** nothing is blocking it (classes `WdtManager` / `WdtConditions`
-/ `WdtBlockers`).
+`wdt_manager.py` runs a condition/blocker model (classes `WdtManager` / `WdtConditions`
+/ `WdtBlockers`): the WDT feed loop is enabled only while **no** condition and **no**
+blocker is active — `_should_enable` returns False as soon as any is set.
 
 | Concept | Evidence |
 | --- | --- |
 | Feed loop | `Starting WDT feed loop`, `Manually feeding WDT` |
 | Threshold updates | `Updating WDT threshold from: {} to {}` |
 | Condition/blocker engine | `[WDT {}] cond=[{}] blk=[{}]` |
+| Blockers | `('log rotate', 'vfs write', 'wlan kick')` — `WLAN_KICK = 2` is new in v5.0.3 (v5.0.2: `log rotate`, `vfs write` only) |
 | Recovery / boot-loop counters | `Performing immediate WDT Recovery`, `calc_recovery_risk`, `recovery_count`, `boots_wdt` |
 | BLE handoff watchdog | `ble_handoff_watchdog`, `[BLE Watchdog] Handoff stall detected` |
+
+The v5.0.3 `WLAN_KICK` blocker (`'wlan kick'`) is set and cleared by `ble_manager` around
+its new WiFi-driver "kick", so the watchdog is held off while the WLAN driver is being
+kicked.
 
 A separate `ble_handoff_watchdog` guards BLE TX-ownership handoff between the phone app
 and the ESP, reclaiming TX priority when a stall is detected
 (`[BLE Watchdog] Handoff stall detected`).
 
+### Scheduled BLE off-time (v5.0.3)
+
+`compass.ble_schedule_mgr` turns BLE off on a schedule. In v5.0.3 it:
+
+- waits for the BLE outbox to empty before a scheduled disconnect for at most **20 s**
+  (`BLE outbox not empty after {} ms (App never confirmed the connection?) - disconnecting anyway`),
+  and skips that wait entirely when `ble_conn.is_stalled`;
+- also waits for the BLE log uploader to go idle
+  (`Waiting on BLE log upload to finish before scheduled disconnect`);
+- after **two or more consecutive hung links** (`stall_count ≥ 2`) keeps BLE off for
+  **90 s instead of 30 s** and skips the fast-reconnect window
+  (`BLE hung {} links in a row - staying off {} ms without fast-reconnect bursts`).
+
+`start_ble` now ignores a reconnect request when BLE is already active
+(`[Compass.start_ble] BLE already active; reconnect request ignored`).
+
 ## Touch Crystal
 
-Capacitive touch input via `touch_button_v2.py` (`io_mgr.py` for the pin plumbing), which
-wraps a custom native driver imported in Python as `c_cap_touch` (`IMPORT_NAME` /
-`STORE_NAME c_cap_touch`), built on the ESP-IDF `touch_pad` API (`touch_pad_init failed`,
-etc.) — not the stock touch module.
+Capacitive touch input via `touch_button_v2.py`, which wraps a custom native driver
+imported in Python as `c_cap_touch` (`IMPORT_NAME` / `STORE_NAME c_cap_touch`), built on
+the ESP-IDF `touch_pad` API (`touch_pad_init failed`, etc.) — not the stock touch module. The Touch Crystal is a separate input from the two
+physical buttons below. (v5.0.2 also froze an `io_mgr.py`, but it contained only
+`import io` and had no importer; it is removed in v5.0.3.)
 
 | Concept | Evidence |
 | --- | --- |
@@ -93,48 +136,73 @@ bytecode/C constants.
 | `ex_long_hold_ms` | 50–30000 |
 | `auto_tune_multiplier` | 1.0–20.0 |
 
-## SOS button
+## Physical buttons (power & SOS)
 
-`button.py` (`AsyncButton`) handles the physical button with an async press/hold model
-(`long_hold_task`, on-hold callbacks). It drives normal UI actions and the SOS alerting
-feature. The SOS trigger is timing/pattern-based (`sos_timing`, plus software SOS
-`sw_sos`) rather than a confirmed gesture — the binary carries no literal tying a
-physical-button triple-click to any action, and `cb_triple_tap` is wired to the Touch
-Crystal, not the physical button.
+`button.py` (`button.AsyncButton`) drives **both** physical buttons with an async
+press/hold/multi-tap model (`long_hold_task`, per-gesture `cb_*` callbacks). The default
+wiring is set in `compass` and is **identical in v5.0.2 and v5.0.3** (**confirmed**):
+
+| Button | Constructor | Single tap | Double tap | Triple tap | Hold | Long hold |
+| --- | --- | --- | --- | --- | --- | --- |
+| Power `sw_power` | `AsyncButton(4, hold_ms=800)` (Pin 4) | `toggle_brightness` | `user_enable_ble` (toggles BLE advertising on/off) | — | `device_off` | — |
+| SOS `sw_sos` | `AsyncButton(0, hold_ms=800, long_hold_ms=10000)` | `sos_mute` | — | **`start_ota`** | `start_sos` | `compass_reset` |
+
+So the SOS alert is started by **holding** the SOS button, and a **triple tap** of the
+SOS button starts an OTA update. (Earlier revisions of this page said no literal tied a
+physical-button triple tap to any action and that `cb_triple_tap` belonged to the Touch
+Crystal — both wrong; the Touch Crystal is the separate `touch_button_v2` input.) On debug
+builds only (`log._print_lvl == 1`), v5.0.3 rewires the SOS single tap to
+`dev_trigger_upload`, which requests a BLE log upload and then calls `sos_mute`.
+
+**v5.0.3 debounce change.** v5.0.2 disabled the button for 50 ms after a press via a
+`debounce` coroutine. v5.0.3 removes that coroutine and instead applies a **30 ms
+timestamp lockout** (`_edge_ms`) in the IRQ handler `changed`, on both press and release
+edges. The effect — more reliable single/double/triple-tap detection — is inferred.
 
 | Confirmed SOS behavior | Evidence |
 | --- | --- |
-| Mute / un-mute | `Muting SOS`, `Un-muting SOS`, `is_sos_mute` |
+| Trigger | hold `sw_sos` (`hold_ms=800`) → `start_sos` |
+| Mute / un-mute | single tap → `sos_mute`; `Muting SOS`, `Un-muting SOS`, `is_sos_mute` |
 | Peer-in-SOS propagation (mesh) | `evt_peer_in_sos` |
 | Crystal LED indication | `crystal_sos`, `crystal_sos_blink` |
-| Trigger | timing/pattern-based (`sos_timing`); gesture undetermined from binary |
+
+`sos_timing` is a generator in `f_lib/generators.py` (next to `breathe_effect`); it paces
+the SOS indication (inferred) rather than defining the trigger gesture.
 
 <Note>
-  Firmware updates run over direct [WiFi OTA](/protocols/wifi-ota)
-  (`Performing Firmware update via WiFi`, `is_wifi_ota`). The older hotspot OTA path
-  appears **sunset** in v5.0.2 (`OTA Hotspot has been sunset`), so it is not the active
-  update path despite `f_ota/hotspot.py` still being present.
+  The SOS triple tap calls `start_ota`. Firmware updates run over direct
+  [WiFi OTA](/protocols/wifi-ota) (`Performing Firmware update via WiFi`, `is_wifi_ota`).
+  The older hotspot OTA path is still **sunset** in v5.0.3 (`OTA Hotspot has been sunset`),
+  so it is not the active update path despite `f_ota/hotspot.py` still being present.
 </Note>
 
-## Vibe Mode (passive calibration)
+## Vibe Mode (sound-reactive LEDs)
 
-`new_vibe.py` is the v5.0 "Vibe Mode" that performs **passive magnetic calibration**
-while the device moves normally — no dedicated calibration dance. Its telemetry is
-verbose:
+`new_vibe.py` ("Vibe Mode", version string `newvibe-1.10`; v5.0.2: `newvibe-1.9`) is a
+**microphone-driven, sound-reactive ring LED effect** (**confirmed**): it samples the
+microphone ADC (`mic.read_u16`) and writes the halo ring's pixel buffer (`ring.buf`)
+directly. It is **not** magnetometer calibration — earlier revisions of this page called it
+"passive magnetic calibration", which was wrong for both v5.0.2 and v5.0.3.
 
-```text
-NEWVIBE {} | module imported (deploy OK)
-NEWVIBE {} | task started, waiting on enable events
-NEWVIBE {} | reads={} sleep={}ms median NB={} | scale=auto p93 up={} k=1/{} sc={}-{} h_on={} fade={}ms/px leak=1/{} sub={}/4 seed={}
-#NEWVIBE-REC {} n={} sc={} h_on={} ble={}
-```
+`compass.vibe_mode` launches `new_vibe.new_vibe` as a task still named `'sound_react'`;
+v5.0.3 removed the dead in-`compass` `sound_react` / `set_buff` code. The task is gated by
+`evt_*` events (qstrs such as `evt_non_eco_mode`, `evt_led_override_off`).
 
-It runs as a gated asyncio task (`task started, waiting on enable events`,
-`resumed after pause`, `task cancelled`) — the "passive calibration in Vibe Mode" from the
-v5.0 release notes. The `gap_xy` residual often associated with it is confirmed, but that
-telemetry lives in the magnetometer bias-handoff/fusion engine
-(`Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT`, `2D governs, gap_xy={:.1f}uT`); whether Vibe
-Mode feeds it directly is inferred, not confirmed.
+v5.0.3 tuning changes:
+
+| Parameter | v5.0.3 | v5.0.2 |
+| --- | --- | --- |
+| Auto-gain up rate | 25 | 13 |
+| Peak-hold | drops to 0 below 8 | drops to 0 below 0 |
+| Brightness base | 0.07 (~30% dimmer, inferred) | 0.1 |
+| Debug telemetry | removed | `_DBG`-gated (`_DBG` was already False) |
+
+With the `_DBG` telemetry gone, the v5.0.2 `NEWVIBE …` and `#NEWVIBE-REC …` log lines and
+the `task started, waiting on enable events` / `resumed after pause` / `task cancelled`
+strings no longer exist in v5.0.3. The magnetometer bias handoff and its `gap_xy`
+residual (`Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT`, `2D governs, gap_xy={:.1f}uT`)
+belong to the fusion engine (`imu_fusion_auto`), unrelated to Vibe Mode — see
+[Navigation](/subsystems/navigation).
 
 ## Temperature sensor
 

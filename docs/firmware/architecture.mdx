@@ -1,12 +1,13 @@
 ---
 title: "Application architecture"
-description: "The MicroPython application: 96 frozen modules and how they are layered."
+description: "The MicroPython application: 94 frozen modules (v5.0.3) and how they are layered."
 ---
 
 ## Layered view
 
 Totem's firmware is a MicroPython application organized into a small number of
-packages plus a set of top-level modules. From the bottom up:
+packages plus a set of top-level modules — **94** frozen modules in v5.0.3 (v5.0.2: 96;
+the unused `imu_fusion.py` and `io_mgr.py` were removed). From the bottom up:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -16,9 +17,9 @@ packages plus a set of top-level modules. From the bottom up:
 │  Comms          f_ble/ (BLE)   espnow*/peer* (ESP-NOW mesh)    │
 │                 data_upload_v2 · svc_ble_transfer · ota_ble    │
 ├─────────────────────────────────────────────────────────────┤
-│  Sense & act    ubx_gnss · imu_fusion · mag_wmm_data           │
+│  Sense & act    ubx_gnss · imu_fusion_auto · mag_wmm_data      │
 │                 leds · animations · apa106 · touch_button_v2    │
-│                 button · device_power · ds18x20 · io_mgr        │
+│                 button · device_power · ds18x20                 │
 ├─────────────────────────────────────────────────────────────┤
 │  Platform lib   f_lib/ (wifi, requests, task_mgr, rtc, gzip,   │
 │                 tarfile, logger, file_mgr, firmware_ota…)       │
@@ -70,14 +71,14 @@ Reusable infrastructure used by everything above it.
 <Tabs>
   <Tab title="Compass & nav">
     `compass.py`, `compassing.py`, `ubx_gnss.py`, `nav_helpers.py`, `nav_logger.py`,
-    `imu_fusion.py`, `imu_fusion_auto.py`, `mag_wmm_data.py`, `task_mag_declination.py`
+    `imu_fusion_auto.py`, `mag_wmm_data.py`, `task_mag_declination.py`
   </Tab>
   <Tab title="LEDs">
     `leds.py`, `animations.py`, `neopixel.py`, `apa106.py`, `f_lib/neopixel_v2.py`
   </Tab>
   <Tab title="Input & sensors">
-    `button.py`, `touch_button_v2.py`, `io_mgr.py`, `peripherals.py`,
-    `ds18x20.py`, `onewire.py`, `new_vibe.py`
+    `button.py`, `touch_button_v2.py`, `peripherals.py`, `ds18x20.py`, `onewire.py`,
+    `new_vibe.py`
   </Tab>
   <Tab title="Mesh & peers">
     `espnow.py`, `espnow_conn_v2.py`, `espnow_msg.py`, `aioespnow.py`,
@@ -100,13 +101,20 @@ The full list with one-line descriptions is on the [module reference](/reference
 
 The application is **asyncio-based**. `f_lib/task_mgr.py` and the frozen `asyncio`
 package schedule long-running coroutines (BLE service loop, mesh outbox drain, GNSS
-polling, LED animation ticks, background checks). Log lines such as
-`task started, waiting on enable events` and `task cancelled` show tasks gated by
-events from the `event_manager` bus, so subsystems can be paused and resumed (for
-example, events such as `evt_ble_active` and `evt_battery_usable` gate BLE and
-battery-dependent tasks).
+polling, LED animation ticks, background checks). Many tasks wait on `evt_*` events from
+the `event_manager` bus before doing work, so subsystems can be paused and resumed — for
+example, `evt_ble_active` and `evt_battery_usable` gate BLE and battery-dependent tasks,
+and Vibe Mode (`new_vibe`) waits on events such as `evt_non_eco_mode` and
+`evt_led_override_off`. (The v5.0.2 log lines `task started, waiting on enable events` /
+`task cancelled` came from Vibe Mode's `_DBG` telemetry and no longer exist in v5.0.3.)
+
+In v5.0.3 `compass.start` launches the ESP-NOW comms task through
+`enow_v2.communicate_supervised`, which restarts it if it crashes (v5.0.2 launched
+`communicate_v2` directly).
 
 A separate async watchdog-feed loop (`wdt_manager.py` / `WdtManager`) runs alongside
-`task_mgr` and asyncio: it feeds the hardware WDT via `wdt_feed_loop` / `feed_now`
-only while its `WdtBlockers` and `WdtConditions` gates allow, so a stalled subsystem
-stops the feed and lets the watchdog fire.
+`task_mgr` and asyncio: it feeds the hardware WDT via `wdt_feed_loop` / `feed_now`, but
+is disabled while any `WdtConditions` condition or `WdtBlockers` blocker is active
+(`_should_enable` returns False). v5.0.3's blockers are `log rotate`, `vfs write`, and the
+new `wlan kick` (`WLAN_KICK = 2`, set by `ble_manager` around its WiFi-driver kick). When
+the loop is running, a stalled event loop stops the feed and lets the watchdog fire.
