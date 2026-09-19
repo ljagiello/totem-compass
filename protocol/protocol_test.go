@@ -29,11 +29,27 @@ var golden = map[string]string{
 	"ota":           "040001000506000100746f74656d6c6174657374",
 }
 
+// realFrames were captured from a real Totem over BLE (totemctl -trace).
+var realFrames = map[string]string{
+	"static 5.0.3": "0102428c94df7b047800c000000053010500030800010000000000000000000000000000000000000a05084c43467320746f74656d746f74656d446f6d656b5f3547",
+	"live 5.0.3":   "030114e17a8440ffffffffde581642b903f4c202f1844006fa000000e4d3ad6a0802025701850001bf2a00000000000000000000ffde000000c0000000000000000000000c0064",
+	"static 4.1.3": "01023c8c94df7b047800b000000008010401030500000000000000000000000000000000000000000c05006d79746f74656d5f30343738746f74656d",
+	"live 4.1.3":   "030114b072c83f0f000000c8581642c403f4c2f1638840060000000083cead6a060201ffff570000760b00000000000000000000fff7280000b000000000000000000000080064",
+}
+
 var testMAC = MAC{0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6}
 
+// mustHex returns a golden vector or a captured real frame by name.
 func mustHex(t *testing.T, name string) []byte {
 	t.Helper()
-	b, err := hex.DecodeString(golden[name])
+	h, ok := golden[name]
+	if !ok {
+		h, ok = realFrames[name]
+	}
+	if !ok {
+		t.Fatalf("no test frame %q", name)
+	}
+	b, err := hex.DecodeString(h)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,18 +73,11 @@ func TestWireSizesMatchFirmwareFormats(t *testing.T) {
 	}
 }
 
-// Frames captured from a real Totem over BLE (totemctl -trace), with the
-// values the device reported.
+// TestRealDeviceFrames checks captured frames against the values the device
+// reported at the time.
 func TestRealDeviceFrames(t *testing.T) {
-	hexFrame := func(s string) []byte {
-		b, err := hex.DecodeString(s)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return b
-	}
 	t.Run("static 5.0.3", func(t *testing.T) {
-		m, err := Parse(Data, hexFrame("0102428c94df7b047800c000000053010500030800010000000000000000000000000000000000000a05084c43467320746f74656d746f74656d446f6d656b5f3547"))
+		m, err := Parse(Data, mustHex(t, "static 5.0.3"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +88,7 @@ func TestRealDeviceFrames(t *testing.T) {
 		}
 	})
 	t.Run("live 5.0.3", func(t *testing.T) {
-		m, err := Parse(Data, hexFrame("030114e17a8440ffffffffde581642b903f4c202f1844006fa000000e4d3ad6a0802025701850001bf2a00000000000000000000ffde000000c0000000000000000000000c0064"))
+		m, err := Parse(Data, mustHex(t, "live 5.0.3"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,7 +104,7 @@ func TestRealDeviceFrames(t *testing.T) {
 		}
 	})
 	t.Run("static 4.1.3", func(t *testing.T) {
-		m, err := Parse(Data, hexFrame("01023c8c94df7b047800b000000008010401030500000000000000000000000000000000000000000c05006d79746f74656d5f30343738746f74656d"))
+		m, err := Parse(Data, mustHex(t, "static 4.1.3"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,7 +113,7 @@ func TestRealDeviceFrames(t *testing.T) {
 		}
 	})
 	t.Run("live 4.1.3 leaves power mode unset", func(t *testing.T) {
-		m, err := Parse(Data, hexFrame("030114b072c83f0f000000c8581642c403f4c2f1638840060000000083cead6a060201ffff570000760b00000000000000000000fff7280000b000000000000000000000080064"))
+		m, err := Parse(Data, mustHex(t, "live 4.1.3"))
 		if err != nil {
 			t.Fatal(err)
 		}

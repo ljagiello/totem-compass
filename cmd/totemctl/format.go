@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
+	"log/slog"
 	"reflect"
 	"strings"
 	"text/tabwriter"
@@ -13,22 +13,25 @@ import (
 	"github.com/ljagiello/totem-compass/protocol"
 )
 
-// printer writes results to stdout (human text or JSON lines) and progress
-// to stderr, so --json output stays machine-readable.
+// printer writes results to out (human text or JSON lines) and progress to
+// err, so -json output stays machine-readable.
 type printer struct {
 	json  bool
 	quiet bool
-	out   io.Writer
+	out   io.Writer // stdout
+	err   io.Writer // stderr
+	log   *slog.Logger
 }
+
+// printf and println write results. Write errors on stdout/stderr are not
+// actionable for a CLI, so they are dropped here, in one place.
+func (p *printer) printf(format string, args ...any) { _, _ = fmt.Fprintf(p.out, format, args...) }
+func (p *printer) println(args ...any)               { _, _ = fmt.Fprintln(p.out, args...) }
 
 func (p *printer) status(format string, args ...any) {
 	if !p.quiet {
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
+		_, _ = fmt.Fprintf(p.err, format+"\n", args...)
 	}
-}
-
-func (p *printer) warn(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "warning: "+format+"\n", args...)
 }
 
 // emit writes v as one JSON line tagged with its type.
@@ -39,10 +42,10 @@ func (p *printer) emit(v any) {
 		Data any    `json:"data"`
 	}{t.Name(), v})
 	if err != nil {
-		p.warn("encode %s: %v", t.Name(), err)
+		p.log.Warn("cannot encode as JSON", "type", t.Name(), "err", err)
 		return
 	}
-	fmt.Fprintln(p.out, string(b))
+	p.println(string(b))
 }
 
 // message prints one received message as a single line.
@@ -54,28 +57,28 @@ func (p *printer) message(m protocol.Message) {
 	ts := time.Now().Format("15:04:05")
 	switch v := m.(type) {
 	case protocol.LiveData:
-		fmt.Fprintf(p.out, "%s live   %s\n", ts, liveLine(v))
+		p.printf("%s live   %s\n", ts, liveLine(v))
 	case protocol.StaticData:
-		fmt.Fprintf(p.out, "%s static %q v%s release %d, mac %s, colour %s, compass lock %s, persistent north %s\n",
+		p.printf("%s static %q v%s release %d, mac %s, colour %s, compass lock %s, persistent north %s\n",
 			ts, v.Name, v.Version, v.ReleaseID, v.MAC.Pretty(), protocol.ColorName(v.ColorID), onOff(v.CompassLock), onOff(v.PersistentNorth))
 	case protocol.PeerPing:
-		fmt.Fprintf(p.out, "%s peer   %s\n", ts, peerLine(v))
+		p.printf("%s peer   %s\n", ts, peerLine(v))
 	case protocol.PeerSync:
 		macs := make([]string, len(v.Peers))
 		for i, m := range v.Peers {
 			macs[i] = m.String()
 		}
-		fmt.Fprintf(p.out, "%s peers  %d bonded: %s\n", ts, len(v.Peers), strings.Join(macs, " "))
+		p.printf("%s peers  %d bonded: %s\n", ts, len(v.Peers), strings.Join(macs, " "))
 	case protocol.WiFiNetworks:
-		fmt.Fprintf(p.out, "%s wifi   %s\n", ts, strings.Join(v.SSIDs, ", "))
+		p.printf("%s wifi   %s\n", ts, strings.Join(v.SSIDs, ", "))
 	case protocol.FileChunk:
-		fmt.Fprintf(p.out, "%s file   %q chunk %d, %d/%d bytes, status %d action %d\n", ts, v.Name, v.ChunkNo, v.BytePos, v.FileSize, v.Status, v.Action)
+		p.printf("%s file   %q chunk %d, %d/%d bytes, status %d action %d\n", ts, v.Name, v.ChunkNo, v.BytePos, v.FileSize, v.Status, v.Action)
 	case protocol.DisconnectIntent:
-		fmt.Fprintf(p.out, "%s device is about to disconnect (cmd %d, %v)\n", ts, v.Cmd, v.Params)
+		p.printf("%s device is about to disconnect (cmd %d, %v)\n", ts, v.Cmd, v.Params)
 	case protocol.Handoff:
-		// Protocol housekeeping every few seconds; visible with --trace.
+		// Protocol housekeeping every few seconds; visible with -trace.
 	case protocol.Unknown:
-		fmt.Fprintf(p.out, "%s ?      %s (%d,%d) % x\n", ts, v.Channel, v.Cat, v.Cmd, v.Raw)
+		p.printf("%s ?      %s (%d,%d) % x\n", ts, v.Channel, v.Cat, v.Cmd, v.Raw)
 	}
 }
 
@@ -160,7 +163,7 @@ func (p *printer) info(st protocol.StaticData, live *protocol.LiveData) {
 		return
 	}
 	w := tabwriter.NewWriter(p.out, 0, 0, 2, ' ', 0)
-	row := func(k string, v any) { fmt.Fprintf(w, "%s\t%v\n", k, v) }
+	row := func(k string, v any) { _, _ = fmt.Fprintf(w, "%s\t%v\n", k, v) }
 	row("Name", st.Name)
 	row("MAC", st.MAC.Pretty())
 	row("Firmware", fmt.Sprintf("%s (release %d, branch %s)", st.Version, st.ReleaseID, st.Branch))
@@ -194,7 +197,7 @@ func (p *printer) info(st protocol.StaticData, live *protocol.LiveData) {
 			row("SOS", "ACTIVE")
 		}
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 // reportedPower renders a power mode the device reported; 0 means the

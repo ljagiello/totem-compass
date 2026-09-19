@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/ljagiello/totem-compass/client"
@@ -25,23 +25,9 @@ type session struct {
 	echo bool
 }
 
+// open connects to the Totem and sends the Ready handshake.
 func open(ctx context.Context, g *globals) (*session, error) {
-	scanCtx, cancel := context.WithTimeout(ctx, g.scanTimeout)
-	defer cancel()
-	g.out.status("scanning for %s…", describeMatch(g.device))
-	dev, err := client.Find(scanCtx, g.device)
-	if err != nil {
-		return nil, err
-	}
-	g.phase("found")
-	g.out.status("connecting to %s (%s, %d dBm)…", orUnnamed(dev.Name), dev.Address, dev.RSSI)
-	opts := client.Options{HalfDuplex: g.halfDuplex, AutoGrant: true}
-	if g.trace {
-		opts.Trace = func(dir string, ch protocol.Channel, b []byte) {
-			fmt.Fprintf(os.Stderr, "%s %s %-11s % x\n", time.Now().Format("15:04:05.000"), dir, ch, b)
-		}
-	}
-	c, err := client.Connect(ctx, dev, opts)
+	c, err := g.connect(ctx, client.Options{HalfDuplex: g.halfDuplex, AutoGrant: true, Logger: g.log})
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +61,7 @@ func (s *session) close() {
 }
 
 func (s *session) send(frames ...protocol.Frame) error {
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.ctx, s.g.wait(30*time.Second))
 	defer cancel()
 	return s.c.Send(ctx, frames...)
 }
@@ -95,7 +81,7 @@ func (s *session) await(timeout time.Duration, match func(protocol.Message) bool
 		select {
 		case ev := <-s.c.Events():
 			if ev.Err != nil {
-				s.out.warn("bad frame on %s (% x): %v", ev.Channel, ev.Raw, ev.Err)
+				s.g.log.Warn("bad frame", "channel", ev.Channel, "data", hex.EncodeToString(ev.Raw), "err", ev.Err)
 				continue
 			}
 			s.track(ev.Msg)
@@ -109,7 +95,7 @@ func (s *session) await(timeout time.Duration, match func(protocol.Message) bool
 				return ev.Msg, nil
 			}
 		case <-s.c.Done():
-			return nil, errors.New("Totem disconnected")
+			return nil, errors.New("the Totem disconnected")
 		case <-ctx.Done():
 			if s.ctx.Err() != nil {
 				return nil, s.ctx.Err()
@@ -132,23 +118,27 @@ func (s *session) track(m protocol.Message) {
 
 func is[T protocol.Message](m protocol.Message) bool { _, ok := m.(T); return ok }
 
-// fetchStatic requests Static Data and waits until check accepts it,
-// re-requesting in each TX window (settings take a few seconds to apply).
+// fetchStatic requests Static Data and waits until check accepts a record.
+// Records sent before a change may still be queued, so it keeps reading and
+// only asks again after a quiet spell (a setting can take a moment to apply).
 func (s *session) fetchStatic(timeout time.Duration, check func(protocol.StaticData) bool) (protocol.StaticData, error) {
+	accept := func(m protocol.Message) bool {
+		d, ok := m.(protocol.StaticData)
+		return ok && (check == nil || check(d))
+	}
 	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	for {
 		if err := s.send(protocol.RequestStaticData()); err != nil {
 			return protocol.StaticData{}, err
 		}
-		m, err := s.await(time.Until(deadline), is[protocol.StaticData])
-		if err != nil {
+		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
+		if err == nil {
+			return m.(protocol.StaticData), nil
+		}
+		if !errors.Is(err, errTimeout) || !time.Now().Before(deadline) {
 			return protocol.StaticData{}, err
 		}
-		if d := m.(protocol.StaticData); check == nil || check(d) {
-			return d, nil
-		}
 	}
-	return protocol.StaticData{}, errTimeout
 }
 
 // fetchPeer requests a Peer Ping for mac and waits for it.
@@ -178,14 +168,14 @@ func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration) (protocol.P
 // record (one pass of the send loop) in legacy mode.
 func (s *session) settle() error {
 	if !s.c.HalfDuplex() {
-		_, err := s.await(10*time.Second, is[protocol.LiveData])
+		_, err := s.await(s.g.wait(10*time.Second), is[protocol.LiveData])
 		if errors.Is(err, errTimeout) {
 			return nil // commands are processed independently of the send loop
 		}
 		return err
 	}
 	gen := s.c.Handoffs()
-	_, err := s.await(20*time.Second, func(m protocol.Message) bool {
+	_, err := s.await(s.g.wait(20*time.Second), func(m protocol.Message) bool {
 		return is[protocol.Handoff](m) && s.c.Handoffs() > gen
 	})
 	return err

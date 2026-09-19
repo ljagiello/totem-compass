@@ -84,8 +84,11 @@ func AppRuntime(s RuntimeState) Frame {
 }
 
 // GrantTX hands the half-duplex transmit window back to the device
-// ([0x04, 0x03, bit1]); RevokeTX takes it away ([0x04, 0x03, bit0]).
-func GrantTX() Frame  { return connFrame(CatHandoff, 0x03, 0x02) }
+// ([0x04, 0x03, bit1]).
+func GrantTX() Frame { return connFrame(CatHandoff, 0x03, 0x02) }
+
+// RevokeTX takes the half-duplex transmit window away from the device
+// ([0x04, 0x03, bit0]).
 func RevokeTX() Frame { return connFrame(CatHandoff, 0x03, 0x01) }
 
 // ---- data characteristic ---------------------------------------------------
@@ -226,10 +229,12 @@ func SetName(name string) (Frame, error) {
 	return dataFrame(CatOptions, 0x03, b)
 }
 
-// ScanWiFi asks the device to scan for WiFi networks; the result arrives as
-// a WiFiNetworks message. ClearWiFiScan forgets the cached result so the next
-// ScanWiFi rescans.
-func ScanWiFi() Frame      { return mustData(CatWiFi, 0x01) }
+// ScanWiFi asks the device to scan for WiFi networks (2,1); the result
+// arrives as a WiFiNetworks message.
+func ScanWiFi() Frame { return mustData(CatWiFi, 0x01) }
+
+// ClearWiFiScan makes the device forget its cached scan result (2,0), so the
+// next ScanWiFi rescans.
 func ClearWiFiScan() Frame { return mustData(CatWiFi, 0x00) }
 
 // SaveWiFi stores the WiFi network used for firmware updates (2,3).
@@ -248,7 +253,7 @@ func SaveWiFi(ssid, key string) (Frame, error) {
 // no fix of its own (gnss_data.phone_*).
 type PhoneFix struct {
 	Lat, Lon float32
-	HAcc     float64 // horizontal accuracy in metres
+	HAcc     float64 // horizontal accuracy in meters
 	Unix     int32
 	UnixMS   int16
 	// Internet (5.0.3+) tells the device the phone is online, one of the

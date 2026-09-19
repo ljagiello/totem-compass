@@ -59,7 +59,7 @@ type liveDataWire struct {
 	Speed                          int8
 	Odometer                       int32
 	_                              [2]float32
-	_                              int8
+	Reserved                       int8 // firmware packs -1
 	Uptime, Age                    int32
 	_                              int32
 	PowerLevel                     int8
@@ -92,7 +92,7 @@ type staticDataWire struct {
 	Major, Minor, Patch     uint8
 	ColorID                 int8
 	Settings                uint8
-	_                       uint8 // pack_flags(1, 0...) constant
+	Const                   uint8 // pack_flags(1, 0...): 1 in v5.0.x, 0 in 4.1.3
 	ServiceID               uint8
 	_                       int8
 	_                       [2]int16

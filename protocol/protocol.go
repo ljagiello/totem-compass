@@ -106,6 +106,7 @@ func (m MAC) Pretty() string {
 	return b.String()
 }
 
+// MarshalText encodes the MAC as in String, for JSON output.
 func (m MAC) MarshalText() ([]byte, error) { return []byte(m.String()), nil }
 
 // ParseMAC accepts "a1b2c3d4e5f6", "A1:B2:C3:D4:E5:F6" or "a1-b2-...".
@@ -125,6 +126,7 @@ type RGB struct{ R, G, B uint8 }
 
 func (c RGB) String() string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
 
+// MarshalText encodes the colour as in String, for JSON output.
 func (c RGB) MarshalText() ([]byte, error) { return []byte(c.String()), nil }
 
 // ParseRGB accepts "#rrggbb", "rrggbb", "r,g,b" or a palette colour name.
@@ -186,6 +188,8 @@ func ColorName(id int8) string {
 // PowerMode is config.power_mode (compass.change_power_mode).
 type PowerMode uint8
 
+// Power modes. PowerUnchanged is also what 4.x firmware reports, as it does
+// not fill in the Live Data field.
 const (
 	PowerUnchanged PowerMode = 0 // leave the current mode alone
 	PowerEco       PowerMode = 1 // dim LEDs (brightness 0.1), eco profile
@@ -204,6 +208,7 @@ func (p PowerMode) String() string {
 	return fmt.Sprintf("mode#%d", uint8(p))
 }
 
+// MarshalText encodes the mode as in String, for JSON output.
 func (p PowerMode) MarshalText() ([]byte, error) { return []byte(p.String()), nil }
 
 // packFlags mirrors f_lib.bitwise.pack_flags: element i sets bit i.
