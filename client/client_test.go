@@ -235,6 +235,55 @@ func TestHalfDuplexWaitsForHandoff(t *testing.T) {
 	l.expectNoWrite(t)
 }
 
+// A GrantTX the device never got must leave the TX window with the app:
+// the device will not hand back a window it does not have, so every later
+// Send used to wait out its full timeout.
+func TestFailedGrantKeepsTX(t *testing.T) {
+	c, l := newClient(t, client.Options{HalfDuplex: true})
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	l.expectWrite(t, protocol.AppRuntime(protocol.RuntimeState{Active: true, Focused: true}))
+	l.expectWrite(t, protocol.Ready(protocol.SchemaExtended))
+	l.inject(protocol.ConnStatus, []byte{protocol.CatHandoff, 0x02, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	nextEvent(t, c)
+
+	l.mu.Lock()
+	l.fail = errors.New("ATT error")
+	l.mu.Unlock()
+	if err := c.Grant(); err == nil {
+		t.Fatal("Grant reported success for a failed write")
+	}
+	l.mu.Lock()
+	l.fail = nil
+	l.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := c.Send(ctx, protocol.RequestStaticData()); err != nil {
+		t.Fatalf("Send after a failed grant: %v", err)
+	}
+	l.expectWrite(t, protocol.RequestStaticData())
+}
+
+// AwaitTX calls that give up must not leave their channels behind.
+func TestAwaitTXForgetsWaitersThatGiveUp(t *testing.T) {
+	c, _ := newClient(t, client.Options{HalfDuplex: true})
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+		if err := c.AwaitTX(ctx); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("AwaitTX = %v", err)
+		}
+		cancel()
+	}
+	if n := c.Waiters(); n != 0 {
+		t.Errorf("%d waiters left behind", n)
+	}
+}
+
 func TestSendGivesUpWhenLinkDrops(t *testing.T) {
 	c, l := newClient(t, client.Options{HalfDuplex: true})
 	if err := c.Start(); err != nil {

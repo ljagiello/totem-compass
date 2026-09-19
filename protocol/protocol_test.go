@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -396,6 +397,33 @@ func TestFuzzFindings(t *testing.T) {
 	f, err := SetName(strings.Repeat("&", 32))
 	if err != nil || !bytes.Contains(f.Bytes, []byte(strings.Repeat("&", 32))) {
 		t.Errorf("SetName(32 ampersands) = %q, %v", f.Bytes, err)
+	}
+}
+
+// Findings from the PR review.
+func TestReviewFindings(t *testing.T) {
+	// A file chunk whose FileID starts with byte '[' is still a chunk, not a
+	// malformed WiFi list.
+	chunk := mustHex(t, "chunk")
+	chunk[2] = '['
+	if m, err := Parse(Data, chunk); err != nil {
+		t.Errorf("chunk with FileID 0x..5b: %v", err)
+	} else if c, ok := m.(FileChunk); !ok || c.FileID&0xff != '[' {
+		t.Errorf("chunk with FileID 0x..5b parsed as %#v", m)
+	}
+	if m, err := Parse(Data, mustHex(t, "wifi")); err != nil || !reflect.DeepEqual(m, WiFiNetworks{SSIDs: []string{"home", "cafe"}}) {
+		t.Errorf("wifi list = %v, %v", m, err)
+	}
+
+	// NaN fails every range comparison, so it used to pass as a coordinate.
+	nan := float32(math.NaN())
+	for _, p := range []POI{{Lat: nan}, {Lon: nan}, {Lat: float32(math.Inf(1))}, {Lat: 91}} {
+		if _, err := AddPOI(p); err == nil {
+			t.Errorf("AddPOI(%v, %v) accepted", p.Lat, p.Lon)
+		}
+	}
+	if f := SendPhoneFix(PhoneFix{HAcc: math.NaN()}); int8(f.Bytes[10]) != 127 {
+		t.Errorf("NaN accuracy sent as %d, want 127", int8(f.Bytes[10]))
 	}
 }
 

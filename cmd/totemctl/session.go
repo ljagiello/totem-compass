@@ -18,9 +18,8 @@ type session struct {
 	g   *globals
 	out *printer
 
-	static *protocol.StaticData
-	live   *protocol.LiveData
-	peers  map[protocol.MAC]protocol.PeerPing
+	live  *protocol.LiveData
+	peers map[protocol.MAC]protocol.PeerPing
 	// echo prints every message as it is received (watch mode).
 	echo bool
 }
@@ -37,7 +36,27 @@ func open(ctx context.Context, g *globals) (*session, error) {
 		return nil, err
 	}
 	g.phase("handshake sent")
-	return &session{ctx: ctx, c: c, g: g, out: g.out, peers: map[protocol.MAC]protocol.PeerPing{}}, nil
+	s := &session{ctx: ctx, c: c, g: g, out: g.out, peers: map[protocol.MAC]protocol.PeerPing{}}
+	if c.HalfDuplex() {
+		// Ready handed the device the TX window; it sends what it has queued
+		// and hands it back. Without that, every command would wait out its
+		// full timeout for a window that never comes.
+		if _, err := s.await(g.wait(15*time.Second), isHandoff); err != nil {
+			s.close()
+			if errors.Is(err, errTimeout) {
+				return nil, errors.New("no TX handoff from the Totem within 15 s: --half-duplex needs firmware 5.x " +
+					"(see `totemctl info`) and a Bluetooth stack that confirms indications, which macOS does not; " +
+					"run without --half-duplex")
+			}
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+func isHandoff(m protocol.Message) bool {
+	h, ok := m.(protocol.Handoff)
+	return ok && h.ToApp
 }
 
 func describeMatch(m string) string {
@@ -69,14 +88,20 @@ func (s *session) send(frames ...protocol.Frame) error {
 var errTimeout = errors.New("timed out waiting for the Totem")
 
 // await consumes events, keeping s's state current, until match returns
-// true or the timeout expires.
+// true or the timeout expires. A timeout of zero or less has already
+// expired: callers compute timeouts from deadlines, and one that ran out
+// must not turn into no limit at all (awaitCtx(s.ctx, ...) waits for good).
 func (s *session) await(timeout time.Duration, match func(protocol.Message) bool) (protocol.Message, error) {
-	ctx := s.ctx
-	var cancel context.CancelFunc
-	if timeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+	if timeout <= 0 {
+		return nil, errTimeout
 	}
+	ctx, cancel := context.WithTimeout(s.ctx, timeout)
+	defer cancel()
+	return s.awaitCtx(ctx, match)
+}
+
+// awaitCtx is await bounded by ctx, which must derive from s.ctx.
+func (s *session) awaitCtx(ctx context.Context, match func(protocol.Message) bool) (protocol.Message, error) {
 	for {
 		select {
 		case ev := <-s.c.Events():
@@ -107,8 +132,6 @@ func (s *session) await(timeout time.Duration, match func(protocol.Message) bool
 
 func (s *session) track(m protocol.Message) {
 	switch v := m.(type) {
-	case protocol.StaticData:
-		s.static = &v
 	case protocol.LiveData:
 		s.live = &v
 	case protocol.PeerPing:
@@ -141,26 +164,46 @@ func (s *session) fetchStatic(timeout time.Duration, check func(protocol.StaticD
 	}
 }
 
-// fetchPeer requests a Peer Ping for mac and waits for it.
-func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration) (protocol.PeerPing, error) {
+// errNoPeer is returned by fetchPeer when the Totem sent no ping for the MAC.
+var errNoPeer = errors.New("no such peer")
+
+// fetchPeer requests Peer Pings for mac until check accepts one (nil
+// accepts any). Like fetchStatic, it keeps reading, since pings queued
+// before a change may still arrive, and asks again after a quiet spell. If
+// pings came but none passed, it returns the last one with errTimeout.
+func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration, check func(protocol.PeerPing) bool) (protocol.PeerPing, error) {
 	req, err := protocol.RequestPeerDetails(mac)
 	if err != nil {
 		return protocol.PeerPing{}, err
 	}
-	if err := s.send(req); err != nil {
-		return protocol.PeerPing{}, err
-	}
-	m, err := s.await(timeout, func(m protocol.Message) bool {
+	var last *protocol.PeerPing
+	accept := func(m protocol.Message) bool {
 		p, ok := m.(protocol.PeerPing)
-		return ok && p.MAC == mac
-	})
-	if errors.Is(err, errTimeout) {
-		return protocol.PeerPing{}, fmt.Errorf("no peer %s on this Totem (see `totemctl peers`)", mac)
+		if !ok || p.MAC != mac {
+			return false
+		}
+		last = &p
+		return check == nil || check(p)
 	}
-	if err != nil {
-		return protocol.PeerPing{}, err
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := s.send(req); err != nil {
+			return protocol.PeerPing{}, err
+		}
+		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
+		if err == nil {
+			return m.(protocol.PeerPing), nil
+		}
+		if !errors.Is(err, errTimeout) {
+			return protocol.PeerPing{}, err
+		}
+		if !time.Now().Before(deadline) {
+			if last == nil {
+				return protocol.PeerPing{}, fmt.Errorf("%w: %s is not on this Totem (see `totemctl peers`)", errNoPeer, mac)
+			}
+			return *last, errTimeout
+		}
 	}
-	return m.(protocol.PeerPing), nil
 }
 
 // settle waits until the device has had a chance to act on what was just

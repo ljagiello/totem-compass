@@ -162,9 +162,11 @@ func (t *Totem) Write(ch protocol.Channel, b []byte) error {
 func (t *Totem) statusCommand(b []byte) (bool, error) {
 	switch cat, cmd := b[0], b[1]; {
 	case cat == protocol.CatConn && cmd == 0x01:
-		if len(b) >= 4 && b[3] > 0 {
+		if len(b) >= 4 && b[3] > 0 && t.Static.HalfDuplex {
 			return false, errors.New("clienttest: only the legacy loop (schema 0) is simulated")
 		}
+		// Firmware without the half-duplex loop (Static.HalfDuplex false, as
+		// on 4.x) ignores the schema byte and runs the legacy loop.
 		t.appConn = true
 		if len(b) >= 3 && b[2] == 1 {
 			t.staticCmd, t.peerCmd = 0, 0

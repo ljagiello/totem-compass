@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -170,14 +171,9 @@ func (c *Client) legacyAck(m protocol.Message) {
 
 func (c *Client) onHandoff() {
 	c.mu.Lock()
-	c.appOwnsTX = true
 	c.handoffs++
-	waiters := c.txWaiters
-	c.txWaiters = nil
 	c.mu.Unlock()
-	for _, w := range waiters {
-		close(w)
-	}
+	c.takeTX()
 	if c.opts.AutoGrant {
 		go func() {
 			time.Sleep(c.opts.GrantDelay)
@@ -232,7 +228,26 @@ func (c *Client) Grant() error {
 	c.mu.Lock()
 	c.appOwnsTX = false
 	c.mu.Unlock()
-	return c.write(protocol.GrantTX())
+	if err := c.write(protocol.GrantTX()); err != nil {
+		// The device did not take the window, so it will not hand it back:
+		// keep it, or every later Send would wait for a Handoff that never
+		// comes.
+		c.takeTX()
+		return err
+	}
+	return nil
+}
+
+// takeTX gives the app the TX window and wakes everything waiting for it.
+func (c *Client) takeTX() {
+	c.mu.Lock()
+	c.appOwnsTX = true
+	waiters := c.txWaiters
+	c.txWaiters = nil
+	c.mu.Unlock()
+	for _, w := range waiters {
+		close(w)
+	}
 }
 
 // AwaitTX blocks until the app holds the TX window: always in legacy mode,
@@ -250,10 +265,20 @@ func (c *Client) AwaitTX(ctx context.Context) error {
 	case <-w:
 		return nil
 	case <-c.link.Done():
+		c.dropWaiter(w)
 		return ErrDisconnected
 	case <-ctx.Done():
+		c.dropWaiter(w)
 		return ctx.Err()
 	}
+}
+
+// dropWaiter forgets a waiter that gave up, so repeated timeouts do not
+// pile up channels until the next handoff.
+func (c *Client) dropWaiter(w chan struct{}) {
+	c.mu.Lock()
+	c.txWaiters = slices.DeleteFunc(c.txWaiters, func(x chan struct{}) bool { return x == w })
+	c.mu.Unlock()
 }
 
 // Send writes frames, in order, within one app TX window, as the official

@@ -266,12 +266,14 @@ func Parse(ch Channel, b []byte) (Message, error) {
 	case cat == CatPeer && cmd == 0x07:
 		return parsePeerSync(b)
 	case cat == CatWiFi && cmd == 0x02:
+		// Both the WiFi list and file chunks use (2,2). A JSON list is the
+		// list; anything else, including a chunk whose FileID starts with
+		// byte '[', is a chunk.
 		if len(b) > 2 && b[2] == '[' {
 			var w WiFiNetworks
-			if err := json.Unmarshal(b[2:], &w.SSIDs); err != nil {
-				return nil, fmt.Errorf("wifi networks: %w", err)
+			if json.Unmarshal(b[2:], &w.SSIDs) == nil {
+				return w, nil
 			}
-			return w, nil
 		}
 		return parseFileChunk(b)
 	}

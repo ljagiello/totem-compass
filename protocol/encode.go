@@ -189,6 +189,9 @@ func AddPOI(p POI) (Frame, error) {
 	if len(name) > maxPOIName {
 		return Frame{}, fmt.Errorf("POI name is %d bytes, max %d", len(name), maxPOIName)
 	}
+	if !validLatLon(p.Lat, p.Lon) {
+		return Frame{}, fmt.Errorf("invalid POI coordinates %v,%v", p.Lat, p.Lon)
+	}
 	w := poiWire{
 		Lat: p.Lat, Lon: p.Lon, PAcc: 0,
 		R: p.Color.R, G: p.Color.G, B: p.Color.B,
@@ -196,6 +199,12 @@ func AddPOI(p POI) (Frame, error) {
 		NameLen: int8(len(name)),
 	}
 	return dataFrame(CatPeer, 0x06, uint8(poiHeader+len(name)), p.ID[:], w, name)
+}
+
+// validLatLon reports whether lat, lon are a real position. Written so NaN
+// fails every comparison and is rejected.
+func validLatLon(lat, lon float32) bool {
+	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
 }
 
 // PeerLocation feeds a bonded peer's position obtained out-of-band (the app
@@ -324,7 +333,11 @@ type PhoneFix struct {
 
 // SendPhoneFix builds (12,3): '<ffbBih' = lat, lon, h_acc, flags, unix, unix_ms.
 func SendPhoneFix(f PhoneFix) Frame {
-	hacc := int8(math.Min(math.Max(math.Round(f.HAcc), -128), 127))
+	acc := f.HAcc
+	if math.IsNaN(acc) {
+		acc = 127 // unknown: the worst accuracy the byte can say
+	}
+	hacc := int8(math.Min(math.Max(math.Round(acc), -128), 127))
 	return mustData(CatPhone, 0x03, f.Lat, f.Lon, hacc,
 		packFlags(f.Internet, f.UIClosed, f.Focused), f.Unix, f.UnixMS)
 }

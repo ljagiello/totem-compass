@@ -6,6 +6,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,10 +38,22 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
+// TestMain drops TOTEM_* variables from the developer's environment, which
+// viper would otherwise read into every test.
+func TestMain(m *testing.M) {
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "TOTEM_") {
+			_ = os.Unsetenv(k)
+		}
+	}
+	os.Exit(m.Run())
+}
+
 // harness runs totemctl command lines against a simulated Totem.
 type harness struct {
 	totem *clienttest.Totem
 	g     *globals
+	stdin string
 	out   bytes.Buffer
 	errb  syncBuffer
 	dials int
@@ -61,11 +75,29 @@ func (h *harness) run(t *testing.T, args ...string) error {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	return h.runCtx(ctx, args...)
+}
+
+func (h *harness) runCtx(ctx context.Context, args ...string) error {
 	root := newRootCmd(h.g)
 	root.SetArgs(args)
+	root.SetIn(strings.NewReader(h.stdin))
 	root.SetOut(&h.out)
 	root.SetErr(&h.errb)
 	return root.ExecuteContext(ctx)
+}
+
+// session opens a session on the simulated Totem, as a command would.
+func (h *harness) session(t *testing.T) *session {
+	t.Helper()
+	h.g.out = &printer{out: &h.out, err: &h.errb}
+	h.g.setLogger(newLogger(&h.errb, false))
+	s, err := open(context.Background(), h.g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.close)
+	return s
 }
 
 func (h *harness) mustRun(t *testing.T, args ...string) {
@@ -211,7 +243,7 @@ func TestInfoJSON(t *testing.T) {
 func TestCompassMergesCurrentSettings(t *testing.T) {
 	h := newHarness()
 	h.totem.Static.PersistentNorth = true
-	h.mustRun(t, "compass", "--lock", "on")
+	h.mustRun(t, "compass", "--lock", "on", "--blink", "off")
 	st, live, _, blink := h.state()
 	if !st.CompassLock || !st.PersistentNorth {
 		t.Errorf("lock %v north %v, want both on (north must be preserved)", st.CompassLock, st.PersistentNorth)
@@ -219,8 +251,41 @@ func TestCompassMergesCurrentSettings(t *testing.T) {
 	if blink || live.PowerMode != protocol.PowerNormal {
 		t.Errorf("blink %v power %s, want off / unchanged", blink, live.PowerMode)
 	}
-	if !strings.Contains(h.errb.String(), `level=WARN msg="the Totem does not report peer blink`) {
-		t.Errorf("no peer-blink warning:\n%s", h.errb.String())
+}
+
+// The (7,3) frame always sets peer blink, which the Totem does not report:
+// without a value from the user, compass and power used to turn it off.
+func TestBlinkMustBeKnown(t *testing.T) {
+	for _, args := range [][]string{{"compass", "--lock", "on"}, {"power", "eco"}} {
+		h := newHarness()
+		h.totem.PeerBlink = true
+		err := h.run(t, args...)
+		if err == nil || !strings.Contains(err.Error(), "--blink on or --blink off") || h.dials != 0 {
+			t.Errorf("%v: err %v, dials %d", args, err, h.dials)
+		}
+	}
+
+	// TOTEM_BLINK and the config file supply it too.
+	t.Setenv("TOTEM_BLINK", "on")
+	h := newHarness()
+	h.mustRun(t, "power", "eco")
+	if _, live, _, blink := h.state(); !blink || live.PowerMode != protocol.PowerEco {
+		t.Errorf("TOTEM_BLINK=on: blink %v power %s", blink, live.PowerMode)
+	}
+	t.Setenv("TOTEM_BLINK", "")
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("blink: on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h = newHarness()
+	h.mustRun(t, "--config", path, "compass", "--lock", "on")
+	if _, _, _, blink := h.state(); !blink {
+		t.Error("blink: on in the config file was not used")
+	}
+	h = newHarness()
+	h.mustRun(t, "--config", path, "compass", "--lock", "on", "--blink", "off")
+	if _, _, _, blink := h.state(); blink {
+		t.Error("--blink off did not beat the config file")
 	}
 }
 
@@ -238,7 +303,7 @@ func TestCompassBlinkNeedsNoWarning(t *testing.T) {
 
 func TestPower(t *testing.T) {
 	h := newHarness()
-	h.mustRun(t, "power", "eco")
+	h.mustRun(t, "power", "eco", "--blink", "on")
 	if _, live, _, _ := h.state(); live.PowerMode != protocol.PowerEco {
 		t.Errorf("power mode %s, want eco", live.PowerMode)
 	}
@@ -250,7 +315,7 @@ func TestPower(t *testing.T) {
 func TestPowerOnFirmwareThatDoesNotReportIt(t *testing.T) {
 	h := newHarness()
 	h.totem.HidePowerMode = true // firmware 4.x
-	h.mustRun(t, "power", "eco")
+	h.mustRun(t, "power", "eco", "--blink", "off")
 	if !strings.Contains(h.errb.String(), `level=WARN msg="this firmware does not report its power mode`) {
 		t.Errorf("no unconfirmed-power warning:\n%s", h.errb.String())
 	}
@@ -281,12 +346,22 @@ func TestWiFi(t *testing.T) {
 		t.Errorf("scan output %q", got)
 	}
 
+	// The password comes from standard input, never the command line, so
+	// one starting with '-' is not taken for flags.
 	h = newHarness()
-	h.mustRun(t, "wifi", "set", "Domek", "s3cret")
+	h.stdin = "-s3cret\n"
+	h.mustRun(t, "wifi", "set", "Domek")
 	var ssid, key string
 	h.totem.Do(func(t *clienttest.Totem) { ssid, key = t.Static.WiFiSSID, t.WiFiKey })
-	if ssid != "Domek" || key != "s3cret" {
+	if ssid != "Domek" || key != "-s3cret" {
 		t.Errorf("saved %q / %q", ssid, key)
+	}
+
+	h = newHarness()
+	h.mustRun(t, "wifi", "set", "Cafe", "--open")
+	h.totem.Do(func(t *clienttest.Totem) { ssid, key = t.Static.WiFiSSID, t.WiFiKey })
+	if ssid != "Cafe" || key != "" {
+		t.Errorf("open network saved %q / %q", ssid, key)
 	}
 }
 
@@ -358,7 +433,7 @@ func TestPeerUnknown(t *testing.T) {
 	h := newHarness()
 	h.g.timeScale = 0.01 // this one waits out the timeout
 	err := h.run(t, "peer", "hide", "0a0b0c0d0e0f")
-	if err == nil || !strings.Contains(err.Error(), "no peer 0a0b0c0d0e0f") {
+	if !errors.Is(err, errNoPeer) || !strings.Contains(err.Error(), "0a0b0c0d0e0f") {
 		t.Errorf("err = %v", err)
 	}
 }
@@ -440,13 +515,17 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 		{"wifi", "set", strings.Repeat("s", 33)},
 		{"poi", "add", "--name", strings.Repeat("p", 128), "--lat", "1", "--lon", "2"},
 		{"compass"},
+		{"compass", "--lock", "on"}, // peer blink unknown
+		{"power", "eco"},
 		{"compass", "--lock", "maybe"},
 		{"compass", "--power", "turbo"},
 		{"power"},
-		{"power", "turbo"},
+		{"power", "turbo", "--blink", "on"},
 		{"wifi"},
 		{"wifi", "frobnicate"},
 		{"wifi", "set"},
+		{"wifi", "set", "Home", "password"},
+		{"wifi", "set", "Home"}, // no password on stdin and no --open
 		{"peer"},
 		{"peer", "frobnicate", "a1b2c3d4e5f6"},
 		{"peer", "color", "a1b2c3d4e5f6"},
@@ -460,6 +539,10 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 		{"location", "--lat", "50"},
 		{"location", "--lat", "91", "--lon", "0"},
 		{"location", "--lat", "north", "--lon", "west"},
+		{"location", "--lat", "NaN", "--lon", "0"},
+		{"location", "--lat", "1", "--lon", "1", "--acc", "NaN"},
+		{"location", "--lat", "1", "--lon", "1", "--acc", "-5"},
+		{"poi", "add", "--name", "x", "--lat", "NaN", "--lon", "1"},
 		{"raw", "01"},
 		{"raw", "zz"},
 	} {
@@ -506,5 +589,91 @@ func TestParseOnOffAndPower(t *testing.T) {
 		if got, err := parsePower(in); err != nil || got != want {
 			t.Errorf("parsePower(%q) = %v, %v", in, got, err)
 		}
+	}
+}
+
+// A timeout computed from a deadline that has passed must fail at once, not
+// wait for good: fetchStatic, after a slow send, used to hang.
+func TestExpiredTimeoutsDoNotWaitForever(t *testing.T) {
+	h := newHarness()
+	s := h.session(t)
+	never := func(protocol.Message) bool { return false }
+	for _, d := range []time.Duration{0, -time.Second} {
+		start := time.Now()
+		if _, err := s.await(d, never); !errors.Is(err, errTimeout) || time.Since(start) > 100*time.Millisecond {
+			t.Errorf("await(%v) = %v after %v", d, err, time.Since(start))
+		}
+	}
+	start := time.Now()
+	_, err := s.fetchStatic(0, func(protocol.StaticData) bool { return false })
+	if !errors.Is(err, errTimeout) || time.Since(start) > time.Second {
+		t.Errorf("fetchStatic past its deadline = %v after %v", err, time.Since(start))
+	}
+}
+
+// --half-duplex on firmware without the half-duplex loop (4.x) fails fast
+// with an explanation, instead of every send waiting 30 s for a TX window.
+func TestHalfDuplexNeedsSupport(t *testing.T) {
+	h := newHarness()
+	h.totem.Static.HalfDuplex = false
+	start := time.Now()
+	err := h.run(t, "--half-duplex", "info")
+	if err == nil || !strings.Contains(err.Error(), "run without --half-duplex") {
+		t.Fatalf("err = %v", err)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("took %v", d)
+	}
+}
+
+// Ctrl-C ends watch normally; anything else it cuts short exits 130.
+func TestInterrupt(t *testing.T) {
+	h := newHarness()
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+	if err := h.runCtx(ctx, "watch"); err != nil {
+		t.Errorf("watch ended by Ctrl-C: %v", err)
+	}
+	for err, want := range map[error]int{
+		nil:                                      0,
+		errors.New("x"):                          1,
+		context.Canceled:                         130,
+		fmt.Errorf("send: %w", context.Canceled): 130,
+	} {
+		if got := exitCode(err); got != want {
+			t.Errorf("exitCode(%v) = %d, want %d", err, got, want)
+		}
+	}
+}
+
+// `poi delete` sends a frame that deletes any peer: it must refuse a
+// bonded Totem, which only re-bonding in person restores.
+func TestPOIDeleteOnlyDeletesPOIs(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	err := h.run(t, "poi", "delete", peerA.String())
+	if err == nil || !strings.Contains(err.Error(), "not a point of interest") {
+		t.Errorf("deleting a bonded Totem: %v", err)
+	}
+	if _, _, peers, _ := h.state(); len(peers) != 2 {
+		t.Fatalf("a bonded Totem was deleted: %v", peers)
+	}
+
+	h = newHarness()
+	h.totem.Peers = []protocol.PeerPing{{MAC: protocol.MAC{2, 0xaa}, Name: "Stage", POI: true, RSSI: 100}}
+	h.mustRun(t, "poi", "delete", "02aa00000000")
+	if _, _, peers, _ := h.state(); len(peers) != 0 {
+		t.Errorf("POI not deleted: %v", peers)
+	}
+}
+
+// Every JSON line carries a type; scan used an anonymous struct, whose
+// type name is empty.
+func TestScanJSONType(t *testing.T) {
+	var out bytes.Buffer
+	p := &printer{json: true, out: &out}
+	p.emit(Device{Name: "totem", Address: "8C:94:DF:7B:04:78", RSSI: -50})
+	if !strings.HasPrefix(out.String(), `{"type":"Device","data":{"name":"totem"`) {
+		t.Errorf("scan JSON line: %s", out.String())
 	}
 }

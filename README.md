@@ -41,23 +41,29 @@ totemctl info                     # name, firmware, battery, position, settings
 totemctl watch                    # stream live data and peer updates
 totemctl peers                    # bonded Totems and points of interest
 totemctl name "Base Camp"         # rename
-totemctl compass --lock on --north off
-totemctl power eco                # or: normal
+totemctl compass --lock on --north off --blink on
+totemctl power eco --blink on     # or: normal
 totemctl wifi scan                # networks the Totem can see
-totemctl wifi set <ssid> <pass>   # network used for firmware updates
+totemctl wifi set <ssid>          # network used for firmware updates; asks for the password
 totemctl peer color <mac> hot_pink
 totemctl poi add --name "Main Stage" --lat 50.0671 --lon 19.9124 --sticky
 totemctl location --lat 50.0671 --lon 19.9124  # feed a phone-style GNSS fix + clock
 ```
 
-Pick a device with `-d <name or address substring>`, get machine-readable
-output with `--json`, and log every frame with `--trace`. `totemctl help
-<command>` lists each command's flags. Every global flag can also be set as a
-`TOTEM_<FLAG>` environment variable (`TOTEM_DEVICE`, `TOTEM_HALF_DUPLEX`, …) or
-in a config file with the long flag names as keys (`device: Base Camp`). The
-default location is `totemctl/config.yaml` under the user config directory
-(`~/Library/Application Support` on macOS, `~/.config` on Linux), or pass
-`--config`.
+Pick a device with `-d <address substring>`, using an address `totemctl scan`
+prints: every Totem advertises as "totem", so the name set with `totemctl name`
+cannot select one. Get machine-readable output with `--json`, and log every
+frame with `--trace`. `totemctl help <command>` lists each command's flags.
+
+Every global flag can also be set as a `TOTEM_<FLAG>` environment variable
+(`TOTEM_DEVICE`, `TOTEM_HALF_DUPLEX`, …) or in a config file with the long flag
+names as keys (`device: <address from totemctl scan>`). The default location is
+`totemctl/config.yaml` under the user config directory (`~/Library/Application
+Support` on macOS, `~/.config` on Linux), or pass `--config`.
+
+`compass` and `power` send a frame that always sets peer blink, which the Totem
+does not report, so they need `--blink on|off`; set it once with `blink: on` in
+the config file or `TOTEM_BLINK`.
 
 The Ready frame's schema id selects one of two device transmit loops. The
 client defaults to the legacy full-duplex loop (schema 0: notifications plus

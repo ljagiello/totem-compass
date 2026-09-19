@@ -1,16 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+	"os"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/ljagiello/totem-compass/client"
 	"github.com/ljagiello/totem-compass/protocol"
@@ -31,12 +36,7 @@ func newScanCmd(g *globals) *cobra.Command {
 			err := client.Scan(ctx, all, func(d client.Device) {
 				n++
 				if g.out.json {
-					g.out.emit(struct {
-						Name     string   `json:"name"`
-						Address  string   `json:"address"`
-						RSSI     int16    `json:"rssi"`
-						Services []string `json:"services,omitempty"`
-					}{d.Name, d.Address.String(), d.RSSI, d.Services})
+					g.out.emit(Device{d.Name, d.Address.String(), d.RSSI, d.Services})
 					return
 				}
 				g.out.printf("%-24s %s  %d dBm\n", orUnnamed(d.Name), d.Address, d.RSSI)
@@ -62,6 +62,14 @@ func newScanCmd(g *globals) *cobra.Command {
 	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "also print advertised services and manufacturer data")
 	c.Flags().DurationVar(&dur, "for", 10*time.Second, "scan duration")
 	return c
+}
+
+// Device is one Totem found by scan, as printed with --json.
+type Device struct {
+	Name     string   `json:"name"`
+	Address  string   `json:"address"`
+	RSSI     int16    `json:"rssi"`
+	Services []string `json:"services,omitempty"`
 }
 
 func newInfoCmd(g *globals) *cobra.Command {
@@ -106,8 +114,13 @@ func newWatchCmd(g *globals) *cobra.Command {
 			if err := s.send(protocol.RequestStaticData(), all); err != nil {
 				return err
 			}
-			if _, err = s.await(dur, nil); errors.Is(err, errTimeout) {
-				return nil
+			if dur > 0 {
+				_, err = s.await(dur, nil)
+			} else {
+				_, err = s.awaitCtx(s.ctx, nil)
+			}
+			if errors.Is(err, errTimeout) || errors.Is(err, context.Canceled) {
+				return nil // --for elapsed or Ctrl-C: how watch ends
 			}
 			return err
 		},
@@ -213,8 +226,23 @@ func newNameCmd(g *globals) *cobra.Command {
 }
 
 type compassChange struct {
-	lock, north, blink *bool
-	power              protocol.PowerMode
+	lock, north *bool
+	blink       bool
+	power       protocol.PowerMode
+}
+
+// blinkSetting resolves peer blink for a (7,3) frame, which always sets
+// it: the --blink flag, else TOTEM_BLINK or blink in the config file. The
+// Totem does not report it, so the current value cannot be kept as is.
+func (g *globals) blinkSetting(flag *bool) (bool, error) {
+	switch {
+	case flag != nil:
+		return *flag, nil
+	case g.blink != nil:
+		return *g.blink, nil
+	}
+	return false, errors.New("the Totem does not report peer blink, and this change always sets it: " +
+		"pass --blink on or --blink off (or set TOTEM_BLINK, or blink in the config file)")
 }
 
 func newCompassCmd(g *globals) *cobra.Command {
@@ -223,10 +251,14 @@ func newCompassCmd(g *globals) *cobra.Command {
 	c := &cobra.Command{
 		Use:     "compass",
 		Short:   "Change compass settings",
-		Example: "  totemctl compass --lock on --north off",
+		Example: "  totemctl compass --lock on --north off --blink on",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return applyCompass(cmd.Context(), g, compassChange{lock.val, north.val, blink.val, protocol.PowerMode(power)})
+			b, err := g.blinkSetting(blink.val)
+			if err != nil {
+				return err
+			}
+			return applyCompass(cmd.Context(), g, compassChange{lock.val, north.val, b, protocol.PowerMode(power)})
 		},
 	}
 	c.Flags().Var(&lock, "lock", "compass lock")
@@ -238,9 +270,11 @@ func newCompassCmd(g *globals) *cobra.Command {
 }
 
 func newPowerCmd(g *globals) *cobra.Command {
-	return &cobra.Command{
+	var blink switchFlag
+	c := &cobra.Command{
 		Use:       "power eco|normal",
 		Short:     "Switch power mode (eco dims the LEDs)",
+		Example:   "  totemctl power eco --blink on",
 		Args:      cobra.ExactArgs(1),
 		ValidArgs: []string{"eco", "normal"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -248,9 +282,15 @@ func newPowerCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return applyCompass(cmd.Context(), g, compassChange{power: p})
+			b, err := g.blinkSetting(blink.val)
+			if err != nil {
+				return err
+			}
+			return applyCompass(cmd.Context(), g, compassChange{power: p, blink: b})
 		},
 	}
+	c.Flags().Var(&blink, "blink", "blink peers on the ring (the same frame sets it)")
+	return c
 }
 
 // applyCompass merges the requested change into the Totem's current
@@ -265,17 +305,15 @@ func applyCompass(ctx context.Context, g *globals, ch compassChange) error {
 	if err != nil {
 		return err
 	}
-	prefs := protocol.CompassPrefs{PersistentNorth: st.PersistentNorth, CompassLock: st.CompassLock, PowerMode: ch.power}
+	prefs := protocol.CompassPrefs{
+		PersistentNorth: st.PersistentNorth, CompassLock: st.CompassLock,
+		PeerBlink: ch.blink, PowerMode: ch.power,
+	}
 	if ch.lock != nil {
 		prefs.CompassLock = *ch.lock
 	}
 	if ch.north != nil {
 		prefs.PersistentNorth = *ch.north
-	}
-	if ch.blink != nil {
-		prefs.PeerBlink = *ch.blink
-	} else {
-		g.log.Warn("the Totem does not report peer blink; it will be set to off (pass --blink on to keep it on)")
 	}
 	if err := s.send(protocol.SetCompassPrefs(prefs)); err != nil {
 		return err
@@ -354,14 +392,25 @@ func newWiFiCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	var openNet bool
 	set := &cobra.Command{
-		Use:   "set <ssid> [password]",
+		Use:   "set <ssid>",
 		Short: "Save the network the Totem uses for firmware updates",
-		Args:  cobra.RangeArgs(1, 2),
+		Long: `Save the network the Totem uses for firmware updates.
+
+The password is read from the terminal without echo, or from the first line
+of standard input, so it stays out of the shell history and the process
+list. Use --open for a network without a password.`,
+		Example: `  totemctl wifi set Home
+  pass show wifi/home | totemctl wifi set Home`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ssid, pass := args[0], ""
-			if len(args) == 2 {
-				pass = args[1]
+			if !openNet {
+				var err error
+				if pass, err = readPassword(cmd, ssid); err != nil {
+					return err
+				}
 			}
 			f, err := protocol.SaveWiFi(ssid, pass)
 			if err != nil {
@@ -382,7 +431,33 @@ func newWiFiCmd(g *globals) *cobra.Command {
 			return nil
 		},
 	}
+	set.Flags().BoolVar(&openNet, "open", false, "the network has no password")
 	return group("wifi", "Scan for WiFi networks or save the one used for updates", scan, set)
+}
+
+// readPassword reads a password without echo from a terminal, or as the
+// first line of standard input otherwise.
+func readPassword(cmd *cobra.Command, ssid string) (string, error) {
+	var pass string
+	if f, ok := cmd.InOrStdin().(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Password for %q: ", ssid)
+		b, err := term.ReadPassword(int(f.Fd()))
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+		if err != nil {
+			return "", err
+		}
+		pass = string(b)
+	} else {
+		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return "", err
+		}
+		pass = strings.TrimRight(line, "\r\n")
+	}
+	if pass == "" {
+		return "", errors.New("no password given; use --open for a network without one")
+	}
+	return pass, nil
 }
 
 func newPeerCmd(g *globals) *cobra.Command {
@@ -442,7 +517,7 @@ func newPeerCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
-			p, err := s.fetchPeer(mac, g.wait(30*time.Second))
+			p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
 			if err != nil {
 				return err
 			}
@@ -472,7 +547,7 @@ func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*
 		return err
 	}
 	defer s.close()
-	p, err := s.fetchPeer(mac, g.wait(30*time.Second))
+	p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
 	if err != nil {
 		return err
 	}
@@ -488,12 +563,16 @@ func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*
 		g.out.status("deleted %q", p.Name)
 		return nil
 	}
-	p, err = s.fetchPeer(mac, g.wait(30*time.Second))
+	// Pings sent before the update may still be queued: wait for one that
+	// shows it.
+	p, err = s.fetchPeer(mac, g.wait(30*time.Second), func(p protocol.PeerPing) bool {
+		return p.Color == upd.Color && p.Hidden == upd.Hidden
+	})
+	if errors.Is(err, errTimeout) {
+		return fmt.Errorf("sent, but the Totem still reports colour %s hidden %v", p.Color, p.Hidden)
+	}
 	if err != nil {
 		return err
-	}
-	if p.Color != upd.Color || p.Hidden != upd.Hidden {
-		return fmt.Errorf("sent, but the Totem reports colour %s hidden %v", p.Color, p.Hidden)
 	}
 	g.out.status("%s", peerLine(p))
 	return nil
@@ -536,7 +615,7 @@ func newPOICmd(g *globals) *cobra.Command {
 			if err := s.send(f); err != nil {
 				return err
 			}
-			p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second))
+			p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second), nil)
 			if err != nil {
 				return fmt.Errorf("sent, but the Totem did not list the POI: %w", err)
 			}
@@ -567,7 +646,28 @@ func newPOICmd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return oneShot(cmd.Context(), g, protocol.UpdatePeer(protocol.PeerUpdate{MAC: mac, Delete: true}), "deleted "+mac.String())
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			// The delete frame removes any peer: make sure this one is a POI,
+			// since a deleted bond needs the Totems side by side to restore.
+			p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
+			if err != nil {
+				return err
+			}
+			if !p.POI {
+				return fmt.Errorf("%s is %q, a bonded Totem, not a point of interest; `totemctl peer delete` removes bonds", mac, p.Name)
+			}
+			if err := s.send(protocol.UpdatePeer(protocol.PeerUpdate{MAC: mac, Delete: true})); err != nil {
+				return err
+			}
+			if err := s.settle(); err != nil {
+				return err
+			}
+			g.out.status("deleted %q", p.Name)
+			return nil
 		},
 	}
 	return group("poi", "Add or remove a point of interest to navigate to", add, del)
@@ -583,7 +683,9 @@ func randomPOIID() protocol.MAC {
 }
 
 func checkCoords(lat, lon float64) error {
-	if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+	// Written so NaN, which fails every comparison, is rejected too.
+	inRange := lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+	if !inRange {
 		return fmt.Errorf("bad coordinates %v,%v: latitude must be within ±90 and longitude within ±180", lat, lon)
 	}
 	return nil
@@ -599,6 +701,9 @@ func newLocationCmd(g *globals) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := checkCoords(lat, lon); err != nil {
 				return err
+			}
+			if math.IsNaN(acc) || acc < 0 {
+				return fmt.Errorf("bad accuracy %v: want meters, 0 or more", acc)
 			}
 			now := time.Now()
 			f := protocol.SendPhoneFix(protocol.PhoneFix{

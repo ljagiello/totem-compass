@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	golang.org/x/term v0.46.0
 	tinygo.org/x/bluetooth v0.16.0
 )
 

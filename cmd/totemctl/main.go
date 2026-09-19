@@ -27,6 +27,7 @@ type globals struct {
 	device      string
 	scanTimeout time.Duration
 	halfDuplex  bool
+	blink       *bool // TOTEM_BLINK or blink in the config file, if set
 	out         *printer
 	log         *slog.Logger // warnings; with --trace also frames and phases
 	start       time.Time
@@ -99,10 +100,25 @@ func realMain() int {
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
-	if err == nil || errors.Is(err, context.Canceled) {
-		return 0
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, context.Canceled) {
+			msg = "interrupted"
+		}
+		_, _ = fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.CommandPath(), msg)
 	}
-	_, _ = fmt.Fprintf(os.Stderr, "%s: %v\n", cmd.CommandPath(), err)
+	return exitCode(err)
+}
+
+// exitCode maps a command's error to the process status: 130 (128+SIGINT)
+// when Ctrl-C cut it short, so scripts cannot mistake it for success.
+func exitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, context.Canceled):
+		return 130
+	}
 	return 1
 }
 
@@ -124,7 +140,9 @@ protocol as the official phone app.
 
 Each global flag can also be set as TOTEM_<FLAG> in the environment
 (TOTEM_DEVICE, TOTEM_HALF_DUPLEX, ...) or as a key in the config file
-(device: Base Camp). A flag beats the environment, which beats the file.
+(device: <address from totemctl scan>). A flag beats the environment,
+which beats the file. So can blink, the peer-blink setting that compass
+and power must send.
 
 ` + wakeHelp,
 		SilenceErrors: true, // realMain prints them
@@ -134,7 +152,7 @@ Each global flag can also be set as TOTEM_<FLAG> in the environment
 		},
 	}
 	pf := root.PersistentFlags()
-	pf.StringP("device", "d", "", "Totem to use: name or address substring (default: the first found)")
+	pf.StringP("device", "d", "", "Totem to use: an address substring, as totemctl scan prints (default: the first found)")
 	pf.Duration("scan-timeout", 60*time.Second, "how long to look for the Totem")
 	pf.Bool("json", false, "print results as JSON lines")
 	pf.BoolP("quiet", "q", false, "suppress progress messages")
@@ -168,6 +186,14 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 	g.device = v.GetString("device")
 	g.scanTimeout = v.GetDuration("scan-timeout")
 	g.halfDuplex = v.GetBool("half-duplex")
+	g.blink = nil
+	if b := v.GetString("blink"); b != "" {
+		on, err := parseOnOff(b)
+		if err != nil {
+			return fmt.Errorf("blink setting: %w", err)
+		}
+		g.blink = &on
+	}
 	g.out = &printer{json: v.GetBool("json"), quiet: v.GetBool("quiet"), out: cmd.OutOrStdout(), err: cmd.ErrOrStderr()}
 	g.setLogger(newLogger(cmd.ErrOrStderr(), v.GetBool("trace")))
 	return nil
@@ -180,9 +206,14 @@ func (g *globals) connectBLE(ctx context.Context, opts client.Options) (*client.
 	g.out.status("scanning for %s…", describeMatch(g.device))
 	dev, err := client.Find(scanCtx, g.device)
 	if errors.Is(err, client.ErrNotFound) {
-		return nil, fmt.Errorf("%w. A Totem is only visible for 60 s after a double-press of the power button, "+
+		hint := ""
+		if g.device != "" {
+			hint = ". Every Totem advertises as \"totem\", not by the name `totemctl name` sets: " +
+				"pick one by the address `totemctl scan` shows"
+		}
+		return nil, fmt.Errorf("%w%s. A Totem is only visible for 60 s after a double-press of the power button, "+
 			"while its crystal breathes blue (the double-press toggles, so press again if it doesn't). "+
-			"If the Totem phone app is open nearby, close it: a connected Totem stops advertising", err)
+			"If the Totem phone app is open nearby, close it: a connected Totem stops advertising", err, hint)
 	}
 	if err != nil {
 		return nil, err

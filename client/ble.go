@@ -35,18 +35,17 @@ var (
 	enableOnce sync.Once
 	enableErr  error
 
-	// disconnects routes the adapter-wide connect handler to live links.
-	disconnects sync.Map // address string -> chan struct{}
+	// links routes the adapter-wide connect handler to the link for each
+	// address. A closed link stays until its disconnect callback arrives, so
+	// a late callback cannot reach a newer link to the same device.
+	links sync.Map // address string -> *bleLink
 )
 
 func enable() error {
 	enableOnce.Do(func() {
 		adapter.SetConnectHandler(func(d bluetooth.Device, connected bool) {
-			if connected {
-				return
-			}
-			if ch, ok := disconnects.LoadAndDelete(d.Address.String()); ok {
-				close(ch.(chan struct{}))
+			if !connected {
+				onDisconnect(d.Address.String())
 			}
 		})
 		if err := adapter.Enable(); err != nil {
@@ -87,8 +86,21 @@ func Scan(ctx context.Context, all bool, found func(Device)) error {
 	}
 	seen := map[string]bool{}
 	var mu sync.Mutex
-	stop := context.AfterFunc(ctx, func() { _ = adapter.StopScan() })
+	scanDone := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		// StopScan fails until adapter.Scan has registered the scan, which
+		// takes several D-Bus round trips on Linux; a failed stop would leave
+		// the scan running for good. Retry until it takes or the scan ends.
+		for adapter.StopScan() != nil {
+			select {
+			case <-scanDone:
+				return
+			case <-time.After(20 * time.Millisecond):
+			}
+		}
+	})
 	defer stop()
+	defer close(scanDone)
 	return adapter.Scan(func(_ *bluetooth.Adapter, r bluetooth.ScanResult) {
 		if !all && !isTotem(r) {
 			return
@@ -165,10 +177,41 @@ func Connect(ctx context.Context, d Device, opts Options) (*Client, error) {
 
 // bleLink is a Link over the Totem's conn-status and data characteristics.
 type bleLink struct {
-	addr  string
-	dev   bluetooth.Device
-	chars map[protocol.Channel]*bluetooth.DeviceCharacteristic
-	gone  chan struct{}
+	addr     string
+	dev      bluetooth.Device
+	chars    map[protocol.Channel]*bluetooth.DeviceCharacteristic
+	gone     chan struct{}
+	goneOnce sync.Once
+}
+
+func (l *bleLink) markGone() { l.goneOnce.Do(func() { close(l.gone) }) }
+
+// onDisconnect marks the link for addr gone and forgets it.
+func onDisconnect(addr string) {
+	if l, ok := links.LoadAndDelete(addr); ok {
+		l.(*bleLink).markGone()
+	}
+}
+
+// claim registers l for its address's disconnect callback. A closed link to
+// the same device may still be waiting for its own callback; claim waits
+// for it (up to patience), so that callback cannot mark the new link gone.
+func claim(ctx context.Context, l *bleLink, patience time.Duration) error {
+	deadline := time.Now().Add(patience)
+	for {
+		if _, loaded := links.LoadOrStore(l.addr, l); !loaded {
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			links.Store(l.addr, l) // the old link is already marked gone
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 func dial(ctx context.Context, d Device) (*bleLink, error) {
@@ -176,7 +219,9 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 		return nil, err
 	}
 	l := &bleLink{addr: d.Address.String(), gone: make(chan struct{})}
-	disconnects.Store(l.addr, l.gone)
+	if err := claim(ctx, l, 3*time.Second); err != nil {
+		return nil, err
+	}
 
 	type result struct {
 		dev bluetooth.Device
@@ -191,14 +236,22 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 	select {
 	case r = <-done:
 	case <-ctx.Done():
-		disconnects.Delete(l.addr)
+		links.CompareAndDelete(l.addr, l)
+		// Connect cannot be canceled. If it still succeeds, drop the link:
+		// a connected Totem stops advertising and could not be found again.
+		go func() {
+			if r := <-done; r.err == nil {
+				_ = r.dev.Disconnect()
+			}
+		}()
 		return nil, ctx.Err()
 	}
 	if r.err != nil {
-		disconnects.Delete(l.addr)
+		links.CompareAndDelete(l.addr, l)
 		return nil, fmt.Errorf("connect %s: %w", d.Address, r.err)
 	}
 	l.dev = r.dev
+	go watchLink(l)
 	if err := l.discover(); err != nil {
 		_ = l.Close()
 		return nil, err
@@ -249,13 +302,14 @@ func (l *bleLink) Write(ch protocol.Channel, b []byte) error {
 func (l *bleLink) Done() <-chan struct{} { return l.gone }
 
 // Close drops the connection. The OS tears it down even if the process
-// exits before the disconnect callback arrives, so it waits only briefly.
+// exits before the disconnect callback arrives, so it waits only briefly;
+// Done is closed either way.
 func (l *bleLink) Close() error {
 	err := l.dev.Disconnect()
 	select {
 	case <-l.gone:
 	case <-time.After(250 * time.Millisecond):
 	}
-	disconnects.Delete(l.addr)
+	l.markGone()
 	return err
 }
