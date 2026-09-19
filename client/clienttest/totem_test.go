@@ -20,7 +20,8 @@ func FuzzWrite(f *testing.F) {
 		return b
 	}
 	ready := frame(protocol.ConnStatus, protocol.Ready(protocol.SchemaLegacy).Bytes)
-	name, _ := protocol.SetName("Base Camp")
+	clean, _ := protocol.CleanName("Base Camp")
+	name, _ := protocol.SetName(clean)
 	wifi, _ := protocol.SaveWiFi("home", "pw")
 	poi, _ := protocol.AddPOI(protocol.POI{ID: protocol.MAC{2, 1}, Name: "Stage", Lat: 1, Lon: 2})
 	details, _ := protocol.RequestPeerDetails(protocol.MAC{2, 1})

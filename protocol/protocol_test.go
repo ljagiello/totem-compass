@@ -322,7 +322,7 @@ func TestPhoneFixInternetBit(t *testing.T) {
 }
 
 func TestJSONCommands(t *testing.T) {
-	f, err := SetName("Lukasz's Totem")
+	f, err := SetName(mustClean(t, "Lukasz's Totem"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestJSONCommands(t *testing.T) {
 	if want := `{"join":"s3cret","nw":"home"}`; string(f.Bytes[2:]) != want || f.Bytes[0] != 2 || f.Bytes[1] != 3 {
 		t.Errorf("SaveWiFi = %q", f.Bytes)
 	}
-	if _, err := SetName(string(make([]byte, 200))); err == nil {
+	if _, err := SetName(DeviceName(make([]byte, 200))); err == nil {
 		t.Error("oversized name accepted")
 	}
 }
@@ -395,7 +395,7 @@ func TestFuzzFindings(t *testing.T) {
 
 	// SetName HTML-escaped &, < and >, so a 29-character name of them
 	// overflowed the device buffer.
-	f, err := SetName(strings.Repeat("&", 32))
+	f, err := SetName(mustClean(t, strings.Repeat("&", 32)))
 	if err != nil || !bytes.Contains(f.Bytes, []byte(strings.Repeat("&", 32))) {
 		t.Errorf("SetName(32 ampersands) = %q, %v", f.Bytes, err)
 	}
@@ -472,6 +472,7 @@ func TestTruncatedWiFiList(t *testing.T) {
 		`[]`:                 {SSIDs: []string{}},
 		`["a\"b", "c"]`:      {SSIDs: []string{`a"b`, "c"}},
 		`["home", "cafe"]  `: {SSIDs: []string{"home", "cafe"}},
+		"[\"home\"]\x00":     {SSIDs: []string{"home"}}, // bytes after a complete list
 	} {
 		m, err := Parse(Data, append([]byte{CatWiFi, 0x02}, in...))
 		if err != nil || !reflect.DeepEqual(m, want) {
@@ -492,19 +493,46 @@ func TestCleanName(t *testing.T) {
 		strings.Repeat("🧭", 16): strings.Repeat("🧭", 16), // 32 UTF-16 units
 		strings.Repeat("x", 32): strings.Repeat("x", 32),
 	} {
-		if got, err := CleanName(in); err != nil || got != want {
+		if got, err := CleanName(in); err != nil || string(got) != want {
 			t.Errorf("CleanName(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
 	// U+2028/U+2029 always JSON-encode to 6-byte escapes: 32 of them passed
 	// CleanName and then overflowed the frame.
 	for _, in := range []string{"", " \t ", "\xff", "a\x00b", strings.Repeat("x", 33), strings.Repeat("🧭", 17),
-		strings.Repeat(" ", 32), "a b"} {
+		strings.Repeat("\u2028", 32), "a\u2029b"} {
 		if got, err := CleanName(in); err == nil {
 			t.Errorf("CleanName(%q) = %q, want an error", in, got)
 		}
 	}
-	if f, err := SetName("  Base Camp  "); err != nil || string(f.Bytes[2:]) != `{"name":"Base Camp"}` {
-		t.Errorf("SetName trims like the device: %q, %v", f.Bytes, err)
+	if f, err := SetName(mustClean(t, "  Base Camp  ")); err != nil || string(f.Bytes[2:]) != `{"name":"Base Camp"}` {
+		t.Errorf("SetName after CleanName: %q, %v", f.Bytes, err)
+	}
+}
+
+func mustClean(t *testing.T, name string) DeviceName {
+	t.Helper()
+	n, err := CleanName(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// Invalid UTF-8 cannot reach the Totem as typed: JSON replaces it, so the
+// Totem saved a different network, and add_new_bond fails to decode it.
+func TestEncodersRejectInvalidText(t *testing.T) {
+	for _, tc := range []struct{ ssid, key string }{{"caf\xe9", "pw"}, {"home", "p\xffw"}} {
+		if _, err := SaveWiFi(tc.ssid, tc.key); err == nil {
+			t.Errorf("SaveWiFi(%q, %q) accepted", tc.ssid, tc.key)
+		}
+	}
+	for _, name := range []string{"Stage\xff", "a\x00b", "line\nbreak"} {
+		if _, err := AddPOI(POI{Name: name}); err == nil {
+			t.Errorf("AddPOI(%q) accepted", name)
+		}
+	}
+	if _, err := AddPOI(POI{Name: "Scène 🎵"}); err != nil {
+		t.Error(err)
 	}
 }

@@ -323,8 +323,7 @@ func parseWiFiNetworks(b []byte) (Message, error) {
 		ssid, ok := tok.(string)
 		if !ok {
 			if d, ok := tok.(json.Delim); ok && d == ']' {
-				// A complete list that failed to unmarshal holds non-strings.
-				return nil, fmt.Errorf("wifi networks: not a list of strings: %q", b)
+				return w, nil // a complete list with bytes after it
 			}
 			return nil, fmt.Errorf("wifi networks: unexpected %v in %q", tok, b)
 		}

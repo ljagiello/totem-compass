@@ -204,6 +204,11 @@ var (
 // accepts any). If pings came but none passed check, it returns the last
 // one with errUnconfirmed; if none came, an error wrapping errTimeout.
 func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration, check func(protocol.PeerPing) bool) (protocol.PeerPing, error) {
+	if p, ok := s.peers[mac]; ok && check == nil {
+		// Already sent this session, e.g. after the peer list (whose ack
+		// asks for every peer's ping): no need to ask again.
+		return p, nil
+	}
 	req, err := protocol.RequestPeerDetails(mac)
 	if err != nil {
 		return protocol.PeerPing{}, err
@@ -281,19 +286,35 @@ func (s *session) refuseBond(mac protocol.MAC) error {
 // sent: its next TX handoff in half-duplex mode, or its next Live Data
 // record (one pass of the send loop) in legacy mode. A record received
 // before the send, still queued, does not count.
+//
+// The frame was written with response, so the device has it either way; a
+// timeout here is not a failure (in either mode), and changes that can be
+// checked are confirmed by their caller.
 func (s *session) settle() error {
-	if !s.c.HalfDuplex() {
-		_, err := s.await(s.g.wait(10*time.Second), func(m protocol.Message) bool {
+	var err error
+	if s.c.HalfDuplex() {
+		gen := s.c.Handoffs()
+		_, err = s.await(s.g.wait(20*time.Second), func(m protocol.Message) bool {
+			return is[protocol.Handoff](m) && s.c.Handoffs() > gen
+		})
+	} else {
+		_, err = s.await(s.g.wait(10*time.Second), func(m protocol.Message) bool {
 			return is[protocol.LiveData](m) && s.eventAt.After(s.sentAt)
 		})
-		if errors.Is(err, errTimeout) {
-			return nil // commands are processed independently of the send loop
-		}
-		return err
 	}
-	gen := s.c.Handoffs()
-	_, err := s.await(s.g.wait(20*time.Second), func(m protocol.Message) bool {
-		return is[protocol.Handoff](m) && s.c.Handoffs() > gen
+	if errors.Is(err, errTimeout) {
+		return nil
+	}
+	return err
+}
+
+// confirmGone waits until the Totem no longer lists mac.
+func (s *session) confirmGone(mac protocol.MAC) error {
+	_, err := fetch(s, protocol.RequestPeerSync(), s.g.wait(30*time.Second), func(ps protocol.PeerSync) bool {
+		return !slices.Contains(ps.Peers, mac)
 	})
+	if errors.Is(err, errTimeout) {
+		return fmt.Errorf("sent, but the Totem still lists %s: %w", mac, err)
+	}
 	return err
 }

@@ -41,6 +41,9 @@ type Totem struct {
 	HidePowerMode bool
 	// NoLiveData stops Live Data, as if the send loop never got to it.
 	NoLiveData bool
+	// IgnoreDeletes drops peer delete requests, as a device that refused
+	// them would.
+	IgnoreDeletes bool
 	// Tick is the send-loop period; zero means 2 ms.
 	Tick time.Duration
 
@@ -281,7 +284,9 @@ func (t *Totem) peerCommand(cmd byte, b []byte) error {
 			return nil
 		}
 		if b[11]&1 != 0 {
-			t.Peers = slices.Delete(t.Peers, i, i+1)
+			if !t.IgnoreDeletes {
+				t.Peers = slices.Delete(t.Peers, i, i+1)
+			}
 			return nil
 		}
 		t.Peers[i].Color = protocol.RGB{R: b[8], G: b[9], B: b[10]}

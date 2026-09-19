@@ -230,8 +230,10 @@ func onDisconnect(addr string) {
 		return
 	}
 	l := v.(*bleLink)
-	if up, err := l.connected(); err == nil && up {
-		return
+	if askConnected {
+		if up, err := l.connected(); err == nil && up {
+			return
+		}
 	}
 	links.CompareAndDelete(addr, l)
 	l.markGone()
@@ -335,6 +337,14 @@ func (l *bleLink) Done() <-chan struct{} { return l.gone }
 // exits before the disconnect callback arrives, so it waits only briefly;
 // Done is closed either way.
 func (l *bleLink) Close() error {
+	select {
+	case <-l.gone:
+		// Already down: its callback arrived (on Windows, tinygo released
+		// the device then), or watchLink disconnected it.
+		links.CompareAndDelete(l.addr, l)
+		return nil
+	default:
+	}
 	err := l.dev.Disconnect()
 	select {
 	case <-l.gone:

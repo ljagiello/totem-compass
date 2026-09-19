@@ -9,6 +9,10 @@ import "time"
 // link is down, so the callback cannot confirm anything.
 const closeWait = 0
 
+// askConnected: a disconnect callback may be a late one for an older
+// connection, and BlueZ's Connected property tells.
+const askConnected = true
+
 // watchLink polls the connection state until the link goes. BlueZ reports a
 // disconnect only as a D-Bus property change, which tinygo's central role
 // does not pass to the connect handler: a Totem dropping the link (e.g. to

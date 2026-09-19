@@ -35,8 +35,10 @@ type globals struct {
 	// configPath is the default --config file, which may be missing; empty
 	// (tests) reads no file.
 	configPath string
-	// connect opens a client session; tests replace it with a simulator.
+	// connect opens a client session and scan lists nearby Totems; tests
+	// replace them.
 	connect func(ctx context.Context, opts client.Options) (*client.Client, error)
+	scan    func(ctx context.Context, all bool, found func(client.Device)) error
 	// timeScale shrinks every wait for the device (tests); 0 means 1.
 	timeScale float64
 }
@@ -111,6 +113,7 @@ func realMain() int {
 
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
+	g.scan = client.Scan
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {
 		msg := err.Error()
@@ -221,17 +224,26 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 	if g.scanTimeout < time.Second {
 		return fmt.Errorf("scan-timeout %q: want a duration with a unit, at least 1s (e.g. 60s or 2m)", v.GetString("scan-timeout"))
 	}
-	g.halfDuplex = v.GetBool("half-duplex")
-	g.blink = nil
-	if b := v.GetString("blink"); b != "" {
-		on, err := parseOnOff(b)
-		if err != nil {
-			return fmt.Errorf("blink setting: %w", err)
+	// viper's GetBool takes only what strconv.ParseBool does and reads
+	// anything else (TOTEM_JSON=yes, quiet: on) as false without a word:
+	// switches take on/off like blink does.
+	on := map[string]*bool{}
+	for _, key := range []string{"half-duplex", "json", "quiet", "trace", "blink"} {
+		s := v.GetString(key)
+		if s == "" {
+			continue
 		}
-		g.blink = &on
+		b, err := parseOnOff(s)
+		if err != nil {
+			return fmt.Errorf("%s setting: %w", key, err)
+		}
+		on[key] = &b
 	}
-	g.out = &printer{json: v.GetBool("json"), quiet: v.GetBool("quiet"), out: cmd.OutOrStdout(), err: cmd.ErrOrStderr()}
-	g.setLogger(newLogger(cmd.ErrOrStderr(), v.GetBool("trace")))
+	set := func(key string) bool { return on[key] != nil && *on[key] }
+	g.halfDuplex = set("half-duplex")
+	g.blink = on["blink"]
+	g.out = &printer{json: set("json"), quiet: set("quiet"), out: cmd.OutOrStdout(), err: cmd.ErrOrStderr()}
+	g.setLogger(newLogger(cmd.ErrOrStderr(), set("trace")))
 	return nil
 }
 

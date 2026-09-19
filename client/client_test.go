@@ -214,6 +214,25 @@ func TestTruncatedWiFiListIsAcked(t *testing.T) {
 	}
 }
 
+// Writes reach the device in the order they were queued, acks included.
+// Acks used to be written from goroutines racing for a mutex, so a Static
+// Data ack (1,0) could land after the next request (1,1) and cancel it.
+func TestWritesKeepTheirOrder(t *testing.T) {
+	for range 20 {
+		c, l := newClient(t, client.Options{})
+		release := l.holdWrites()
+		go func() { _ = c.SendNow(protocol.RequestPeerSync()) }() // in the link, blocked
+		time.Sleep(5 * time.Millisecond)
+		l.injectMsg(t, static) // its ack queues next
+		go func() { _ = c.SendNow(protocol.RequestStaticData()) }()
+		time.Sleep(5 * time.Millisecond)
+		release()
+		l.expectWrite(t, protocol.RequestPeerSync())
+		l.expectWrite(t, protocol.AckStaticData())
+		l.expectWrite(t, protocol.RequestStaticData())
+	}
+}
+
 // Repeats that arrive while the ack is still being written don't queue more.
 func TestLegacyAckNotDuplicatedWhileInFlight(t *testing.T) {
 	_, l := newClient(t, client.Options{})

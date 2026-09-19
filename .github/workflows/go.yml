@@ -53,6 +53,14 @@ jobs:
       - name: Test
         run: go test -race ./...
 
+      # Windows has its own Bluetooth backend (client/ble_windows.go); make
+      # sure it still builds.
+      - name: Build and vet for Windows
+        if: runner.os == 'Linux'
+        env:
+          GOOS: windows
+        run: go vet ./...
+
   fuzz:
     name: Fuzz ${{ matrix.target }}
     # Every input that ever failed stays in testdata/fuzz and runs with the

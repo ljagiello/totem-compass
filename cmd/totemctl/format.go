@@ -50,6 +50,9 @@ func (p *printer) emit(v any) {
 
 // message prints one received message as a single line.
 func (p *printer) message(m protocol.Message) {
+	if _, ok := m.(protocol.Handoff); ok {
+		return // TX handoffs are protocol housekeeping; --trace shows them
+	}
 	if p.json {
 		p.emit(m)
 		return
@@ -75,8 +78,6 @@ func (p *printer) message(m protocol.Message) {
 		p.printf("%s file   %q chunk %d, %d/%d bytes, status %d action %d\n", ts, v.Name, v.ChunkNo, v.BytePos, v.FileSize, v.Status, v.Action)
 	case protocol.DisconnectIntent:
 		p.printf("%s device is about to disconnect (cmd %d, %v)\n", ts, v.Cmd, v.Params)
-	case protocol.Handoff:
-		// Protocol housekeeping every few seconds; visible with -trace.
 	case protocol.Unknown:
 		p.printf("%s ?      %s (%d,%d) % x\n", ts, v.Channel, v.Cat, v.Cmd, v.Raw)
 	}

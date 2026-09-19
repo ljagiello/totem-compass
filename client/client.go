@@ -8,6 +8,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -74,14 +75,25 @@ type Client struct {
 	log    *slog.Logger
 	events chan Event
 
-	writeMu sync.Mutex // one GATT write in flight at a time
 	batchMu sync.Mutex // held while a Send batch uses the app's TX window
 
 	mu        sync.Mutex
 	appOwnsTX bool
 	txWaiters []chan struct{}
 	handoffs  uint64
-	acking    map[[2]byte]bool // acks being written
+
+	// Every GATT write goes through one FIFO queue served by writer.
+	qmu     sync.Mutex
+	queue   []writeReq
+	pending map[[2]byte]bool // acks queued or being written
+	wake    chan struct{}    // the queue has work
+}
+
+// writeReq is one queued GATT write. result receives its outcome; acks,
+// which nobody waits for, have none.
+type writeReq struct {
+	f      protocol.Frame
+	result chan error
 }
 
 // New starts a session over l and subscribes to both characteristics.
@@ -101,8 +113,10 @@ func New(l Link, opts Options) (*Client, error) {
 		log:       opts.Logger,
 		events:    make(chan Event, 256),
 		appOwnsTX: true,
-		acking:    map[[2]byte]bool{},
+		pending:   map[[2]byte]bool{},
+		wake:      make(chan struct{}, 1),
 	}
+	go c.writer()
 	for _, ch := range []protocol.Channel{protocol.Data, protocol.ConnStatus} {
 		if err := l.Subscribe(ch, c.receiver(ch)); err != nil {
 			return nil, fmt.Errorf("subscribe %s: %w", ch, err)
@@ -114,17 +128,24 @@ func New(l Link, opts Options) (*Client, error) {
 // receiver runs on the transport's goroutine, so it must not block or write.
 func (c *Client) receiver(ch protocol.Channel) func([]byte) {
 	return func(buf []byte) {
-		b := append([]byte(nil), buf...)
-		c.logFrame("rx", ch, b)
 		at := time.Now()
-		msg, err := protocol.Parse(ch, b)
+		c.logFrame("rx", ch, buf)
+		// Parse keeps nothing of buf, so it can read the transport's buffer;
+		// the event gets one copy (an Unknown message already holds it).
+		msg, err := protocol.Parse(ch, buf)
+		var raw []byte
+		if u, ok := msg.(protocol.Unknown); ok {
+			raw = u.Raw
+		} else {
+			raw = bytes.Clone(buf)
+		}
 		if h, ok := msg.(protocol.Handoff); ok && h.ToApp {
 			c.onHandoff()
 		}
 		if !c.opts.HalfDuplex && ch == protocol.Data {
-			c.legacyAck(b)
+			c.legacyAck(buf)
 		}
-		c.deliver(Event{Channel: ch, Raw: b, Msg: msg, Err: err, At: at})
+		c.deliver(Event{Channel: ch, Raw: raw, Msg: msg, Err: err, At: at})
 	}
 }
 
@@ -153,7 +174,7 @@ func (c *Client) deliver(ev Event) {
 //	WiFi list    -> (2,0)  clears wifi_cmd_id and the cached scan
 //	Peer Sync    -> (6,8)  moves peer_cmd_id on and asks for every Peer Ping
 //
-// Every repeat is acked, except while the same ack is still being written:
+// Every repeat is acked, except while the same ack is still queued:
 // a request made again later (e.g. Static Data re-read to confirm a setting)
 // must be acked again or the device repeats it forever and stops sending
 // Live Data. Extra acks are harmless.
@@ -179,19 +200,15 @@ func (c *Client) legacyAck(frame []byte) {
 		return
 	}
 	key := [2]byte{ack.Bytes[0], ack.Bytes[1]}
-	c.mu.Lock()
-	busy := c.acking[key]
-	c.acking[key] = true
-	c.mu.Unlock()
-	if busy {
+	c.qmu.Lock()
+	if c.pending[key] {
+		c.qmu.Unlock()
 		return
 	}
-	go func() {
-		c.backgroundErr("legacy ack", c.write(ack))
-		c.mu.Lock()
-		delete(c.acking, key)
-		c.mu.Unlock()
-	}()
+	c.pending[key] = true
+	c.queue = append(c.queue, writeReq{f: ack})
+	c.qmu.Unlock()
+	c.signal()
 }
 
 func (c *Client) onHandoff() {
@@ -335,14 +352,76 @@ func (c *Client) Send(ctx context.Context, frames ...protocol.Frame) error {
 // device processes writes regardless of who owns TX.
 func (c *Client) SendNow(f protocol.Frame) error { return c.write(f) }
 
+// write queues f and waits for the writer to write it.
 func (c *Client) write(f protocol.Frame) error {
 	select {
 	case <-c.link.Done():
 		return ErrDisconnected
 	default:
 	}
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
+	r := writeReq{f: f, result: make(chan error, 1)}
+	c.qmu.Lock()
+	c.queue = append(c.queue, r)
+	c.qmu.Unlock()
+	c.signal()
+	select {
+	case err := <-r.result:
+		return err
+	case <-c.link.Done():
+		return ErrDisconnected
+	}
+}
+
+func (c *Client) signal() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
+// writer performs every GATT write, one at a time, in the order they were
+// queued. An ack the receiver queues therefore reaches the device before a
+// request queued after it: a late Static Data ack (1,0) written after the
+// next request (1,1) would cancel that request.
+func (c *Client) writer() {
+	for {
+		select {
+		case <-c.link.Done():
+			c.qmu.Lock()
+			q := c.queue
+			c.queue = nil
+			c.qmu.Unlock()
+			for _, r := range q {
+				if r.result != nil {
+					r.result <- ErrDisconnected
+				}
+			}
+			return
+		case <-c.wake:
+		}
+		for {
+			c.qmu.Lock()
+			if len(c.queue) == 0 {
+				c.qmu.Unlock()
+				break
+			}
+			r := c.queue[0]
+			c.queue = c.queue[1:]
+			c.qmu.Unlock()
+			err := c.writeNow(r.f)
+			if r.result != nil {
+				r.result <- err
+				continue
+			}
+			c.qmu.Lock()
+			delete(c.pending, [2]byte{r.f.Bytes[0], r.f.Bytes[1]})
+			c.qmu.Unlock()
+			c.backgroundErr("legacy ack", err)
+		}
+	}
+}
+
+func (c *Client) writeNow(f protocol.Frame) error {
 	c.logFrame("tx", f.Channel, f.Bytes)
 	if err := c.link.Write(f.Channel, f.Bytes); err != nil {
 		return fmt.Errorf("write %s % x: %w", f.Channel, f.Bytes, err)

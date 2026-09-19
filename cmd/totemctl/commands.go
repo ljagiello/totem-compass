@@ -33,12 +33,26 @@ func newScanCmd(g *globals) *cobra.Command {
 			ctx, cancel := context.WithTimeout(cmd.Context(), dur)
 			defer cancel()
 			g.out.status("scanning for %s…", dur)
-			n := 0
-			err := client.Scan(ctx, all, func(d client.Device) {
-				n++
+			// Scan reports a Totem again once a name it lacked arrives, so
+			// keep the latest report per address and print each one once,
+			// when the scan ends. (No report comes after Scan returns.)
+			var order []string
+			found := map[string]client.Device{}
+			err := g.scan(ctx, all, func(d client.Device) {
+				key := d.Address.String()
+				if _, ok := found[key]; !ok {
+					order = append(order, key)
+				}
+				found[key] = d
+			})
+			if err != nil {
+				return err
+			}
+			for _, key := range order {
+				d := found[key]
 				if g.out.json {
 					g.out.emit(Device{d.Name, d.Address.String(), d.RSSI, d.Services})
-					return
+					continue
 				}
 				g.out.printf("%-24s %s  %d dBm\n", orUnnamed(d.Name), d.Address, d.RSSI)
 				if verbose {
@@ -49,11 +63,8 @@ func newScanCmd(g *globals) *cobra.Command {
 						g.out.printf("    mfg 0x%04x % x\n", id, b)
 					}
 				}
-			})
-			if err != nil {
-				return err
 			}
-			if n == 0 && !all && cmd.Context().Err() == nil { // not when Ctrl-C cut it short
+			if len(order) == 0 && !all && cmd.Context().Err() == nil { // not when Ctrl-C cut it short
 				g.out.status("no Totems found.\n\n%s", wakeHelp)
 			}
 			return nil
@@ -223,7 +234,7 @@ func newNameCmd(g *globals) *cobra.Command {
 			if err := s.send(f); err != nil {
 				return err
 			}
-			if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.Name == name }); err != nil {
+			if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.Name == string(name) }); err != nil {
 				return fmt.Errorf("sent, but the Totem did not report the new name: %w", err)
 			}
 			g.out.status("renamed to %q", name)
@@ -448,26 +459,58 @@ list. Use --open for a network without a password.`,
 // readPassword reads a password without echo from a terminal, or as the
 // first line of standard input otherwise.
 func readPassword(cmd *cobra.Command, ssid string) (string, error) {
-	var pass string
+	var read func() (string, error)
+	restore := func() {}
 	if f, ok := cmd.InOrStdin().(*os.File); ok && term.IsTerminal(int(f.Fd())) {
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Password for %q: ", ssid)
-		b, err := term.ReadPassword(int(f.Fd()))
-		_, _ = fmt.Fprintln(cmd.ErrOrStderr())
+		fd := int(f.Fd())
+		state, err := term.GetState(fd)
 		if err != nil {
 			return "", err
 		}
-		pass = string(b)
-	} else {
-		line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
-		if err != nil && !errors.Is(err, io.EOF) {
-			return "", err
+		restore = func() { _ = term.Restore(fd, state) }
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Password for %q: ", ssid)
+		defer func() { _, _ = fmt.Fprintln(cmd.ErrOrStderr()) }()
+		read = func() (string, error) {
+			b, err := term.ReadPassword(fd)
+			return string(b), err
 		}
-		pass = strings.TrimRight(line, "\r\n")
+	} else {
+		read = func() (string, error) {
+			line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+			if err != nil && !errors.Is(err, io.EOF) {
+				return "", err
+			}
+			return strings.TrimRight(line, "\r\n"), nil
+		}
 	}
-	if pass == "" {
+
+	// The read ignores the context, and the first Ctrl-C only cancels it:
+	// the default handler, back for the second, would kill the process with
+	// echo still off. So stop waiting on cancellation and put the terminal
+	// back ourselves.
+	type result struct {
+		pass string
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		p, err := read()
+		done <- result{p, err}
+	}()
+	var r result
+	select {
+	case r = <-done:
+	case <-cmd.Context().Done():
+		restore()
+		return "", cmd.Context().Err()
+	}
+	if r.err != nil {
+		return "", r.err
+	}
+	if r.pass == "" {
 		return "", errors.New("no password given; use --open for a network without one")
 	}
-	return pass, nil
+	return r.pass, nil
 }
 
 func newPeerCmd(g *globals) *cobra.Command {
@@ -573,7 +616,7 @@ func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*
 		return err
 	}
 	if upd.Delete {
-		if err := s.settle(); err != nil {
+		if err := s.confirmGone(mac); err != nil {
 			return err
 		}
 		g.out.status("deleted %q", p.Name)
@@ -697,7 +740,7 @@ func newPOICmd(g *globals) *cobra.Command {
 			if err := s.send(protocol.UpdatePeer(protocol.PeerUpdate{MAC: mac, Delete: true})); err != nil {
 				return err
 			}
-			if err := s.settle(); err != nil {
+			if err := s.confirmGone(mac); err != nil {
 				return err
 			}
 			g.out.status("deleted %q", p.Name)

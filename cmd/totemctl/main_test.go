@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,7 @@ type harness struct {
 	totem *clienttest.Totem
 	g     *globals
 	stdin string
+	in    io.Reader // stdin, if not the string
 	out   bytes.Buffer
 	errb  syncBuffer
 	dials int
@@ -83,6 +85,9 @@ func (h *harness) runCtx(ctx context.Context, args ...string) error {
 	root := newRootCmd(h.g)
 	root.SetArgs(args)
 	root.SetIn(strings.NewReader(h.stdin))
+	if h.in != nil {
+		root.SetIn(h.in)
+	}
 	root.SetOut(&h.out)
 	root.SetErr(&h.errb)
 	return root.ExecuteContext(ctx)
@@ -843,6 +848,127 @@ func TestSettleIgnoresQueuedLiveData(t *testing.T) {
 	}
 	if !s.eventAt.After(s.sentAt) {
 		t.Errorf("settle returned on Live Data from %v, before the send at %v", s.eventAt, s.sentAt)
+	}
+}
+
+// viper's GetBool read TOTEM_JSON=yes or quiet: on as false, silently.
+func TestSwitchSettingsTakeOnOff(t *testing.T) {
+	t.Setenv("TOTEM_JSON", "yes")
+	h := newHarness()
+	h.mustRun(t, "info")
+	if !strings.HasPrefix(h.out.String(), `{"type":"StaticData"`) {
+		t.Errorf("TOTEM_JSON=yes: %q", h.out.String())
+	}
+	t.Setenv("TOTEM_JSON", "")
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("quiet: on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h = newHarness()
+	h.mustRun(t, "--config", path, "power", "eco", "--blink", "on")
+	if strings.Contains(h.errb.String(), "power eco") {
+		t.Errorf("quiet: on still printed progress:\n%s", h.errb.String())
+	}
+
+	t.Setenv("TOTEM_TRACE", "maybe")
+	h = newHarness()
+	if err := h.run(t, "info"); err == nil || !strings.Contains(err.Error(), "trace setting") || h.dials != 0 {
+		t.Errorf("TOTEM_TRACE=maybe: err %v, dials %d", err, h.dials)
+	}
+}
+
+// A delete is confirmed by the peer list, not assumed.
+func TestDeletesAreConfirmed(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	h.totem.IgnoreDeletes = true
+	err := h.run(t, "peer", "delete", peerA.String())
+	if err == nil || !strings.Contains(err.Error(), "still lists") {
+		t.Errorf("an ignored delete: %v", err)
+	}
+	if strings.Contains(h.errb.String(), "deleted") {
+		t.Errorf("reported a delete that did not happen:\n%s", h.errb.String())
+	}
+}
+
+// Ctrl-C at the password prompt returns at once (and, on a terminal, puts
+// echo back), instead of waiting for input the second Ctrl-C would kill.
+func TestPasswordPromptIsInterruptible(t *testing.T) {
+	h := newHarness()
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+	h.in = pr // stdin that never delivers a line
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(200*time.Millisecond, cancel)
+	start := time.Now()
+	err := h.runCtx(ctx, "wifi", "set", "Home")
+	if !errors.Is(err, context.Canceled) || h.dials != 0 {
+		t.Errorf("err %v, dials %d", err, h.dials)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("took %v", d)
+	}
+}
+
+// scan prints each Totem once, with the name that arrived after its first
+// advertisement; it printed both reports.
+func TestScanPrintsEachTotemOnce(t *testing.T) {
+	h := newHarness()
+	h.g.scan = func(_ context.Context, _ bool, found func(client.Device)) error {
+		found(client.Device{RSSI: -60})                // service UUID only
+		found(client.Device{Name: "totem", RSSI: -58}) // then the scan response
+		return nil
+	}
+	h.mustRun(t, "--json", "scan")
+	lines := strings.Split(strings.TrimSpace(h.out.String()), "\n")
+	if len(lines) != 1 || !strings.Contains(lines[0], `"name":"totem"`) {
+		t.Errorf("scan output:\n%s", h.out.String())
+	}
+}
+
+// A ping this session already has is reused, not requested again.
+func TestFetchPeerReusesAPingItHas(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	s := h.session(t)
+	if _, err := s.peerList(); err != nil { // its ack asks for every ping
+		t.Fatal(err)
+	}
+	if _, err := s.await(time.Second, func(protocol.Message) bool { _, ok := s.peers[peerA]; return ok }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.fetchPeer(peerA, time.Second, nil); err != nil {
+		t.Fatal(err)
+	}
+	req, _ := protocol.RequestPeerDetails(peerA)
+	if wrote(h, req) {
+		t.Error("asked for a ping the session already had")
+	}
+}
+
+// With --json, TX handoffs stay hidden as in text output.
+func TestJSONHidesHandoffs(t *testing.T) {
+	var out bytes.Buffer
+	p := &printer{json: true, out: &out}
+	p.message(protocol.Handoff{ToApp: true})
+	if out.Len() != 0 {
+		t.Errorf("printed %q", out.String())
+	}
+}
+
+// In half-duplex mode, a settle timeout after a write that went through
+// means "sent", as in legacy mode; it used to fail the command.
+func TestHalfDuplexSettleTimeoutIsNotFailure(t *testing.T) {
+	h := newHarness()
+	h.g.halfDuplex = true
+	q := &halfDuplexTotem{subs: map[protocol.Channel]func([]byte){}, done: make(chan struct{})}
+	h.g.connect = func(_ context.Context, opts client.Options) (*client.Client, error) {
+		return client.New(q, opts)
+	}
+	s := h.session(t)
+	if err := s.settle(); err != nil {
+		t.Errorf("settle = %v", err)
 	}
 }
 

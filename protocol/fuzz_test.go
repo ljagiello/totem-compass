@@ -151,7 +151,7 @@ func FuzzEncoders(f *testing.F) {
 	f.Add("Base Camp", "home", "s3cret", "totem", "latest", int8(1), int16(1), float32(50.0671), float32(19.9124), []byte{0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6})
 	f.Add(strings.Repeat("x", 132), "", "", strings.Repeat("b", 127), "", int8(-1), int16(-1), float32(-33.8), float32(151.2), []byte{})
 	f.Add("\xff\xfe", "\"quoted\"", "\\", "", strings.Repeat("v", 200), int8(0), int16(0), float32(0), float32(0), bytes.Repeat([]byte{1}, 6*31))
-	f.Add(strings.Repeat(" ", 32), "", "", "", "", int8(0), int16(0), float32(0), float32(0), []byte{})
+	f.Add(strings.Repeat("\u2028", 32), "", "", "", "", int8(0), int16(0), float32(0), float32(0), []byte{})
 	f.Fuzz(func(t *testing.T, name, ssid, key, branch, version string, cmd int8, endpoint int16, lat, lon float32, macs []byte) {
 		fits := func(what string, fr Frame) {
 			t.Helper()
@@ -160,28 +160,28 @@ func FuzzEncoders(f *testing.F) {
 			}
 		}
 
-		// SetName sends exactly the cleaned name, which Static Data can report.
-		clean, cerr := CleanName(name)
-		fr, err := SetName(name)
-		if (err == nil) != (cerr == nil) {
-			t.Fatalf("SetName(%q) error %v, but CleanName error %v", name, err, cerr)
-		}
-		if err == nil {
+		// Every name CleanName accepts fits the frame, and is what Static
+		// Data can report back.
+		if clean, err := CleanName(name); err == nil {
+			fr, err := SetName(clean)
+			if err != nil {
+				t.Fatalf("SetName(CleanName(%q)): %v", name, err)
+			}
 			fits("SetName", fr)
 			var v struct{ Name string }
-			if err := json.Unmarshal(fr.Bytes[2:], &v); err != nil || v.Name != clean {
-				t.Fatalf("SetName(%q) payload %q, want name %q: %v", name, fr.Bytes[2:], clean, err)
+			if err := json.Unmarshal(fr.Bytes[2:], &v); err != nil || v.Name != string(clean) {
+				t.Fatalf("SetName(%q) payload %q: %v", clean, fr.Bytes[2:], err)
 			}
-			if len(clean) > 127 || clean != strings.Trim(clean, " \t\n\v\f\r") || !utf8.ValidString(clean) {
+			if len(clean) > 127 || string(clean) != strings.Trim(string(clean), " \t\n\v\f\r") || !utf8.ValidString(string(clean)) {
 				t.Fatalf("CleanName(%q) = %q, which the device cannot report back", name, clean)
 			}
 		}
 
+		// The Totem gets exactly the network given, or an error.
 		if fr, err := SaveWiFi(ssid, key); err == nil {
 			fits("SaveWiFi", fr)
 			var v struct{ NW, Join string }
-			if err := json.Unmarshal(fr.Bytes[2:], &v); err != nil ||
-				(utf8.ValidString(ssid) && utf8.ValidString(key) && (v.NW != ssid || v.Join != key)) {
+			if err := json.Unmarshal(fr.Bytes[2:], &v); err != nil || v.NW != ssid || v.Join != key {
 				t.Fatalf("SaveWiFi(%q, %q) payload %q: %v", ssid, key, fr.Bytes[2:], err)
 			}
 		}

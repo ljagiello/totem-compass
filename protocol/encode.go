@@ -186,8 +186,14 @@ const maxPOIName = 127
 // frame length, as the app writes it; the firmware does not check it.
 func AddPOI(p POI) (Frame, error) {
 	name := []byte(p.Name)
-	if len(name) > maxPOIName {
+	switch {
+	case len(name) > maxPOIName:
 		return Frame{}, fmt.Errorf("POI name is %d bytes, max %d", len(name), maxPOIName)
+	case !utf8.Valid(name):
+		// add_new_bond decodes the name as UTF-8, which fails on anything else.
+		return Frame{}, errors.New("POI name must be valid UTF-8")
+	case strings.ContainsFunc(p.Name, unicode.IsControl):
+		return Frame{}, errors.New("POI name must not contain control characters")
 	}
 	if !ValidCoords(float64(p.Lat), float64(p.Lon)) {
 		return Frame{}, fmt.Errorf("invalid POI coordinates %v,%v", p.Lat, p.Lon)
@@ -248,11 +254,15 @@ func SetCompassPrefs(p CompassPrefs) Frame {
 // name fits the signed length byte Static Data reports it with.
 const MaxNameLen = 32
 
+// DeviceName is a name the Totem can store and report back, as CleanName
+// makes it.
+type DeviceName string
+
 // CleanName returns name as the device will store it (update_options saves
 // name.strip()), or an error for a name the device could not report back
 // in Static Data. The device takes any length, and a name longer than 127
 // bytes would make its Static Data unreadable.
-func CleanName(name string) (string, error) {
+func CleanName(name string) (DeviceName, error) {
 	name = strings.Trim(name, " \t\n\v\f\r") // MicroPython's str.strip()
 	units := 0
 	for _, r := range name {
@@ -272,17 +282,14 @@ func CleanName(name string) (string, error) {
 	case units > MaxNameLen:
 		return "", fmt.Errorf("name is %d characters, max %d", units, MaxNameLen)
 	}
-	return name, nil
+	return DeviceName(name), nil
 }
 
-// SetName renames the Totem (5,3) to CleanName(name). The device stores it
-// in user-config.json and reports it in Static Data.
-func SetName(name string) (Frame, error) {
-	name, err := CleanName(name)
-	if err != nil {
-		return Frame{}, err
-	}
-	b, err := jsonPayload(map[string]string{"name": name})
+// SetName renames the Totem (5,3). The device stores the name in
+// user-config.json and reports it in Static Data. A name from CleanName
+// always fits the frame; SetName does not validate it again.
+func SetName(name DeviceName) (Frame, error) {
+	b, err := jsonPayload(map[string]string{"name": string(name)})
 	if err != nil {
 		return Frame{}, err
 	}
@@ -313,6 +320,11 @@ func ClearWiFiScan() Frame { return mustData(CatWiFi, 0x00) }
 func SaveWiFi(ssid, key string) (Frame, error) {
 	if ssid == "" || len(ssid) > 32 {
 		return Frame{}, fmt.Errorf("ssid must be 1-32 bytes, not %d", len(ssid))
+	}
+	// JSON cannot carry invalid UTF-8: it would arrive as U+FFFD, and the
+	// Totem would save (and switch to) a network that is not the one given.
+	if !utf8.ValidString(ssid) || !utf8.ValidString(key) {
+		return Frame{}, errors.New("ssid and password must be valid UTF-8")
 	}
 	b, err := jsonPayload(map[string]string{"nw": ssid, "join": key})
 	if err != nil {
