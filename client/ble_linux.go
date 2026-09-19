@@ -18,15 +18,18 @@ func watchLink(l *bleLink) {
 			return
 		case <-t.C:
 		}
-		connected, err := l.dev.Connected()
+		up, err := l.connected()
 		switch {
 		case err != nil:
 			// BlueZ drops the device object some time after a disconnect;
-			// one failed read is not proof, three in a row are.
+			// one failed read is not proof, three in a row are. Disconnect
+			// anyway, in case BlueZ still holds the link: a connected Totem
+			// stops advertising.
 			if failures++; failures < 3 {
 				continue
 			}
-		case connected:
+			_ = l.dev.Disconnect()
+		case up:
 			failures = 0
 			continue
 		}

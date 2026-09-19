@@ -427,6 +427,28 @@ func TestReviewFindings(t *testing.T) {
 	}
 }
 
+// A WiFi list cut off in transit keeps its complete entries and still
+// decodes as the list, so the client acks it: the device repeats the list
+// until acked. It used to decode as a garbage FileChunk.
+func TestTruncatedWiFiList(t *testing.T) {
+	for in, want := range map[string]WiFiNetworks{
+		`["home", "caf`:      {SSIDs: []string{"home"}, Truncated: true},
+		`["home", "cafe"`:    {SSIDs: []string{"home", "cafe"}, Truncated: true},
+		`["`:                 {Truncated: true},
+		`[]`:                 {SSIDs: []string{}},
+		`["a\"b", "c"]`:      {SSIDs: []string{`a"b`, "c"}},
+		`["home", "cafe"]  `: {SSIDs: []string{"home", "cafe"}},
+	} {
+		m, err := Parse(Data, append([]byte{CatWiFi, 0x02}, in...))
+		if err != nil || !reflect.DeepEqual(m, want) {
+			t.Errorf("Parse(%q) = %#v, %v, want %#v", in, m, err, want)
+		}
+	}
+	if m, err := Parse(Data, append([]byte{CatWiFi, 0x02}, `["a", 1]`...)); err == nil {
+		t.Errorf("a list with a number parsed as %#v", m)
+	}
+}
+
 // CleanName mirrors what update_options stores and rejects what Static Data
 // could not report back.
 func TestCleanName(t *testing.T) {
@@ -440,7 +462,10 @@ func TestCleanName(t *testing.T) {
 			t.Errorf("CleanName(%q) = %q, %v, want %q", in, got, err, want)
 		}
 	}
-	for _, in := range []string{"", " \t ", "\xff", "a\x00b", strings.Repeat("x", 33), strings.Repeat("🧭", 17)} {
+	// U+2028/U+2029 always JSON-encode to 6-byte escapes: 32 of them passed
+	// CleanName and then overflowed the frame.
+	for _, in := range []string{"", " \t ", "\xff", "a\x00b", strings.Repeat("x", 33), strings.Repeat("🧭", 17),
+		strings.Repeat(" ", 32), "a b"} {
 		if got, err := CleanName(in); err == nil {
 			t.Errorf("CleanName(%q) = %q, want an error", in, got)
 		}

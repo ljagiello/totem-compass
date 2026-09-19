@@ -151,6 +151,7 @@ func FuzzEncoders(f *testing.F) {
 	f.Add("Base Camp", "home", "s3cret", "totem", "latest", int8(1), int16(1), float32(50.0671), float32(19.9124), []byte{0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6})
 	f.Add(strings.Repeat("x", 132), "", "", strings.Repeat("b", 127), "", int8(-1), int16(-1), float32(-33.8), float32(151.2), []byte{})
 	f.Add("\xff\xfe", "\"quoted\"", "\\", "", strings.Repeat("v", 200), int8(0), int16(0), float32(0), float32(0), bytes.Repeat([]byte{1}, 6*31))
+	f.Add(strings.Repeat(" ", 32), "", "", "", "", int8(0), int16(0), float32(0), float32(0), []byte{})
 	f.Fuzz(func(t *testing.T, name, ssid, key, branch, version string, cmd int8, endpoint int16, lat, lon float32, macs []byte) {
 		fits := func(what string, fr Frame) {
 			t.Helper()

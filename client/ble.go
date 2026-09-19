@@ -35,9 +35,10 @@ var (
 	enableOnce sync.Once
 	enableErr  error
 
-	// links routes the adapter-wide connect handler to the link for each
-	// address. A closed link stays until its disconnect callback arrives, so
-	// a late callback cannot reach a newer link to the same device.
+	// links routes the adapter-wide connect handler to the current link for
+	// each address. The handler says only which address disconnected, so a
+	// late callback for an older connection can land on a newer link;
+	// onDisconnect asks the link itself before believing it.
 	links sync.Map // address string -> *bleLink
 )
 
@@ -135,6 +136,7 @@ func Find(ctx context.Context, match string) (Device, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var dev *Device
+	parent := ctx
 	err := Scan(ctx, false, func(d Device) {
 		if dev == nil && matches(d, match) {
 			dev = &d
@@ -145,6 +147,11 @@ func Find(ctx context.Context, match string) (Device, error) {
 		return Device{}, err
 	}
 	if dev == nil {
+		// Scan ends quietly when its context does; only a deadline means
+		// nothing matched. A cancellation (Ctrl-C) is not "not found".
+		if err := parent.Err(); errors.Is(err, context.Canceled) {
+			return Device{}, err
+		}
 		if match != "" {
 			return Device{}, fmt.Errorf("%w matching %q", ErrNotFound, match)
 		}
@@ -177,41 +184,31 @@ func Connect(ctx context.Context, d Device, opts Options) (*Client, error) {
 
 // bleLink is a Link over the Totem's conn-status and data characteristics.
 type bleLink struct {
-	addr     string
-	dev      bluetooth.Device
-	chars    map[protocol.Channel]*bluetooth.DeviceCharacteristic
-	gone     chan struct{}
-	goneOnce sync.Once
+	addr      string
+	dev       bluetooth.Device
+	connected func() (bool, error) // the OS's view of this connection
+	chars     map[protocol.Channel]*bluetooth.DeviceCharacteristic
+	gone      chan struct{}
+	goneOnce  sync.Once
 }
 
 func (l *bleLink) markGone() { l.goneOnce.Do(func() { close(l.gone) }) }
 
-// onDisconnect marks the link for addr gone and forgets it.
+// onDisconnect handles a disconnect callback for addr. The callback may be a
+// late one for an older connection to the same Totem (after a Close that
+// stopped waiting, or a canceled connect that completed): the current link
+// is marked gone only if the OS no longer reports it connected.
 func onDisconnect(addr string) {
-	if l, ok := links.LoadAndDelete(addr); ok {
-		l.(*bleLink).markGone()
+	v, ok := links.Load(addr)
+	if !ok {
+		return
 	}
-}
-
-// claim registers l for its address's disconnect callback. A closed link to
-// the same device may still be waiting for its own callback; claim waits
-// for it (up to patience), so that callback cannot mark the new link gone.
-func claim(ctx context.Context, l *bleLink, patience time.Duration) error {
-	deadline := time.Now().Add(patience)
-	for {
-		if _, loaded := links.LoadOrStore(l.addr, l); !loaded {
-			return nil
-		}
-		if !time.Now().Before(deadline) {
-			links.Store(l.addr, l) // the old link is already marked gone
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(50 * time.Millisecond):
-		}
+	l := v.(*bleLink)
+	if up, err := l.connected(); err == nil && up {
+		return
 	}
+	links.CompareAndDelete(addr, l)
+	l.markGone()
 }
 
 func dial(ctx context.Context, d Device) (*bleLink, error) {
@@ -219,9 +216,6 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 		return nil, err
 	}
 	l := &bleLink{addr: d.Address.String(), gone: make(chan struct{})}
-	if err := claim(ctx, l, 3*time.Second); err != nil {
-		return nil, err
-	}
 
 	type result struct {
 		dev bluetooth.Device
@@ -236,7 +230,6 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 	select {
 	case r = <-done:
 	case <-ctx.Done():
-		links.CompareAndDelete(l.addr, l)
 		// Connect cannot be canceled. If it still succeeds, drop the link:
 		// a connected Totem stops advertising and could not be found again.
 		go func() {
@@ -247,10 +240,11 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 		return nil, ctx.Err()
 	}
 	if r.err != nil {
-		links.CompareAndDelete(l.addr, l)
 		return nil, fmt.Errorf("connect %s: %w", d.Address, r.err)
 	}
 	l.dev = r.dev
+	l.connected = r.dev.Connected
+	links.Store(l.addr, l)
 	go watchLink(l)
 	if err := l.discover(); err != nil {
 		_ = l.Close()
@@ -310,6 +304,7 @@ func (l *bleLink) Close() error {
 	case <-l.gone:
 	case <-time.After(250 * time.Millisecond):
 	}
+	links.CompareAndDelete(l.addr, l)
 	l.markGone()
 	return err
 }

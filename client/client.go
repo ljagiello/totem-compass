@@ -122,10 +122,24 @@ func (c *Client) receiver(ch protocol.Channel) func([]byte) {
 		if !c.opts.HalfDuplex {
 			c.legacyAck(msg)
 		}
+		c.deliver(Event{Channel: ch, Raw: b, Msg: msg, Err: err})
+	}
+}
+
+// deliver queues ev without blocking the transport. When the consumer falls
+// behind, the oldest event goes, not this one: the newest state (and a
+// Handoff, which a waiting command needs) matters more than stale records.
+func (c *Client) deliver(ev Event) {
+	for {
 		select {
-		case c.events <- Event{Channel: ch, Raw: b, Msg: msg, Err: err}:
-		default: // the consumer is not keeping up; drop rather than stall the link
-			c.log.Debug("event dropped: consumer not keeping up", "channel", ch)
+		case c.events <- ev:
+			return
+		default:
+		}
+		select {
+		case old := <-c.events:
+			c.log.Debug("event dropped: consumer not keeping up", "channel", old.Channel)
+		default: // the consumer just made room
 		}
 	}
 }
@@ -350,6 +364,10 @@ func (c *Client) logFrame(dir string, ch protocol.Channel, b []byte) {
 func (c *Client) Close() error {
 	select {
 	case <-c.link.Done():
+		// Done may mean the transport lost track of the link rather than
+		// that the OS dropped it: close it anyway, or the Totem could stay
+		// connected (and stop advertising).
+		_ = c.link.Close()
 		return nil
 	default:
 	}

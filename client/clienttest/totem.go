@@ -39,6 +39,8 @@ type Totem struct {
 	// HidePowerMode models firmware 4.x, whose Live Data leaves power_mode
 	// at 0 even though (7,3) still changes it.
 	HidePowerMode bool
+	// NoLiveData stops Live Data, as if the send loop never got to it.
+	NoLiveData bool
 	// Tick is the send-loop period; zero means 2 ms.
 	Tick time.Duration
 
@@ -408,7 +410,7 @@ func (t *Totem) nextRecord() encoding.BinaryMarshaler {
 			return t.Peers[i]
 		}
 		return nil
-	case t.pass%3 == 0:
+	case t.pass%3 == 0 && !t.NoLiveData:
 		live := t.Live
 		if t.HidePowerMode {
 			live.PowerMode = protocol.PowerUnchanged

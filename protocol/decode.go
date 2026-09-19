@@ -186,7 +186,12 @@ type peerPingWire struct {
 type PeerSync struct{ Peers []MAC }
 
 // WiFiNetworks is (0x02,0x02)+JSON: SSIDs found by a ScanWiFi, strongest first.
-type WiFiNetworks struct{ SSIDs []string }
+type WiFiNetworks struct {
+	SSIDs []string
+	// Truncated means the list was cut off in transit (a long list can
+	// outgrow the frame): SSIDs holds the complete entries before the cut.
+	Truncated bool
+}
 
 // FileChunk is (0x02,0x02)+'<HBBBiHiB': the device announcing or closing a
 // file (log) upload to the app. In 5.0.3 the chunk data itself streams on the
@@ -241,7 +246,7 @@ func Parse(ch Channel, b []byte) (Message, error) {
 		return nil, fmt.Errorf("%s frame too short: % x", ch, b)
 	}
 	cat, cmd := b[0], b[1]
-	unknown := Unknown{ch, cat, cmd, append([]byte(nil), b...)}
+	unknown := func() (Message, error) { return Unknown{ch, cat, cmd, bytes.Clone(b)}, nil }
 	if ch == ConnStatus {
 		switch {
 		case cat == CatHandoff && cmd == 0x02 && len(b) >= 3:
@@ -254,7 +259,7 @@ func Parse(ch Channel, b []byte) (Message, error) {
 		case cat == CatConn && cmd == 0x02:
 			return DisconnectIntent{Cmd: cmd}, nil
 		}
-		return unknown, nil
+		return unknown()
 	}
 	switch {
 	case cat == CatLiveData && cmd == 0x01:
@@ -266,18 +271,47 @@ func Parse(ch Channel, b []byte) (Message, error) {
 	case cat == CatPeer && cmd == 0x07:
 		return parsePeerSync(b)
 	case cat == CatWiFi && cmd == 0x02:
-		// Both the WiFi list and file chunks use (2,2). A JSON list is the
-		// list; anything else, including a chunk whose FileID starts with
-		// byte '[', is a chunk.
-		if len(b) > 2 && b[2] == '[' {
-			var w WiFiNetworks
-			if json.Unmarshal(b[2:], &w.SSIDs) == nil {
-				return w, nil
-			}
+		// Both the WiFi list and file chunks use (2,2); the app tells them
+		// apart by whether it asked for a scan. Without that context: a
+		// frame starting ["  or [] is the list, anything else a chunk. (A
+		// chunk whose FileID is 0x225b or 0x5d5b would be misread.)
+		if len(b) > 3 && b[2] == '[' && (b[3] == '"' || b[3] == ']') {
+			return parseWiFiNetworks(b[2:])
 		}
 		return parseFileChunk(b)
 	}
-	return unknown, nil
+	return unknown()
+}
+
+// parseWiFiNetworks decodes the JSON list of SSIDs, keeping the complete
+// entries of a list cut off in transit. The device repeats the list until
+// it is acknowledged, so it must decode even then.
+func parseWiFiNetworks(b []byte) (Message, error) {
+	var w WiFiNetworks
+	if json.Unmarshal(b, &w.SSIDs) == nil {
+		return w, nil
+	}
+	w.SSIDs = nil
+	dec := json.NewDecoder(bytes.NewReader(b))
+	if _, err := dec.Token(); err != nil { // the '['
+		return nil, fmt.Errorf("wifi networks: %w", err)
+	}
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			w.Truncated = true
+			return w, nil
+		}
+		ssid, ok := tok.(string)
+		if !ok {
+			if d, ok := tok.(json.Delim); ok && d == ']' {
+				// A complete list that failed to unmarshal holds non-strings.
+				return nil, fmt.Errorf("wifi networks: not a list of strings: %q", b)
+			}
+			return nil, fmt.Errorf("wifi networks: unexpected %v in %q", tok, b)
+		}
+		w.SSIDs = append(w.SSIDs, ssid)
+	}
 }
 
 func readAt(b []byte, off int, v any) error {

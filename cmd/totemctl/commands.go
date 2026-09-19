@@ -26,7 +26,7 @@ func newScanCmd(g *globals) *cobra.Command {
 	var dur time.Duration
 	c := &cobra.Command{
 		Use:   "scan",
-		Short: "List nearby Totems",
+		Short: "List nearby Totems (Ctrl-C stops early)",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), dur)
@@ -52,7 +52,7 @@ func newScanCmd(g *globals) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if n == 0 && !all {
+			if n == 0 && !all && cmd.Context().Err() == nil { // not when Ctrl-C cut it short
 				g.out.status("no Totems found.\n\n%s", wakeHelp)
 			}
 			return nil
@@ -88,7 +88,11 @@ func newInfoCmd(g *globals) *cobra.Command {
 				return err
 			}
 			if s.live == nil {
-				_, _ = s.await(g.wait(15*time.Second), is[protocol.LiveData])
+				// Print what there is if Live Data is slow, but not if the
+				// command was interrupted or the Totem went away.
+				if _, err := s.await(g.wait(15*time.Second), is[protocol.LiveData]); err != nil && !errors.Is(err, errTimeout) {
+					return err
+				}
 			}
 			g.out.info(st, s.live)
 			return nil
@@ -140,18 +144,10 @@ func newPeersCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
-			// The device only sends Peer Sync once Static Data was delivered.
-			if _, err := s.fetchStatic(g.wait(30*time.Second), nil); err != nil {
-				return err
-			}
-			if err := s.send(protocol.RequestPeerSync()); err != nil {
-				return err
-			}
-			m, err := s.await(g.wait(30*time.Second), is[protocol.PeerSync])
+			want, err := s.peerList()
 			if err != nil {
-				return fmt.Errorf("no peer list from the Totem: %w", err)
+				return err
 			}
-			want := m.(protocol.PeerSync).Peers
 			if s.c.HalfDuplex() { // legacy mode requests details as the Peer Sync ack
 				all, _ := protocol.RequestPeerDetails()
 				if err := s.send(all); err != nil {
@@ -169,8 +165,12 @@ func newPeersCmd(g *globals) *cobra.Command {
 			}
 			if missing() {
 				limit := g.wait(time.Duration(len(want)+10) * 2 * time.Second)
-				if _, err := s.await(limit, func(protocol.Message) bool { return !missing() }); err != nil {
+				_, err := s.await(limit, func(protocol.Message) bool { return !missing() })
+				switch {
+				case errors.Is(err, errTimeout):
 					g.log.Warn("not every peer reported details", "reported", len(s.peers), "bonded", len(want))
+				case err != nil:
+					return err // interrupted or disconnected: no partial list
 				}
 			}
 			if len(s.peers) == 0 {
@@ -381,6 +381,9 @@ func newWiFiCmd(g *globals) *cobra.Command {
 			m, err := s.await(g.wait(60*time.Second), is[protocol.WiFiNetworks])
 			if err != nil {
 				return err
+			}
+			if m.(protocol.WiFiNetworks).Truncated {
+				g.log.Warn("the network list was cut off in transit; it shows the networks before the cut")
 			}
 			if g.out.json {
 				g.out.emit(m)
@@ -612,6 +615,13 @@ func newPOICmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			if id != "" {
+				// add_new_bond replaces whatever the peer table holds under
+				// this id, including a bonded Totem.
+				if err := s.refuseBond(poi.ID); err != nil {
+					return err
+				}
+			}
 			if err := s.send(f); err != nil {
 				return err
 			}
@@ -683,9 +693,7 @@ func randomPOIID() protocol.MAC {
 }
 
 func checkCoords(lat, lon float64) error {
-	// Written so NaN, which fails every comparison, is rejected too.
-	inRange := lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
-	if !inRange {
+	if !protocol.ValidCoords(lat, lon) {
 		return fmt.Errorf("bad coordinates %v,%v: latitude must be within ±90 and longitude within ±180", lat, lon)
 	}
 	return nil

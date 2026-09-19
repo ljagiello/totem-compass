@@ -24,6 +24,7 @@ type fakeLink struct {
 	writes chan protocol.Frame
 	done   chan struct{}
 	once   sync.Once
+	closes int // Close calls
 }
 
 func newFakeLink() *fakeLink {
@@ -66,6 +67,9 @@ func (l *fakeLink) holdWrites() (release func()) {
 func (l *fakeLink) Done() <-chan struct{} { return l.done }
 
 func (l *fakeLink) Close() error {
+	l.mu.Lock()
+	l.closes++
+	l.mu.Unlock()
 	l.once.Do(func() { close(l.done) })
 	return nil
 }
@@ -179,6 +183,17 @@ func TestLegacyAcksEveryRequest(t *testing.T) {
 	l.expectNoWrite(t)
 }
 
+// A WiFi list cut off in transit is still the list, and still acked: the
+// device repeats it until acked, ahead of Live Data.
+func TestTruncatedWiFiListIsAcked(t *testing.T) {
+	c, l := newClient(t, client.Options{})
+	l.inject(protocol.Data, append([]byte{protocol.CatWiFi, 0x02}, `["home", "caf`...))
+	l.expectWrite(t, protocol.ClearWiFiScan())
+	if ev := nextEvent(t, c); ev.Msg == nil || !ev.Msg.(protocol.WiFiNetworks).Truncated {
+		t.Errorf("event = %+v", ev)
+	}
+}
+
 // Repeats that arrive while the ack is still being written don't queue more.
 func TestLegacyAckNotDuplicatedWhileInFlight(t *testing.T) {
 	_, l := newClient(t, client.Options{})
@@ -281,6 +296,47 @@ func TestAwaitTXForgetsWaitersThatGiveUp(t *testing.T) {
 	}
 	if n := c.Waiters(); n != 0 {
 		t.Errorf("%d waiters left behind", n)
+	}
+}
+
+// When the consumer falls behind, the oldest events go: a Handoff that a
+// command is waiting for used to be dropped as the newest.
+func TestFullEventBufferKeepsNewest(t *testing.T) {
+	c, l := newClient(t, client.Options{})
+	for range 300 {
+		l.injectMsg(t, protocol.LiveData{})
+	}
+	l.inject(protocol.ConnStatus, []byte{protocol.CatHandoff, 0x02, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	var last client.Event
+	for n := 0; ; n++ {
+		select {
+		case ev := <-c.Events():
+			last = ev
+			continue
+		default:
+		}
+		if n == 0 {
+			t.Fatal("no events")
+		}
+		break
+	}
+	if last.Msg != (protocol.Handoff{ToApp: true}) {
+		t.Errorf("last event = %+v, want the Handoff", last)
+	}
+}
+
+// Close closes the link even after it reports Done, which can mean the
+// transport lost track of a link the OS still holds.
+func TestCloseAlwaysClosesTheLink(t *testing.T) {
+	c, l := newClient(t, client.Options{})
+	_ = l.Close() // the link reports Done
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closes != 2 {
+		t.Errorf("link closed %d times, want 2", l.closes)
 	}
 }
 

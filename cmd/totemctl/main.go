@@ -95,28 +95,58 @@ func main() { os.Exit(realMain()) }
 
 // realMain returns the exit status, so deferred cleanup runs before exit.
 func realMain() int {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	go func() {
+		sig := <-sigs
+		// Hand later signals back to the default handler, so a second
+		// Ctrl-C kills the process even if cleanup (a BLE write that the
+		// OS takes long to time out) hangs.
+		signal.Stop(sigs)
+		cancel(stoppedBy{sig})
+	}()
+
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {
 		msg := err.Error()
-		if errors.Is(err, context.Canceled) {
-			msg = "interrupted"
+		var s stoppedBy
+		if errors.Is(err, context.Canceled) && errors.As(context.Cause(ctx), &s) {
+			msg = s.Error()
 		}
 		_, _ = fmt.Fprintf(os.Stderr, "%s: %s\n", cmd.CommandPath(), msg)
 	}
-	return exitCode(err)
+	return exitCode(err, context.Cause(ctx))
 }
 
-// exitCode maps a command's error to the process status: 130 (128+SIGINT)
-// when Ctrl-C cut it short, so scripts cannot mistake it for success.
-func exitCode(err error) int {
+// stoppedBy is the cancellation cause when a signal stops totemctl.
+type stoppedBy struct{ sig os.Signal }
+
+func (s stoppedBy) Error() string {
+	if s.sig == os.Interrupt {
+		return "interrupted"
+	}
+	return "stopped by " + s.sig.String()
+}
+
+// exitCode maps a command's error to the process status. When a signal cut
+// the command short it is 128 + the signal (130 for Ctrl-C, 143 for
+// SIGTERM), as a shell reports it, so scripts cannot mistake it for success.
+func exitCode(err, cause error) int {
 	switch {
 	case err == nil:
 		return 0
 	case errors.Is(err, context.Canceled):
+		var s stoppedBy
+		if errors.As(cause, &s) {
+			if n, ok := s.sig.(syscall.Signal); ok {
+				return 128 + int(n)
+			}
+		}
 		return 130
 	}
 	return 1

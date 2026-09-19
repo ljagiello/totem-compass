@@ -189,7 +189,7 @@ func AddPOI(p POI) (Frame, error) {
 	if len(name) > maxPOIName {
 		return Frame{}, fmt.Errorf("POI name is %d bytes, max %d", len(name), maxPOIName)
 	}
-	if !validLatLon(p.Lat, p.Lon) {
+	if !ValidCoords(float64(p.Lat), float64(p.Lon)) {
 		return Frame{}, fmt.Errorf("invalid POI coordinates %v,%v", p.Lat, p.Lon)
 	}
 	w := poiWire{
@@ -201,9 +201,9 @@ func AddPOI(p POI) (Frame, error) {
 	return dataFrame(CatPeer, 0x06, uint8(poiHeader+len(name)), p.ID[:], w, name)
 }
 
-// validLatLon reports whether lat, lon are a real position. Written so NaN
-// fails every comparison and is rejected.
-func validLatLon(lat, lon float32) bool {
+// ValidCoords reports whether lat, lon are a real position: latitude within
+// ±90, longitude within ±180. NaN, which fails every comparison, is not.
+func ValidCoords(lat, lon float64) bool {
 	return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
 }
 
@@ -265,6 +265,10 @@ func CleanName(name string) (string, error) {
 		return "", errors.New("name must be valid UTF-8")
 	case strings.ContainsFunc(name, unicode.IsControl):
 		return "", errors.New("name must not contain control characters")
+	case strings.ContainsAny(name, "\u2028\u2029"):
+		// JSON encoding turns each into a 6-byte escape, which could
+		// overflow the frame.
+		return "", errors.New("name must not contain line or paragraph separators")
 	case units > MaxNameLen:
 		return "", fmt.Errorf("name is %d characters, max %d", units, MaxNameLen)
 	}

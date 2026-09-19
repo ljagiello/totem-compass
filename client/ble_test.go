@@ -1,9 +1,8 @@
 package client
 
 import (
-	"context"
+	"errors"
 	"testing"
-	"time"
 )
 
 func isClosed(ch chan struct{}) bool {
@@ -15,56 +14,44 @@ func isClosed(ch chan struct{}) bool {
 	}
 }
 
-// A disconnect callback that arrives after Close gave up waiting belongs to
-// the old link; it must not mark a newer link to the same Totem gone.
-func TestLateDisconnectDoesNotReachNewLink(t *testing.T) {
-	ctx := context.Background()
-	old := &bleLink{addr: "8C:94:DF:7B:04:78", gone: make(chan struct{})}
-	if err := claim(ctx, old, time.Second); err != nil {
-		t.Fatal(err)
-	}
-	old.markGone() // Close timed out: Done closes, the callback is still due
-	old.markGone() // and closing twice is harmless
-
-	claimed := make(chan error, 1)
-	fresh := &bleLink{addr: old.addr, gone: make(chan struct{})}
-	go func() { claimed <- claim(ctx, fresh, 5*time.Second) }()
-	select {
-	case err := <-claimed:
-		t.Fatalf("new link claimed the address while the old callback was due: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
-
-	onDisconnect(old.addr) // the old link's late callback
-	if err := <-claimed; err != nil {
-		t.Fatal(err)
-	}
-	if isClosed(fresh.gone) {
-		t.Fatal("the old link's callback closed the new link")
-	}
-	onDisconnect(fresh.addr) // the new link's own disconnect
-	if !isClosed(fresh.gone) {
-		t.Fatal("the new link's disconnect did not close it")
-	}
+func testLink(addr string, up *bool) *bleLink {
+	return &bleLink{addr: addr, gone: make(chan struct{}), connected: func() (bool, error) { return *up, nil }}
 }
 
-// If the old callback never comes, a new link waits only so long.
-func TestClaimGivesUpOnAMissingCallback(t *testing.T) {
-	ctx := context.Background()
-	old := &bleLink{addr: "a", gone: make(chan struct{})}
-	if err := claim(ctx, old, time.Second); err != nil {
-		t.Fatal(err)
+// The connect handler reports only an address, so a disconnect callback can
+// belong to an older connection to the same Totem: after a Close that
+// stopped waiting for it, or a canceled connect that completed and was
+// dropped. It must not mark the current link gone while the OS still
+// reports that link connected.
+func TestLateDisconnectDoesNotReachNewLink(t *testing.T) {
+	up := true
+	l := testLink("8C:94:DF:7B:04:78", &up)
+	links.Store(l.addr, l)
+	defer links.Delete(l.addr)
+
+	onDisconnect(l.addr) // the old connection's late callback
+	if isClosed(l.gone) {
+		t.Fatal("a callback for an older connection closed the current link")
 	}
-	fresh := &bleLink{addr: "a", gone: make(chan struct{})}
-	start := time.Now()
-	if err := claim(ctx, fresh, 150*time.Millisecond); err != nil {
-		t.Fatal(err)
+
+	up = false
+	onDisconnect(l.addr) // the current link's own disconnect
+	if !isClosed(l.gone) {
+		t.Fatal("the link's disconnect did not close it")
 	}
-	if d := time.Since(start); d < 150*time.Millisecond || d > time.Second {
-		t.Errorf("claim waited %v, want about 150ms", d)
+	if _, ok := links.Load(l.addr); ok {
+		t.Error("a gone link is still routed")
 	}
-	onDisconnect("a")
-	if !isClosed(fresh.gone) {
-		t.Fatal("the address does not route to the new link")
+	onDisconnect(l.addr) // and nothing breaks on a repeat
+}
+
+// If the OS cannot say, the callback is believed.
+func TestDisconnectWithUnknownState(t *testing.T) {
+	l := &bleLink{addr: "a", gone: make(chan struct{}), connected: func() (bool, error) { return false, errors.New("no such object") }}
+	links.Store(l.addr, l)
+	onDisconnect(l.addr)
+	if !isClosed(l.gone) {
+		t.Fatal("link not marked gone")
 	}
+	l.markGone() // Close after the callback is harmless
 }

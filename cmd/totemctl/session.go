@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/ljagiello/totem-compass/client"
@@ -79,10 +80,21 @@ func (s *session) close() {
 	s.g.phase("disconnected")
 }
 
+// send writes frames within one TX window, waiting for it up to 30 s.
 func (s *session) send(frames ...protocol.Frame) error {
-	ctx, cancel := context.WithTimeout(s.ctx, s.g.wait(30*time.Second))
+	return s.sendBy(time.Now().Add(s.g.wait(30*time.Second)), frames...)
+}
+
+// sendBy is send for a caller with its own deadline. Waiting for the TX
+// window past it (in half-duplex mode) would stretch the caller's timeout.
+func (s *session) sendBy(deadline time.Time, frames ...protocol.Frame) error {
+	ctx, cancel := context.WithDeadline(s.ctx, deadline)
 	defer cancel()
-	return s.c.Send(ctx, frames...)
+	err := s.c.Send(ctx, frames...)
+	if errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() == nil {
+		return fmt.Errorf("%w: %w", errTimeout, err)
+	}
+	return err
 }
 
 var errTimeout = errors.New("timed out waiting for the Totem")
@@ -151,7 +163,7 @@ func (s *session) fetchStatic(timeout time.Duration, check func(protocol.StaticD
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := s.send(protocol.RequestStaticData()); err != nil {
+		if err := s.sendBy(deadline, protocol.RequestStaticData()); err != nil {
 			return protocol.StaticData{}, err
 		}
 		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
@@ -187,7 +199,10 @@ func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration, check func(
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := s.send(req); err != nil {
+		if err := s.sendBy(deadline, req); err != nil {
+			if errors.Is(err, errTimeout) && last != nil {
+				return *last, errTimeout
+			}
 			return protocol.PeerPing{}, err
 		}
 		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
@@ -204,6 +219,43 @@ func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration, check func(
 			return *last, errTimeout
 		}
 	}
+}
+
+// peerList returns the bonded peers (and POIs) the Totem lists.
+func (s *session) peerList() ([]protocol.MAC, error) {
+	// The device sends Peer Sync only once Static Data was delivered.
+	if _, err := s.fetchStatic(s.g.wait(30*time.Second), nil); err != nil {
+		return nil, err
+	}
+	if err := s.send(protocol.RequestPeerSync()); err != nil {
+		return nil, err
+	}
+	m, err := s.await(s.g.wait(30*time.Second), is[protocol.PeerSync])
+	if err != nil {
+		return nil, fmt.Errorf("no peer list from the Totem: %w", err)
+	}
+	return m.(protocol.PeerSync).Peers, nil
+}
+
+// refuseBond fails if mac is a bonded Totem on this device (rather than a
+// point of interest or nothing): a POI written under its id replaces the
+// bond, which only re-bonding the Totems side by side restores.
+func (s *session) refuseBond(mac protocol.MAC) error {
+	macs, err := s.peerList()
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(macs, mac) {
+		return nil
+	}
+	p, err := s.fetchPeer(mac, s.g.wait(30*time.Second), nil)
+	if err != nil {
+		return err
+	}
+	if !p.POI {
+		return fmt.Errorf("%s is %q, a bonded Totem: a POI with this id would replace the bond", mac, p.Name)
+	}
+	return nil
 }
 
 // settle waits until the device has had a chance to act on what was just

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -634,15 +635,117 @@ func TestInterrupt(t *testing.T) {
 	if err := h.runCtx(ctx, "watch"); err != nil {
 		t.Errorf("watch ended by Ctrl-C: %v", err)
 	}
-	for err, want := range map[error]int{
-		nil:                                      0,
-		errors.New("x"):                          1,
-		context.Canceled:                         130,
-		fmt.Errorf("send: %w", context.Canceled): 130,
+	for _, tc := range []struct {
+		err, cause error
+		want       int
+	}{
+		{nil, nil, 0},
+		{errors.New("x"), nil, 1},
+		{context.Canceled, stoppedBy{os.Interrupt}, 130},
+		{fmt.Errorf("send: %w", context.Canceled), stoppedBy{syscall.SIGTERM}, 143},
+		{context.Canceled, nil, 130},
 	} {
-		if got := exitCode(err); got != want {
-			t.Errorf("exitCode(%v) = %d, want %d", err, got, want)
+		if got := exitCode(tc.err, tc.cause); got != tc.want {
+			t.Errorf("exitCode(%v, %v) = %d, want %d", tc.err, tc.cause, got, tc.want)
 		}
+	}
+}
+
+// Ctrl-C while info waits for Live Data used to print a partial result and
+// exit 0; a timeout still prints what there is.
+func TestInfoInterrupted(t *testing.T) {
+	h := newHarness()
+	h.totem.NoLiveData = true
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(300*time.Millisecond, cancel)
+	if err := h.runCtx(ctx, "info"); !errors.Is(err, context.Canceled) {
+		t.Errorf("interrupted info: %v", err)
+	}
+	if h.out.Len() != 0 {
+		t.Errorf("interrupted info printed:\n%s", h.out.String())
+	}
+
+	h = newHarness()
+	h.totem.NoLiveData = true
+	h.mustRun(t, "info")
+	if !strings.Contains(h.out.String(), "Test Totem") {
+		t.Errorf("info without Live Data:\n%s", h.out.String())
+	}
+}
+
+// `poi add --id` with a bonded Totem's MAC would replace the bond with a
+// POI; an existing POI's id is fine (it updates the POI).
+func TestPOIAddNeverReplacesABond(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	err := h.run(t, "poi", "add", "--name", "x", "--lat", "1", "--lon", "2", "--id", peerA.String())
+	if err == nil || !strings.Contains(err.Error(), "would replace the bond") {
+		t.Errorf("POI over a bond: %v", err)
+	}
+	if _, _, peers, _ := h.state(); peers[0].POI || peers[0].Name != "Zed" {
+		t.Errorf("the bond was replaced: %+v", peers[0])
+	}
+
+	h = newHarness()
+	h.totem.Peers = []protocol.PeerPing{{MAC: protocol.MAC{2, 0xaa}, Name: "Old", POI: true, RSSI: 100}}
+	h.mustRun(t, "poi", "add", "--name", "New", "--lat", "1", "--lon", "2", "--id", "02aa00000000")
+	if _, _, peers, _ := h.state(); len(peers) != 1 || peers[0].Name != "New" {
+		t.Errorf("POI not updated: %+v", peers)
+	}
+}
+
+// halfDuplexTotem answers Ready with one TX handoff and then stays silent,
+// never handing TX back after the client grants it.
+type halfDuplexTotem struct {
+	mu   sync.Mutex
+	subs map[protocol.Channel]func([]byte)
+	done chan struct{}
+	once sync.Once
+}
+
+func (q *halfDuplexTotem) Subscribe(ch protocol.Channel, fn func([]byte)) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.subs[ch] = fn
+	return nil
+}
+
+func (q *halfDuplexTotem) Write(ch protocol.Channel, b []byte) error {
+	if ch == protocol.ConnStatus && b[0] == protocol.CatConn && b[1] == 0x01 {
+		q.mu.Lock()
+		fn := q.subs[protocol.ConnStatus]
+		q.mu.Unlock()
+		go fn([]byte{protocol.CatHandoff, 0x02, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	}
+	return nil
+}
+
+func (q *halfDuplexTotem) Done() <-chan struct{} { return q.done }
+
+func (q *halfDuplexTotem) Close() error {
+	q.once.Do(func() { close(q.done) })
+	return nil
+}
+
+// Waiting for the TX window must end at the caller's deadline: each send
+// used to have its own 30 s, so a 30 s confirmation could take a minute.
+func TestSendRespectsCallerDeadline(t *testing.T) {
+	h := newHarness()
+	h.g.halfDuplex = true
+	q := &halfDuplexTotem{subs: map[protocol.Channel]func([]byte){}, done: make(chan struct{})}
+	h.g.connect = func(_ context.Context, opts client.Options) (*client.Client, error) {
+		opts.GrantDelay = time.Millisecond
+		return client.New(q, opts)
+	}
+	s := h.session(t)
+	time.Sleep(50 * time.Millisecond) // AutoGrant hands TX to the device for good
+	start := time.Now()
+	_, err := s.fetchStatic(300*time.Millisecond, nil)
+	if !errors.Is(err, errTimeout) {
+		t.Errorf("fetchStatic = %v, want a timeout", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("a 300 ms fetch took %v (the send waited on its own timeout)", d)
 	}
 }
 
