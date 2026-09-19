@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -264,6 +265,13 @@ func TestName(t *testing.T) {
 	if st, _, _, _ := h.state(); st.Name != "Base Camp" {
 		t.Errorf("name %q", st.Name)
 	}
+	// The device strips the name; the confirmation must expect that, not
+	// wait for the name as typed.
+	h = newHarness()
+	h.mustRun(t, "name", "  Dune  ")
+	if st, _, _, _ := h.state(); st.Name != "Dune" {
+		t.Errorf("name %q", st.Name)
+	}
 }
 
 func TestWiFi(t *testing.T) {
@@ -427,6 +435,10 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 		{"--no-such-flag", "info"},
 		{"info", "extra"},
 		{"name"},
+		{"name", "   "},
+		{"name", strings.Repeat("x", 33)},
+		{"wifi", "set", strings.Repeat("s", 33)},
+		{"poi", "add", "--name", strings.Repeat("p", 128), "--lat", "1", "--lon", "2"},
 		{"compass"},
 		{"compass", "--lock", "maybe"},
 		{"compass", "--power", "turbo"},
@@ -459,6 +471,26 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 			t.Errorf("totemctl %s: connected before rejecting its arguments", strings.Join(args, " "))
 		}
 	}
+}
+
+// FuzzParseRawFrame checks the hex parser behind `totemctl raw`.
+func FuzzParseRawFrame(f *testing.F) {
+	for _, s := range []string{"01 01", "0101", "00:01:01:00", "01", "zz", "", "0 1 0 1", "ABCDEF"} {
+		f.Add(s, false)
+	}
+	f.Fuzz(func(t *testing.T, s string, conn bool) {
+		fr, err := parseRawFrame(strings.Fields(s), conn)
+		if err != nil {
+			return
+		}
+		clean := strings.ToLower(strings.NewReplacer(" ", "", ":", "", "\t", "", "\n", "", "\r", "", "\v", "", "\f", "").Replace(s))
+		if len(fr.Bytes) < 2 || hex.EncodeToString(fr.Bytes) != clean {
+			t.Fatalf("parseRawFrame(%q) = % x, want the bytes of %q", s, fr.Bytes, clean)
+		}
+		if (fr.Channel == protocol.ConnStatus) != conn {
+			t.Fatalf("parseRawFrame(%q, %v) wrote to %s", s, conn, fr.Channel)
+		}
+	})
 }
 
 func TestParseOnOffAndPower(t *testing.T) {

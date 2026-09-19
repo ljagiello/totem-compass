@@ -4,8 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
+	"strings"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 )
 
 // Frame is one app→device message and the characteristic it is written to.
@@ -172,8 +177,9 @@ type poiWire struct {
 // poiHeader is the POI frame up to its name: cat, cmd, length, id, poiWire.
 const poiHeader = 53
 
-// maxPOIName is what fits after the header in one GATT write.
-const maxPOIName = DataBufferSize - poiHeader
+// maxPOIName is the longest name add_new_bond can read: its length is a
+// signed byte. (The device buffer would hold DataBufferSize-poiHeader = 132.)
+const maxPOIName = 127
 
 // AddPOI builds (6,6), which registers a point of interest the compass can
 // point to. The device stores it in its peer table under p.ID. Byte 2 is the
@@ -228,17 +234,58 @@ func SetCompassPrefs(p CompassPrefs) Frame {
 		uint8(p.PowerMode)&0x07)
 }
 
-// SetName renames the Totem (5,3). The device stores it in user-config.json
-// and uses it as its advertised BLE name.
-func SetName(name string) (Frame, error) {
-	if name == "" {
-		return Frame{}, fmt.Errorf("name must not be empty")
+// MaxNameLen is the longest device name, in UTF-16 code units: the limit of
+// the official app's rename field. That is at most 96 UTF-8 bytes, so the
+// name fits the signed length byte Static Data reports it with.
+const MaxNameLen = 32
+
+// CleanName returns name as the device will store it (update_options saves
+// name.strip()), or an error for a name the device could not report back
+// in Static Data. The device takes any length, and a name longer than 127
+// bytes would make its Static Data unreadable.
+func CleanName(name string) (string, error) {
+	name = strings.Trim(name, " \t\n\v\f\r") // MicroPython's str.strip()
+	units := 0
+	for _, r := range name {
+		units += utf16.RuneLen(r)
 	}
-	b, err := json.Marshal(map[string]string{"name": name})
+	switch {
+	case name == "":
+		return "", errors.New("name must not be empty")
+	case !utf8.ValidString(name):
+		return "", errors.New("name must be valid UTF-8")
+	case strings.ContainsFunc(name, unicode.IsControl):
+		return "", errors.New("name must not contain control characters")
+	case units > MaxNameLen:
+		return "", fmt.Errorf("name is %d characters, max %d", units, MaxNameLen)
+	}
+	return name, nil
+}
+
+// SetName renames the Totem (5,3) to CleanName(name). The device stores it
+// in user-config.json and reports it in Static Data.
+func SetName(name string) (Frame, error) {
+	name, err := CleanName(name)
+	if err != nil {
+		return Frame{}, err
+	}
+	b, err := jsonPayload(map[string]string{"name": name})
 	if err != nil {
 		return Frame{}, err
 	}
 	return dataFrame(CatOptions, 0x03, b)
+}
+
+// jsonPayload encodes v for the device's json.loads. HTML escaping is off:
+// it would spend six of the few frame bytes on every &, < and >.
+func jsonPayload(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 // ScanWiFi asks the device to scan for WiFi networks (2,1); the result
@@ -251,10 +298,10 @@ func ClearWiFiScan() Frame { return mustData(CatWiFi, 0x00) }
 
 // SaveWiFi stores the WiFi network used for firmware updates (2,3).
 func SaveWiFi(ssid, key string) (Frame, error) {
-	if ssid == "" {
-		return Frame{}, fmt.Errorf("ssid must not be empty")
+	if ssid == "" || len(ssid) > 32 {
+		return Frame{}, fmt.Errorf("ssid must be 1-32 bytes, not %d", len(ssid))
 	}
-	b, err := json.Marshal(map[string]string{"nw": ssid, "join": key})
+	b, err := jsonPayload(map[string]string{"nw": ssid, "join": key})
 	if err != nil {
 		return Frame{}, err
 	}

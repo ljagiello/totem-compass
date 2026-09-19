@@ -13,6 +13,7 @@ package protocol
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -135,11 +136,19 @@ func ParseRGB(s string) (RGB, error) {
 		return c, nil
 	}
 	if strings.Contains(s, ",") {
-		var c RGB
-		if _, err := fmt.Sscanf(s, "%d,%d,%d", &c.R, &c.G, &c.B); err != nil {
-			return c, fmt.Errorf("invalid colour %q: %w", s, err)
+		parts := strings.Split(s, ",")
+		if len(parts) != 3 {
+			return RGB{}, fmt.Errorf("invalid colour %q: want r,g,b", s)
 		}
-		return c, nil
+		var v [3]uint8
+		for i, p := range parts {
+			n, err := strconv.ParseUint(strings.TrimSpace(p), 10, 8)
+			if err != nil {
+				return RGB{}, fmt.Errorf("invalid colour %q: component %q is not 0-255", s, p)
+			}
+			v[i] = uint8(n)
+		}
+		return RGB{v[0], v[1], v[2]}, nil
 	}
 	b, err := hex.DecodeString(strings.TrimPrefix(s, "#"))
 	if err != nil || len(b) != 3 {

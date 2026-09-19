@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -196,15 +197,31 @@ func (t *Totem) dataCommand(b []byte) error {
 			if err := json.Unmarshal(b[2:], &v); err != nil {
 				return fmt.Errorf("clienttest: save wifi: %w", err)
 			}
+			if len(v.NW) > maxStaticString {
+				return fmt.Errorf("clienttest: a %d-byte SSID would corrupt Static Data", len(v.NW))
+			}
 			t.Static.WiFiSSID, t.WiFiKey = v.NW, v.Join
 		}
 	case protocol.CatOptions:
 		if cmd == 3 {
-			var v struct{ Name string }
+			// update_options: if 'name' in parsed, name = parsed['name'].strip()
+			var v map[string]any
 			if err := json.Unmarshal(b[2:], &v); err != nil {
 				return fmt.Errorf("clienttest: save options: %w", err)
 			}
-			t.Static.Name = v.Name
+			raw, ok := v["name"]
+			if !ok {
+				return nil
+			}
+			name, ok := raw.(string)
+			if !ok {
+				return fmt.Errorf("clienttest: save options: name is %T", raw)
+			}
+			name = strings.Trim(name, " \t\n\v\f\r")
+			if len(name) > maxStaticString {
+				return fmt.Errorf("clienttest: a %d-byte name would corrupt Static Data", len(name))
+			}
+			t.Static.Name = name
 		}
 	case protocol.CatPeer:
 		t.peerCmd = cmd
@@ -265,19 +282,19 @@ func (t *Totem) peerCommand(cmd byte, b []byte) error {
 		}
 		t.Peers[i].Color = protocol.RGB{R: b[8], G: b[9], B: b[10]}
 		t.Peers[i].Hidden = b[11]&4 != 0
-	case 6: // add_new_bond: 1 byte, mac(6), '<ffbBBBhiiBBbbbhhiiib', name
+	case 6: // add_new_bond: length, mac(6), '<ffbBBBhiiBBbbbhhiiib', name
 		var v struct {
-			Lat, Lon float32
-			PAcc     int8
-			R, G, B  uint8
-			_        int16
-			_        [2]int32
-			_        uint8
-			Flags    uint8
-			_        [3]int8
-			_        [2]int16
-			_        [3]int32
-			NameLen  int8
+			Lat, Lon                           float32
+			PAcc                               int8
+			R, G, B                            uint8
+			Azimuth                            int16
+			Eat, Nbt                           int32
+			AnimationID                        uint8
+			Flags                              uint8
+			Reserved33, Reserved34, Reserved35 int8
+			Reserved36, Reserved38             int16
+			Reserved40, Reserved44, Reserved48 int32
+			NameLen                            int8
 		}
 		if len(b) < 53 {
 			return fmt.Errorf("clienttest: add bond too short: % x", b)
@@ -286,7 +303,7 @@ func (t *Totem) peerCommand(cmd byte, b []byte) error {
 			return err
 		}
 		p := protocol.PeerPing{
-			MAC: protocol.MAC(b[3:9]), Name: string(b[53 : 53+int(v.NameLen)]),
+			MAC: protocol.MAC(b[3:9]), Name: string(pySlice(b, 53, 53+int(v.NameLen))),
 			Lat: v.Lat, Lon: v.Lon, PosAccuracyM: v.PAcc, SpeedKPH: -1, Bearing: -1, RSSI: 100,
 			Color: protocol.RGB{R: v.R, G: v.G, B: v.B},
 			SOS:   v.Flags&1 != 0, POI: v.Flags&2 != 0, Hidden: v.Flags&8 != 0, Locked: v.Flags&16 != 0,
@@ -310,6 +327,23 @@ func (t *Totem) peerCommand(cmd byte, b []byte) error {
 		}
 	}
 	return nil
+}
+
+// maxStaticString is the longest string Static Data can report: its
+// length fields are signed bytes.
+const maxStaticString = 127
+
+// pySlice is Python's b[i:j] for i >= 0, as unpack_utf8_str slices: j is
+// clamped to the buffer and a negative j counts from its end.
+func pySlice(b []byte, i, j int) []byte {
+	if j < 0 {
+		j += len(b)
+	}
+	j = min(j, len(b))
+	if i >= j {
+		return nil
+	}
+	return b[i:j]
 }
 
 func (t *Totem) peerIndex(m protocol.MAC) int {

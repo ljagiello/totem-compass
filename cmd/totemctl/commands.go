@@ -184,10 +184,13 @@ func newPeersCmd(g *globals) *cobra.Command {
 func newNameCmd(g *globals) *cobra.Command {
 	return &cobra.Command{
 		Use:   "name <new name>",
-		Short: "Rename the Totem",
+		Short: "Rename the Totem (up to 32 characters, as in the official app)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name := strings.Join(args, " ")
+			name, err := protocol.CleanName(strings.Join(args, " "))
+			if err != nil {
+				return err
+			}
 			f, err := protocol.SetName(name)
 			if err != nil {
 				return err
@@ -662,16 +665,9 @@ func newRawCmd(g *globals) *cobra.Command {
 		Short: "Send a raw frame and print what comes back",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := hex.DecodeString(strings.NewReplacer(" ", "", ":", "").Replace(strings.Join(args, "")))
+			f, err := parseRawFrame(args, conn)
 			if err != nil {
 				return err
-			}
-			if len(b) < 2 {
-				return errors.New("a frame needs at least the (cat_id, cmd_id) bytes")
-			}
-			f := protocol.Frame{Channel: protocol.Data, Bytes: b}
-			if conn {
-				f.Channel = protocol.ConnStatus
 			}
 			s, err := open(cmd.Context(), g)
 			if err != nil {
@@ -691,6 +687,24 @@ func newRawCmd(g *globals) *cobra.Command {
 	c.Flags().BoolVar(&conn, "conn", false, "write to the conn-status characteristic instead of data")
 	c.Flags().DurationVar(&listen, "listen", 10*time.Second, "how long to print replies")
 	return c
+}
+
+// parseRawFrame decodes hex typed as one or more arguments, with optional
+// spaces or colons between bytes, into a frame for the data (or, with conn,
+// the conn-status) characteristic.
+func parseRawFrame(args []string, conn bool) (protocol.Frame, error) {
+	b, err := hex.DecodeString(strings.NewReplacer(" ", "", ":", "").Replace(strings.Join(args, "")))
+	if err != nil {
+		return protocol.Frame{}, err
+	}
+	if len(b) < 2 {
+		return protocol.Frame{}, errors.New("a frame needs at least the (cat_id, cmd_id) bytes")
+	}
+	f := protocol.Frame{Channel: protocol.Data, Bytes: b}
+	if conn {
+		f.Channel = protocol.ConnStatus
+	}
+	return f, nil
 }
 
 // oneShot sends a single frame and waits until the device has had a chance

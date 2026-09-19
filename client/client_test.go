@@ -332,6 +332,62 @@ func TestFailedLegacyAckIsLogged(t *testing.T) {
 	}
 }
 
+// FuzzReceive feeds arbitrary notifications to the client, as a transport
+// would deliver them from the radio.
+func FuzzReceive(f *testing.F) {
+	for _, rec := range []interface{ MarshalBinary() ([]byte, error) }{
+		static, protocol.LiveData{}, protocol.PeerSync{Peers: []protocol.MAC{{1}}},
+		protocol.WiFiNetworks{SSIDs: []string{"a"}}, protocol.PeerPing{Name: "p"},
+	} {
+		b, err := rec.MarshalBinary()
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(byte(protocol.Data), b, false)
+	}
+	f.Add(byte(protocol.ConnStatus), []byte{protocol.CatHandoff, 0x02, 0x02}, true)
+	f.Add(byte(protocol.ConnStatus), []byte{protocol.CatConn, 0x05, 1, 0, 0, 0, 2, 0, 0, 0}, false)
+	f.Add(byte(protocol.Data), []byte{0x03}, false)
+	f.Fuzz(func(t *testing.T, chb byte, b []byte, halfDuplex bool) {
+		ch := protocol.Channel(chb & 1)
+		c, l := newClient(t, client.Options{HalfDuplex: halfDuplex})
+		orig := bytes.Clone(b)
+		l.inject(ch, b)
+		for i := range b {
+			b[i] ^= 0xff // transports reuse their buffers
+		}
+		ev := nextEvent(t, c)
+		if ev.Channel != ch || !bytes.Equal(ev.Raw, orig) {
+			t.Fatalf("event %s % x, want %s % x", ev.Channel, ev.Raw, ch, orig)
+		}
+		want, perr := protocol.Parse(ch, orig)
+		if (ev.Err == nil) != (perr == nil) || (ev.Msg == nil) != (want == nil) {
+			t.Fatalf("event msg %v err %v, Parse gives %v, %v", ev.Msg, ev.Err, want, perr)
+		}
+		if h, ok := ev.Msg.(protocol.Handoff); ok && h.ToApp && c.Handoffs() != 1 {
+			t.Fatalf("handoff to the app not counted: %d", c.Handoffs())
+		}
+		// Legacy mode acks exactly the records the device repeats until acked.
+		var ack protocol.Frame
+		switch ev.Msg.(type) {
+		case protocol.StaticData:
+			ack = protocol.AckStaticData()
+		case protocol.WiFiNetworks:
+			ack = protocol.ClearWiFiScan()
+		case protocol.PeerSync:
+			ack, _ = protocol.RequestPeerDetails()
+		}
+		if ack.Bytes != nil && !halfDuplex {
+			l.expectWrite(t, ack)
+		}
+		select {
+		case w := <-l.writes:
+			t.Fatalf("unexpected write %s % x", w.Channel, w.Bytes)
+		default:
+		}
+	})
+}
+
 // A full legacy session against the simulated firmware.
 func TestSessionWithSimulatedTotem(t *testing.T) {
 	totem := clienttest.New()

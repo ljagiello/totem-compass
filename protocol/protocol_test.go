@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -366,5 +367,57 @@ func TestMACAndColourParsing(t *testing.T) {
 		if c, err := ParseRGB(s); err != nil || c != want {
 			t.Errorf("ParseRGB(%q) = %v, %v", s, c, err)
 		}
+	}
+}
+
+// Inputs fuzzing found mishandled.
+func TestFuzzFindings(t *testing.T) {
+	// ParseRGB took "1,2,3x" as 1,2,3: fmt.Sscanf ignored the trailing text.
+	for _, s := range []string{"1,2,3x", "1,2", "1,2,3,4", "256,0,0", "-1,0,0", "1,,3"} {
+		if c, err := ParseRGB(s); err == nil {
+			t.Errorf("ParseRGB(%q) = %v, want an error", s, c)
+		}
+	}
+	if c, err := ParseRGB(" 1, 2 ,003"); err != nil || c != (RGB{1, 2, 3}) {
+		t.Errorf("ParseRGB with spaces = %v, %v", c, err)
+	}
+
+	// AddPOI accepted names up to 132 bytes, but add_new_bond reads the
+	// length as a signed byte: 128 bytes went out as -128.
+	if _, err := AddPOI(POI{Name: strings.Repeat("x", 128)}); err == nil {
+		t.Error("AddPOI accepted a 128-byte name")
+	}
+	if f, err := AddPOI(POI{Name: strings.Repeat("x", 127)}); err != nil || int8(f.Bytes[52]) != 127 {
+		t.Errorf("AddPOI(127-byte name): %v", err)
+	}
+
+	// SetName HTML-escaped &, < and >, so a 29-character name of them
+	// overflowed the device buffer.
+	f, err := SetName(strings.Repeat("&", 32))
+	if err != nil || !bytes.Contains(f.Bytes, []byte(strings.Repeat("&", 32))) {
+		t.Errorf("SetName(32 ampersands) = %q, %v", f.Bytes, err)
+	}
+}
+
+// CleanName mirrors what update_options stores and rejects what Static Data
+// could not report back.
+func TestCleanName(t *testing.T) {
+	for in, want := range map[string]string{
+		"  Base Camp \t":        "Base Camp",
+		"Zażółć":                "Zażółć",
+		strings.Repeat("🧭", 16): strings.Repeat("🧭", 16), // 32 UTF-16 units
+		strings.Repeat("x", 32): strings.Repeat("x", 32),
+	} {
+		if got, err := CleanName(in); err != nil || got != want {
+			t.Errorf("CleanName(%q) = %q, %v, want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", " \t ", "\xff", "a\x00b", strings.Repeat("x", 33), strings.Repeat("🧭", 17)} {
+		if got, err := CleanName(in); err == nil {
+			t.Errorf("CleanName(%q) = %q, want an error", in, got)
+		}
+	}
+	if f, err := SetName("  Base Camp  "); err != nil || string(f.Bytes[2:]) != `{"name":"Base Camp"}` {
+		t.Errorf("SetName trims like the device: %q, %v", f.Bytes, err)
 	}
 }
