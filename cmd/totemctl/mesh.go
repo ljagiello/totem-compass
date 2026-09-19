@@ -11,6 +11,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -216,8 +217,11 @@ func newMeshSendCmd(g *globals) *cobra.Command {
 					return nil
 				}
 				g.out.meshEvent(l.event())
-				if l.Level == "WARN" && l.Msg == "unknown command" {
+				switch {
+				case l.Level == "WARN" && l.Msg == "unknown command":
 					return fmt.Errorf("the emulator does not know %q", strings.Join(args, " "))
+				case l.Level == "WARN" && l.Msg == "bad command":
+					return fmt.Errorf("the emulator rejected %q: %v", strings.Join(args, " "), l.attrs["err"])
 				}
 				quiet = g.wait(consoleQuiet)
 			}
@@ -237,7 +241,6 @@ type emulator struct {
 	name  string
 	port  io.ReadWriteCloser
 	lines chan consoleLine
-	stop  chan struct{}
 	done  chan struct{} // closed when the reader ends
 	err   error         // why the reader ended, once done is closed
 	debug bool
@@ -260,8 +263,7 @@ func openEmulator(ctx context.Context, g *globals, debug bool) (*emulator, error
 	if p, ok := port.(interface{ ResetInputBuffer() error }); ok {
 		_ = p.ResetInputBuffer()
 	}
-	e := &emulator{g: g, name: name, port: port, lines: make(chan consoleLine, 64),
-		stop: make(chan struct{}), done: make(chan struct{})}
+	e := &emulator{g: g, name: name, port: port, lines: make(chan consoleLine, 64), done: make(chan struct{})}
 	go e.read()
 	if err := e.handshake(ctx); err != nil {
 		e.close()
@@ -302,28 +304,47 @@ func (e *emulator) handshake(ctx context.Context) error {
 	}
 }
 
+// maxConsoleLine bounds one line from the board. The longest the firmware
+// logs is a frame in hex, well under a kilobyte; a longer run means line
+// noise, which is dropped rather than ending the session (bufio.Scanner
+// gives up for good on such a line).
+const maxConsoleLine = 16 << 10
+
 // read turns console lines into consoleLines until the port closes. Lines
 // that are not JSON (the boot log, a person's text-format session) go to the
 // debug log.
 func (e *emulator) read() {
 	defer close(e.done)
-	sc := bufio.NewScanner(e.port)
-	for sc.Scan() {
-		text := strings.TrimRight(sc.Text(), "\r")
-		l, err := parseConsoleLine([]byte(text))
+	r := bufio.NewReaderSize(e.port, maxConsoleLine)
+	for {
+		line, err := r.ReadSlice('\n')
+		if errors.Is(err, bufio.ErrBufferFull) {
+			for errors.Is(err, bufio.ErrBufferFull) {
+				_, err = r.ReadSlice('\n')
+			}
+			e.g.log.Debug("console", "dropped", "a line over "+strconv.Itoa(maxConsoleLine)+" bytes")
+			if err == nil {
+				continue
+			}
+		}
 		if err != nil {
+			e.err = err
+			return
+		}
+		text := strings.TrimRight(string(line), "\r\n")
+		l, perr := parseConsoleLine([]byte(text))
+		if perr != nil {
 			e.g.log.Debug("console", "line", text)
 			continue
 		}
 		select {
 		case e.lines <- l:
-		case <-e.stop:
-			return
+		default:
+			// Nobody is reading between commands. Dropping keeps the port
+			// drained, so the board never blocks writing while this side
+			// writes, which would deadlock both.
+			e.g.log.Debug("console", "dropped", l.Msg)
 		}
-	}
-	e.err = sc.Err()
-	if e.err == nil {
-		e.err = io.EOF
 	}
 }
 
@@ -370,7 +391,6 @@ func (e *emulator) close() {
 		_ = e.send("log info")
 	}
 	_ = e.send("format text")
-	close(e.stop)
 	_ = e.port.Close()
 	<-e.done
 }

@@ -75,13 +75,17 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | --- | --- |
 | `pair` | open a 6 s pairing window, as a long hold does |
 | `status` | this device and each peer: name, RSSI, last heard, position, battery |
-| `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix, or none (the default) |
-| `heading <deg>` | compass azimuth to report |
+| `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix (latitude ±90, longitude ±180, accuracy 0-127 m, default 5), or none (the default) |
+| `heading <deg>` | compass azimuth to report, 0-359 |
 | `sos on\|off` | the SOS flag |
 | `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
-| `log debug\|info` | log level; `debug` logs every frame heard and sent, as hex |
+| `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |
 | `format text\|json` | log lines as slog text or as JSON (what `totemctl mesh` uses) |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
+
+The console is parsed by `emulator.ParseCommand`, which rejects values out of range (and
+`NaN` or `Inf` coordinates) with a `bad command` warning rather than put them on the air. It is
+fuzzed on the host.
 
 ## Radio setup
 

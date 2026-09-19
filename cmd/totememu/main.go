@@ -12,6 +12,7 @@ package main
 
 import (
 	"device/esp"
+	"errors"
 	"fmt"
 	"log/slog"
 	"machine"
@@ -88,7 +89,7 @@ func main() {
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	cmds := make(chan string, 4)
-	go readLines(cmds)
+	go readLines(log, cmds)
 	stats := time.NewTicker(time.Minute)
 	for {
 		for {
@@ -170,66 +171,42 @@ func (r *radio) report() {
 
 // command runs one console line.
 func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet {
-	f := strings.Fields(line)
-	if len(f) == 0 {
+	if strings.TrimSpace(line) == "" {
+		return nil
+	}
+	c, err := emulator.ParseCommand(line)
+	if errors.Is(err, emulator.ErrUnknownCommand) {
+		log.Warn("unknown command", "line", line)
+		log.Info(emulator.Help)
+		return nil
+	}
+	if err != nil {
+		log.Warn("bad command", "err", err)
 		return nil
 	}
 	now := time.Now()
-	switch f[0] {
-	case "pair":
+	switch c.Op {
+	case emulator.OpPair:
 		return n.Pair(now)
-	case "unbond":
-		if len(f) != 2 {
-			break
-		}
-		m, err := mesh.ParseMAC(f[1])
-		if err != nil {
-			log.Error("unbond", "err", err)
-			return nil
-		}
-		return n.Unbond(now, m)
-	case "pos":
-		if len(f) == 2 && f[1] == "off" {
-			n.SetPosition(nil)
-			log.Info("position cleared")
-			return nil
-		}
-		var p emulator.Position
-		p.AccuracyM = 5
-		if len(f) < 3 {
-			break
-		}
-		if _, err := fmt.Sscan(f[1], &p.Lat); err != nil {
-			break
-		}
-		if _, err := fmt.Sscan(f[2], &p.Lon); err != nil {
-			break
-		}
-		if len(f) > 3 {
-			fmt.Sscan(f[3], &p.AccuracyM)
-		}
-		n.SetPosition(&p)
-		log.Info("position set", "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM)
-		return nil
-	case "heading":
-		var d int16
-		if len(f) == 2 {
-			if _, err := fmt.Sscan(f[1], &d); err == nil {
-				n.SetHeading(d)
-				log.Info("heading set", "deg", d)
-				return nil
-			}
-		}
-	case "sos":
-		if len(f) == 2 && (f[1] == "on" || f[1] == "off") {
-			n.SetSOS(f[1] == "on")
-			log.Info("sos", "on", f[1] == "on")
-			return nil
-		}
-	case "status":
-		c := n.Config()
-		self := []any{"mac", c.MAC, "name", c.Name, "pairing", n.Pairing(), "sos", c.SOS, "heading", c.Heading, "color", c.ColorID}
+	case emulator.OpUnbond:
+		return n.Unbond(now, c.MAC)
+	case emulator.OpPos:
+		n.SetPosition(c.Position)
 		if p := c.Position; p != nil {
+			log.Info("position set", "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM)
+		} else {
+			log.Info("position cleared")
+		}
+	case emulator.OpHeading:
+		n.SetHeading(c.Heading)
+		log.Info("heading set", "deg", c.Heading)
+	case emulator.OpSOS:
+		n.SetSOS(c.On)
+		log.Info("sos", "on", c.On)
+	case emulator.OpStatus:
+		cfg := n.Config()
+		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS, "heading", cfg.Heading, "color", cfg.ColorID}
+		if p := cfg.Position; p != nil {
 			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM)
 		}
 		log.Info("self", self...)
@@ -238,51 +215,35 @@ func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet 
 				"heard_ms", time.Since(p.LastHeard).Milliseconds(), "mesh", p.ViaMesh,
 				"lat", p.Status.Lat, "lon", p.Status.Lon, "distance_m", int(p.DistanceM), "batt", p.Status.BattPct)
 		}
-		return nil
-	case "format":
-		if len(f) == 2 && (f[1] == "json" || f[1] == "text") {
-			jsonLog.Store(f[1] == "json")
-			log.Info("log format", "format", f[1])
-			return nil
-		}
-	case "selftest":
+	case emulator.OpFormat:
+		jsonLog.Store(c.JSON)
+		log.Info("log format", "format", map[bool]string{true: "json", false: "text"}[c.JSON])
+	case emulator.OpLog:
+		level.Set(c.Level)
+		log.Info("log level", "set", level.Level())
+	case emulator.OpSelfTest:
 		lr, bgn, err := selfTest()
 		log.Info("self test: 802.11 frames heard on the mesh channel in 3 s", "lr_only", lr, "with_bgn", bgn, "err", err)
-		return nil
-	case "log":
-		if len(f) == 2 {
-			if err := level.UnmarshalText([]byte(f[1])); err == nil {
-				log.Info("log level", "set", level.Level())
-				return nil
-			}
-		}
-	case "help":
-	default:
-		log.Warn("unknown command", "line", line)
+	case emulator.OpHelp:
+		log.Info(emulator.Help)
 	}
-	log.Info("commands: pair | unbond <mac> | pos <lat> <lon> [acc] | pos off | heading <deg> | sos on|off | status | log debug|info | format text|json | selftest")
 	return nil
 }
 
 // readLines reads console lines from the USB serial port.
-func readLines(out chan<- string) {
-	var line []byte
+func readLines(log *slog.Logger, out chan<- string) {
+	var r emulator.LineReader
 	for {
 		b, ok := consoleByte()
 		if !ok {
 			time.Sleep(20 * time.Millisecond)
 			continue
 		}
-		switch {
-		case b == '\r' || b == '\n':
-			if len(line) > 0 {
-				out <- string(line)
-				line = line[:0]
-			}
-		case b >= ' ' && b <= '~' && len(line) < 128:
-			// Only printable ASCII: a glitch while the host opens the port
-			// must not corrupt the next command.
-			line = append(line, b)
+		switch line, err := r.Feed(b); {
+		case err != nil:
+			log.Warn("console", "err", err)
+		case line != "":
+			out <- line
 		}
 	}
 }

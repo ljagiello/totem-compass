@@ -40,7 +40,8 @@ static totem_rx_slot totem_rx[TOTEM_RX_SLOTS];
 static volatile uint32_t totem_rx_head, totem_rx_tail, totem_rx_dropped;
 
 static void totem_rx_cb(const totem_recv_info_t *info, const uint8_t *data, int len) {
-	if (info == NULL || data == NULL || len <= 0 || len > TOTEM_RX_MAX) {
+	if (info == NULL || info->src_addr == NULL || info->des_addr == NULL ||
+	    data == NULL || len <= 0 || len > TOTEM_RX_MAX) {
 		return;
 	}
 	uint32_t head = totem_rx_head;

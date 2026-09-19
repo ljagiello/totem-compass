@@ -373,6 +373,39 @@ func TestLocateReplyAndRelay(t *testing.T) {
 	}
 }
 
+// TestMeshAsksForLostPeer: once a bonded Totem goes quiet long enough to be
+// stale, the node broadcasts locate requests in its own mesh slot, at most
+// one per MESH_SEND_FREQ_MS. meshTick used to run only once.
+func TestMeshAsksForLostPeer(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.advance(rtcSyncDelay)
+	h.rx(totem, self, -50, statusFrame(t0.Add(h.now.Sub(t0))))
+	heard := h.now
+	h.take()
+	h.advance(10 * time.Minute)
+	var requests []time.Time
+	for _, s := range h.take() {
+		if l, ok := s.msg.(mesh.Locate); ok && l.Origin == self && l.ReplyRequested {
+			if s.Dst != mesh.Broadcast {
+				t.Errorf("locate request unicast to %s", s.Dst)
+			}
+			requests = append(requests, s.at)
+		}
+	}
+	if len(requests) < 5 {
+		t.Fatalf("%d locate requests in 10 min for a lost peer", len(requests))
+	}
+	if stale := requests[0].Sub(heard); stale < 2*time.Minute {
+		t.Errorf("first request %v after the peer was heard, before it went stale", stale)
+	}
+	for i := 1; i < len(requests); i++ {
+		if gap := requests[i].Sub(requests[i-1]); gap < meshSendFreq {
+			t.Errorf("requests %v apart, want at least %v", gap, meshSendFreq)
+		}
+	}
+}
+
 func TestLocateIgnoredWithoutFix(t *testing.T) {
 	h := newHarness(t, nil)
 	h.bond()

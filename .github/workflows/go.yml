@@ -80,6 +80,8 @@ jobs:
           - { package: ./mesh, target: FuzzParse }
           - { package: ./mesh, target: FuzzHalf }
           - { package: ./emulator, target: FuzzNode }
+          - { package: ./emulator, target: FuzzParseCommand }
+          - { package: ./emulator, target: FuzzLineReader }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

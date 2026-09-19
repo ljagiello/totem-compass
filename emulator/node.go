@@ -355,7 +355,12 @@ func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
 	// The radio windows move to wall-clock slots.
 	n.jobs = slices.DeleteFunc(n.jobs, func(j job) bool { return j.kind != jobOnce })
 	n.scheduleWindow(now)
-	// one_sec_mesh_coro wakes 200 ms before each 4 s boundary.
+	n.scheduleMeshTick(now)
+}
+
+// scheduleMeshTick arms the next one_sec_mesh_coro wake-up, 200 ms before
+// the next 4 s wall-clock boundary.
+func (n *Node) scheduleMeshTick(now time.Time) {
 	w := n.wall(now).UnixMilli()
 	next := now.Add(time.Duration(4000-w%4000)*time.Millisecond - 200*time.Millisecond)
 	if !next.After(now) {
@@ -816,6 +821,7 @@ func (n *Node) addRecent(now time.Time, uid uint16, expiry int32) {
 // meshTick is Compass.one_sec_mesh_coro: in our 1-of-5 slot, ask the mesh
 // for bonded peers we have lost.
 func (n *Node) meshTick(now time.Time) {
+	n.scheduleMeshTick(now)
 	if n.cfg.Position == nil || len(n.peers) == 0 || n.lastTX.IsZero() || n.wall(now).Second()%5 != n.meshGrp {
 		return
 	}

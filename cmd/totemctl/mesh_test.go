@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"go.bug.st/serial/enumerator"
 
@@ -88,6 +89,23 @@ func (f *fakeEmulator) commands() []string {
 	return append([]string(nil), f.cmds...)
 }
 
+// waitFor waits for the commands to end with want; the last of them is sent
+// as the session closes, so it can land after the command returns.
+func (f *fakeEmulator) waitFor(t *testing.T, want []string) {
+	t.Helper()
+	for deadline := time.Now().Add(2 * time.Second); ; {
+		got := f.commands()
+		if equalStrings(got, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("commands = %q, want %q", got, want)
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 // meshHarness wires a harness to a fake emulator on the only ESP32 port.
 func meshHarness(f *fakeEmulator) *harness {
 	h := newHarness()
@@ -126,9 +144,7 @@ func TestMeshStatus(t *testing.T) {
 			t.Errorf("output lacks %q:\n%s", want, h.out.String())
 		}
 	}
-	if got, want := f.commands(), []string{"", "format json", "status", "format text"}; !equalStrings(got, want) {
-		t.Errorf("commands = %q, want %q", got, want)
-	}
+	f.waitFor(t, []string{"", "format json", "status", "format text"})
 }
 
 func TestMeshStatusNoPeers(t *testing.T) {
@@ -181,8 +197,27 @@ func TestMeshWatch(t *testing.T) {
 			t.Errorf("output shows %q:\n%s", hidden, out)
 		}
 	}
-	if got, want := f.commands(), []string{"", "format json", "log debug", "log info", "format text"}; !equalStrings(got, want) {
-		t.Errorf("commands = %q, want %q", got, want)
+	f.waitFor(t, []string{"", "format json", "log debug", "log info", "format text"})
+}
+
+// TestMeshWatchSurvivesLineNoise: a burst without newlines, such as the
+// bytes a USB bridge holds while nobody reads the port, must not end the
+// session. bufio.Scanner used to give up for good on it.
+func TestMeshWatchSurvivesLineNoise(t *testing.T) {
+	f := &fakeEmulator{reply: func(cmd string) []string {
+		if cmd != "log debug" {
+			return nil
+		}
+		return []string{
+			`{"up":1000,"level":"INFO","msg":"log level","set":"DEBUG"}`,
+			strings.Repeat("x", 100_000),
+			`{"up":1,"level":"DEBUG","msg":"rx","src":"8c94df7b0478","dst":"209ba970abb0","rssi":-13,"len":108,"frame":"` + capturedStatus + `"}`,
+		}
+	}}
+	h := meshHarness(f)
+	h.mustRun(t, "mesh", "watch", "--for", "500ms")
+	if !strings.Contains(h.out.String(), `status "LCFs totem"`) {
+		t.Errorf("no frame after the noise:\n%s", h.out.String())
 	}
 }
 
@@ -268,6 +303,20 @@ func TestMeshSend(t *testing.T) {
 	err := h.run(t, "mesh", "send", "fly")
 	if err == nil || !strings.Contains(err.Error(), `does not know "fly"`) {
 		t.Errorf("unknown command: err = %v", err)
+	}
+}
+
+func TestMeshSendRejected(t *testing.T) {
+	f := &fakeEmulator{reply: func(cmd string) []string {
+		if cmd == "pos NaN 0" {
+			return []string{`{"up":1,"level":"WARN","msg":"bad command","err":"pos: latitude: \"NaN\": want -90 to 90 degrees"}`}
+		}
+		return nil
+	}}
+	h := meshHarness(f)
+	err := h.run(t, "mesh", "send", "pos", "NaN", "0")
+	if err == nil || !strings.Contains(err.Error(), `rejected "pos NaN 0": pos: latitude`) {
+		t.Errorf("err = %v, want the emulator's reason", err)
 	}
 }
 
