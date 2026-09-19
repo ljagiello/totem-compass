@@ -41,27 +41,33 @@ totemctl info                     # name, firmware, battery, position, settings
 totemctl watch                    # stream live data and peer updates
 totemctl peers                    # bonded Totems and points of interest
 totemctl name "Base Camp"         # rename
-totemctl compass -lock on -north off
+totemctl compass --lock on --north off
 totemctl power eco                # or: normal
 totemctl wifi scan                # networks the Totem can see
 totemctl wifi set <ssid> <pass>   # network used for firmware updates
 totemctl peer color <mac> hot_pink
-totemctl poi add -name "Main Stage" -lat 50.0671 -lon 19.9124 -sticky
-totemctl location 50.0671 19.9124 # feed a phone-style GNSS fix + clock
+totemctl poi add --name "Main Stage" --lat 50.0671 --lon 19.9124 --sticky
+totemctl location --lat 50.0671 --lon 19.9124  # feed a phone-style GNSS fix + clock
 ```
 
-Pick a device with `-d <name or address substring>` (or `TOTEM_DEVICE`), get
-machine-readable output with `-json`, and see every frame with `-trace`.
+Pick a device with `-d <name or address substring>`, get machine-readable
+output with `--json`, and log every frame with `--trace`. `totemctl help
+<command>` lists each command's flags. Every global flag can also be set as a
+`TOTEM_<FLAG>` environment variable (`TOTEM_DEVICE`, `TOTEM_HALF_DUPLEX`, …) or
+in a config file with the long flag names as keys (`device: Base Camp`). The
+default location is `totemctl/config.yaml` under the user config directory
+(`~/Library/Application Support` on macOS, `~/.config` on Linux), or pass
+`--config`.
 
 The Ready frame's schema id selects one of two device transmit loops. The
 client defaults to the legacy full-duplex loop (schema 0: notifications plus
 app-level acks), which works on every platform. The newer half-duplex loop
-(`-half-duplex`) sends indications and drops a record unless it is confirmed
+(`--half-duplex`) sends indications and drops a record unless it is confirmed
 within 500 ms; CoreBluetooth subscribes these characteristics for
 notifications only, so that mode stalls on macOS.
 
 Verified on hardware from macOS: `scan` and `info` on firmware 4.1.3 and 5.0.3; `watch` and
-`compass -lock on|off` round-trips on 4.1.3. The other commands are built from the
+`compass --lock on|off` round-trips on 4.1.3. The other commands are built from the
 v5.0.2/v5.0.3 bytecode (their handlers are identical in both) and covered by unit tests
 only.
 

@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,20 +17,38 @@ import (
 	"github.com/ljagiello/totem-compass/protocol"
 )
 
-// harness runs totemctl commands against a simulated Totem.
+// syncBuffer is a bytes.Buffer safe for the client's goroutines to log into.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// harness runs totemctl command lines against a simulated Totem.
 type harness struct {
-	totem     *clienttest.Totem
-	g         *globals
-	out, errb bytes.Buffer
-	dials     int
+	totem *clienttest.Totem
+	g     *globals
+	out   bytes.Buffer
+	errb  syncBuffer
+	dials int
 }
 
 func newHarness() *harness {
 	h := &harness{totem: clienttest.New()}
 	// Commands return as soon as the simulator answers; the scale only bounds
 	// how long a failing command waits (30 s device timeouts become 3 s).
-	h.g = &globals{out: &printer{out: &h.out, err: &h.errb}, start: time.Now(), timeScale: 0.1}
-	h.g.setLogger(newLogger(&h.errb, false))
+	h.g = &globals{start: time.Now(), timeScale: 0.1}
 	h.g.connect = func(_ context.Context, opts client.Options) (*client.Client, error) {
 		h.dials++
 		return h.totem.Connect(opts)
@@ -41,7 +60,11 @@ func (h *harness) run(t *testing.T, args ...string) error {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return run(ctx, h.g, args)
+	root := newRootCmd(h.g)
+	root.SetArgs(args)
+	root.SetOut(&h.out)
+	root.SetErr(&h.errb)
+	return root.ExecuteContext(ctx)
 }
 
 func (h *harness) mustRun(t *testing.T, args ...string) {
@@ -80,38 +103,72 @@ func withPeers(h *harness) {
 	}
 }
 
-// syncBuffer is a bytes.Buffer safe for the client's goroutines to log into.
-type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *syncBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *syncBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
+func TestHelp(t *testing.T) {
+	h := newHarness()
+	h.mustRun(t) // no command prints help
+	for _, want := range []string{"Available Commands:", "compass", "location", "double-press the power button", "--half-duplex"} {
+		if !strings.Contains(h.out.String(), want) {
+			t.Errorf("help lacks %q:\n%s", want, h.out.String())
+		}
+	}
+	if h.dials != 0 {
+		t.Error("help connected to the Totem")
+	}
 }
 
 func TestTraceLogsFramesAndPhases(t *testing.T) {
 	h := newHarness()
-	var trace syncBuffer
-	h.g.setLogger(newLogger(&trace, true))
-	h.mustRun(t, "info")
+	h.mustRun(t, "--trace", "info")
 	for _, want := range []string{
 		"level=DEBUG msg=frame dir=tx channel=conn_status data=00010100", // Ready
 		"level=DEBUG msg=frame dir=rx channel=data data=0102",            // Static Data
 		`level=DEBUG msg="handshake sent" elapsed=`,
 		`level=DEBUG msg=disconnected elapsed=`,
 	} {
-		if !strings.Contains(trace.String(), want) {
-			t.Errorf("trace lacks %q:\n%s", want, trace.String())
+		if !strings.Contains(h.errb.String(), want) {
+			t.Errorf("trace lacks %q:\n%s", want, h.errb.String())
 		}
+	}
+}
+
+// Global settings come from a flag, else TOTEM_*, else the config file.
+func TestConfigFileEnvAndFlags(t *testing.T) {
+	for _, k := range []string{"TOTEM_DEVICE", "TOTEM_SCAN_TIMEOUT", "TOTEM_JSON"} {
+		t.Setenv(k, "") // empty counts as unset
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("device: from-file\nscan-timeout: 5s\njson: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness()
+	h.mustRun(t, "--config", path, "info")
+	if h.g.device != "from-file" || h.g.scanTimeout != 5*time.Second {
+		t.Errorf("from the file: device %q, scan timeout %v", h.g.device, h.g.scanTimeout)
+	}
+	if !strings.HasPrefix(h.out.String(), `{"type":"StaticData"`) {
+		t.Errorf("json: true in the file, but the output is:\n%s", h.out.String())
+	}
+
+	t.Setenv("TOTEM_DEVICE", "from-env")
+	h = newHarness()
+	h.mustRun(t, "--config", path, "info")
+	if h.g.device != "from-env" {
+		t.Errorf("TOTEM_DEVICE set: device %q", h.g.device)
+	}
+	h = newHarness()
+	h.mustRun(t, "--config", path, "-d", "from-flag", "info")
+	if h.g.device != "from-flag" {
+		t.Errorf("-d given: device %q", h.g.device)
+	}
+
+	// The default config file may be missing; one asked for may not.
+	missing := filepath.Join(t.TempDir(), "config.yaml")
+	h = newHarness()
+	h.g.configPath = missing
+	h.mustRun(t, "info")
+	h = newHarness()
+	if err := h.run(t, "--config", missing, "info"); err == nil || h.dials != 0 {
+		t.Errorf("missing --config file: err %v, dials %d", err, h.dials)
 	}
 }
 
@@ -132,8 +189,7 @@ func TestInfo(t *testing.T) {
 
 func TestInfoJSON(t *testing.T) {
 	h := newHarness()
-	h.g.out.json = true
-	h.mustRun(t, "info")
+	h.mustRun(t, "--json", "info")
 	var types []string
 	sc := bufio.NewScanner(&h.out)
 	for sc.Scan() {
@@ -154,7 +210,7 @@ func TestInfoJSON(t *testing.T) {
 func TestCompassMergesCurrentSettings(t *testing.T) {
 	h := newHarness()
 	h.totem.Static.PersistentNorth = true
-	h.mustRun(t, "compass", "-lock", "on")
+	h.mustRun(t, "compass", "--lock", "on")
 	st, live, _, blink := h.state()
 	if !st.CompassLock || !st.PersistentNorth {
 		t.Errorf("lock %v north %v, want both on (north must be preserved)", st.CompassLock, st.PersistentNorth)
@@ -169,9 +225,10 @@ func TestCompassMergesCurrentSettings(t *testing.T) {
 
 func TestCompassBlinkNeedsNoWarning(t *testing.T) {
 	h := newHarness()
-	h.mustRun(t, "compass", "-blink", "on", "-north", "on")
-	if st, _, _, blink := h.state(); !blink || !st.PersistentNorth || st.CompassLock {
-		t.Errorf("blink %v north %v lock %v", blink, st.PersistentNorth, st.CompassLock)
+	h.mustRun(t, "compass", "--blink", "on", "--north=on", "--power", "eco")
+	st, live, _, blink := h.state()
+	if !blink || !st.PersistentNorth || st.CompassLock || live.PowerMode != protocol.PowerEco {
+		t.Errorf("blink %v north %v lock %v power %s", blink, st.PersistentNorth, st.CompassLock, live.PowerMode)
 	}
 	if strings.Contains(h.errb.String(), "level=WARN") {
 		t.Errorf("unexpected warning:\n%s", h.errb.String())
@@ -275,6 +332,20 @@ func TestPeerCommands(t *testing.T) {
 	}
 }
 
+func TestPeerSelect(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	h.mustRun(t, "peer", "select", peerA.String())
+	if !wrote(h, protocol.SelectPeer(peerA)) {
+		t.Error("select did not send (6,5)")
+	}
+	h = newHarness()
+	h.mustRun(t, "peer", "select", "--stop")
+	if !wrote(h, protocol.StopPeerManagement()) {
+		t.Error("select --stop did not send (6,0)")
+	}
+}
+
 func TestPeerUnknown(t *testing.T) {
 	h := newHarness()
 	h.g.timeScale = 0.01 // this one waits out the timeout
@@ -286,7 +357,7 @@ func TestPeerUnknown(t *testing.T) {
 
 func TestPOI(t *testing.T) {
 	h := newHarness()
-	h.mustRun(t, "poi", "add", "-name", "Main Stage", "-lat", "50.0671", "-lon", "19.9124", "-color", "orange", "-id", "02aabbccddee")
+	h.mustRun(t, "poi", "add", "--name", "Main Stage", "--lat", "50.0671", "--lon", "19.9124", "--color", "orange", "--id", "02aabbccddee")
 	_, _, peers, _ := h.state()
 	if len(peers) != 1 {
 		t.Fatalf("peers %v", peers)
@@ -300,19 +371,22 @@ func TestPOI(t *testing.T) {
 	}
 
 	h = newHarness()
-	h.mustRun(t, "poi", "add", "-name", "Camp", "-lat", "1", "-lon", "2")
+	h.mustRun(t, "poi", "add", "--name", "Camp", "--lat", "-33.8568", "--lon", "-70.6483")
 	_, _, peers, _ = h.state()
 	if len(peers) != 1 || peers[0].MAC[0]&0x03 != 0x02 {
 		t.Errorf("random POI id must be unicast and locally administered: %v", peers)
+	}
+	if peers[0].Lat > -33.85 || peers[0].Lon > -70.64 {
+		t.Errorf("POI at %v,%v, want -33.8568,-70.6483", peers[0].Lat, peers[0].Lon)
 	}
 }
 
 func TestLocation(t *testing.T) {
 	h := newHarness()
-	h.mustRun(t, "location", "50.0671", "19.9124", "-acc", "5")
+	h.mustRun(t, "location", "--lat", "50.0671", "--lon", "-19.9124", "--acc", "5")
 	var fix *protocol.PhoneFix
 	h.totem.Do(func(t *clienttest.Totem) { fix = t.Fix })
-	if fix == nil || fix.Lat < 50.067 || fix.Lat > 50.0672 || fix.HAcc != 5 || !fix.Focused {
+	if fix == nil || fix.Lat < 50.067 || fix.Lat > 50.0672 || fix.Lon > -19.912 || fix.HAcc != 5 || !fix.Focused {
 		t.Fatalf("fix %+v", fix)
 	}
 	if d := time.Since(time.Unix(int64(fix.Unix), 0)); d < 0 || d > time.Minute {
@@ -323,9 +397,9 @@ func TestLocation(t *testing.T) {
 func TestOTA(t *testing.T) {
 	h := newHarness()
 	if err := h.run(t, "ota"); err == nil || h.dials != 0 {
-		t.Fatalf("ota without -yes: err %v, dials %d", err, h.dials)
+		t.Fatalf("ota without --yes: err %v, dials %d", err, h.dials)
 	}
-	h.mustRun(t, "ota", "-yes")
+	h.mustRun(t, "ota", "--yes")
 	if !strings.Contains(h.errb.String(), "reboot into the updater") {
 		t.Errorf("status:\n%s", h.errb.String())
 	}
@@ -333,7 +407,7 @@ func TestOTA(t *testing.T) {
 
 func TestWatchAndRaw(t *testing.T) {
 	h := newHarness()
-	h.mustRun(t, "watch", "-for", "150ms")
+	h.mustRun(t, "watch", "--for", "150ms")
 	for _, want := range []string{" static \"Test Totem\"", " live   37.586700,-122.0073"} {
 		if !strings.Contains(h.out.String(), want) {
 			t.Errorf("watch output lacks %q:\n%s", want, h.out.String())
@@ -341,7 +415,7 @@ func TestWatchAndRaw(t *testing.T) {
 	}
 
 	h = newHarness()
-	h.mustRun(t, "raw", "-listen", "150ms", "01 01")
+	h.mustRun(t, "raw", "01 01", "--listen", "150ms") // flags may follow arguments
 	if !strings.Contains(h.out.String(), " static ") {
 		t.Errorf("raw output:\n%s", h.out.String())
 	}
@@ -349,24 +423,33 @@ func TestWatchAndRaw(t *testing.T) {
 
 func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 	for _, args := range [][]string{
+		{"frobnicate"},
+		{"--no-such-flag", "info"},
 		{"info", "extra"},
 		{"name"},
 		{"compass"},
-		{"compass", "-lock", "maybe"},
+		{"compass", "--lock", "maybe"},
+		{"compass", "--power", "turbo"},
+		{"power"},
 		{"power", "turbo"},
 		{"wifi"},
+		{"wifi", "frobnicate"},
 		{"wifi", "set"},
 		{"peer"},
 		{"peer", "frobnicate", "a1b2c3d4e5f6"},
 		{"peer", "color", "a1b2c3d4e5f6"},
 		{"peer", "color", "a1b2c3d4e5f6", "not-a-colour"},
 		{"peer", "hide", "a1b2"},
-		{"poi", "add", "-lat", "1", "-lon", "2"},
+		{"peer", "select"},
+		{"peer", "select", "--stop", "a1b2c3d4e5f6"},
+		{"poi", "add", "--lat", "1", "--lon", "2"},
+		{"poi", "add", "--name", "x", "--lat", "91", "--lon", "2"},
 		{"poi", "delete"},
-		{"location", "91", "0"},
-		{"location", "north", "west"},
+		{"location", "--lat", "50"},
+		{"location", "--lat", "91", "--lon", "0"},
+		{"location", "--lat", "north", "--lon", "west"},
 		{"raw", "01"},
-		{"frobnicate"},
+		{"raw", "zz"},
 	} {
 		h := newHarness()
 		if err := h.run(t, args...); err == nil {
@@ -378,28 +461,13 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 	}
 }
 
-func TestSubflagsAcceptFlagsAfterPositionals(t *testing.T) {
-	var acc float64
-	var sticky bool
-	pos, err := subflags("t", []string{"50.1", "-acc", "3", "19.9", "-sticky"}, func(fs *flag.FlagSet) {
-		fs.Float64Var(&acc, "acc", 10, "")
-		fs.BoolVar(&sticky, "sticky", false, "")
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(pos, " ") != "50.1 19.9" || acc != 3 || !sticky {
-		t.Errorf("pos %v acc %v sticky %v", pos, acc, sticky)
-	}
-}
-
 func TestParseOnOffAndPower(t *testing.T) {
 	for in, want := range map[string]bool{"on": true, "Yes": true, "1": true, "off": false, "FALSE": false} {
-		if got, err := parseOnOff("x", in); err != nil || got != want {
+		if got, err := parseOnOff(in); err != nil || got != want {
 			t.Errorf("parseOnOff(%q) = %v, %v", in, got, err)
 		}
 	}
-	if _, err := parseOnOff("x", "maybe"); err == nil {
+	if _, err := parseOnOff("maybe"); err == nil {
 		t.Error("parseOnOff accepted maybe")
 	}
 	for in, want := range map[string]protocol.PowerMode{"eco": protocol.PowerEco, "NORMAL": protocol.PowerNormal, "full": protocol.PowerNormal} {

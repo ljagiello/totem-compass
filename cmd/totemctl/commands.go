@@ -5,192 +5,208 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"flag"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/ljagiello/totem-compass/client"
 	"github.com/ljagiello/totem-compass/protocol"
 )
 
-func cmdScan(ctx context.Context, g *globals, args []string) error {
+func newScanCmd(g *globals) *cobra.Command {
 	var all, verbose bool
 	var dur time.Duration
-	if _, err := subflags("scan", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&all, "all", false, "list every BLE device, not just Totems")
-		fs.BoolVar(&verbose, "v", false, "also print advertised services and manufacturer data")
-		fs.DurationVar(&dur, "for", 10*time.Second, "scan duration")
-	}); err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(ctx, dur)
-	defer cancel()
-	g.out.status("scanning for %s…", dur)
-	n := 0
-	err := client.Scan(ctx, all, func(d client.Device) {
-		n++
-		if g.out.json {
-			g.out.emit(struct {
-				Name     string   `json:"name"`
-				Address  string   `json:"address"`
-				RSSI     int16    `json:"rssi"`
-				Services []string `json:"services,omitempty"`
-			}{d.Name, d.Address.String(), d.RSSI, d.Services})
-			return
-		}
-		g.out.printf("%-24s %s  %d dBm\n", orUnnamed(d.Name), d.Address, d.RSSI)
-		if verbose {
-			for _, s := range d.Services {
-				g.out.printf("    service %s\n", s)
+	c := &cobra.Command{
+		Use:   "scan",
+		Short: "List nearby Totems",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, cancel := context.WithTimeout(cmd.Context(), dur)
+			defer cancel()
+			g.out.status("scanning for %s…", dur)
+			n := 0
+			err := client.Scan(ctx, all, func(d client.Device) {
+				n++
+				if g.out.json {
+					g.out.emit(struct {
+						Name     string   `json:"name"`
+						Address  string   `json:"address"`
+						RSSI     int16    `json:"rssi"`
+						Services []string `json:"services,omitempty"`
+					}{d.Name, d.Address.String(), d.RSSI, d.Services})
+					return
+				}
+				g.out.printf("%-24s %s  %d dBm\n", orUnnamed(d.Name), d.Address, d.RSSI)
+				if verbose {
+					for _, s := range d.Services {
+						g.out.printf("    service %s\n", s)
+					}
+					for id, b := range d.MfgData {
+						g.out.printf("    mfg 0x%04x % x\n", id, b)
+					}
+				}
+			})
+			if err != nil {
+				return err
 			}
-			for id, b := range d.MfgData {
-				g.out.printf("    mfg 0x%04x % x\n", id, b)
+			if n == 0 && !all {
+				g.out.status("no Totems found.\n\n%s", wakeHelp)
 			}
-		}
-	})
-	if err != nil {
-		return err
+			return nil
+		},
 	}
-	if n == 0 && !all {
-		g.out.status("no Totems found.\n\n%s", wakeHelp)
-	}
-	return nil
+	c.Flags().BoolVar(&all, "all", false, "list every BLE device, not just Totems")
+	c.Flags().BoolVarP(&verbose, "verbose", "v", false, "also print advertised services and manufacturer data")
+	c.Flags().DurationVar(&dur, "for", 10*time.Second, "scan duration")
+	return c
 }
 
-func cmdInfo(ctx context.Context, g *globals, args []string) error {
-	if err := wantArgs(args, 0, "totemctl info"); err != nil {
-		return err
+func newInfoCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "info",
+		Short: "Show device identity, settings, battery and position",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			st, err := s.fetchStatic(g.wait(30*time.Second), nil)
+			if err != nil {
+				return err
+			}
+			if s.live == nil {
+				_, _ = s.await(g.wait(15*time.Second), is[protocol.LiveData])
+			}
+			g.out.info(st, s.live)
+			return nil
+		},
 	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	st, err := s.fetchStatic(g.wait(30*time.Second), nil)
-	if err != nil {
-		return err
-	}
-	if s.live == nil {
-		_, _ = s.await(g.wait(15*time.Second), is[protocol.LiveData])
-	}
-	g.out.info(st, s.live)
-	return nil
 }
 
-func cmdWatch(ctx context.Context, g *globals, args []string) error {
+func newWatchCmd(g *globals) *cobra.Command {
 	var dur time.Duration
-	pos, err := subflags("watch", args, func(fs *flag.FlagSet) {
-		fs.DurationVar(&dur, "for", 0, "stop after this long (default: until Ctrl-C)")
-	})
-	if err != nil {
-		return err
-	}
-	if err := wantArgs(pos, 0, "totemctl watch [-for 30s]"); err != nil {
-		return err
-	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	s.echo = true
-	g.out.status("connected; Ctrl-C to stop")
-	all, _ := protocol.RequestPeerDetails()
-	if err := s.send(protocol.RequestStaticData(), all); err != nil {
-		return err
-	}
-	if _, err = s.await(dur, nil); errors.Is(err, errTimeout) {
-		return nil
-	}
-	return err
-}
-
-func cmdPeers(ctx context.Context, g *globals, args []string) error {
-	if err := wantArgs(args, 0, "totemctl peers"); err != nil {
-		return err
-	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	// The device only sends Peer Sync once Static Data was delivered.
-	if _, err := s.fetchStatic(g.wait(30*time.Second), nil); err != nil {
-		return err
-	}
-	if err := s.send(protocol.RequestPeerSync()); err != nil {
-		return err
-	}
-	m, err := s.await(g.wait(30*time.Second), is[protocol.PeerSync])
-	if err != nil {
-		return fmt.Errorf("no peer list from the Totem: %w", err)
-	}
-	want := m.(protocol.PeerSync).Peers
-	if s.c.HalfDuplex() { // legacy mode requests details as the Peer Sync ack
-		all, _ := protocol.RequestPeerDetails()
-		if err := s.send(all); err != nil {
-			return err
-		}
-	}
-	// One Peer Ping per peer follows, roughly one per second.
-	missing := func() bool {
-		for _, mac := range want {
-			if _, ok := s.peers[mac]; !ok {
-				return true
+	c := &cobra.Command{
+		Use:   "watch",
+		Short: "Stream live data and peer updates until Ctrl-C",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
 			}
-		}
-		return false
+			defer s.close()
+			s.echo = true
+			g.out.status("connected; Ctrl-C to stop")
+			all, _ := protocol.RequestPeerDetails()
+			if err := s.send(protocol.RequestStaticData(), all); err != nil {
+				return err
+			}
+			if _, err = s.await(dur, nil); errors.Is(err, errTimeout) {
+				return nil
+			}
+			return err
+		},
 	}
-	if missing() {
-		limit := g.wait(time.Duration(len(want)+10) * 2 * time.Second)
-		if _, err := s.await(limit, func(protocol.Message) bool { return !missing() }); err != nil {
-			g.log.Warn("not every peer reported details", "reported", len(s.peers), "bonded", len(want))
-		}
-	}
-	if len(s.peers) == 0 {
-		g.out.status("no bonded peers or points of interest")
-		return nil
-	}
-	macs := make([]protocol.MAC, 0, len(s.peers))
-	for m := range s.peers {
-		macs = append(macs, m)
-	}
-	slices.SortFunc(macs, func(a, b protocol.MAC) int { return strings.Compare(s.peers[a].Name, s.peers[b].Name) })
-	for _, m := range macs {
-		if g.out.json {
-			g.out.emit(s.peers[m])
-		} else {
-			g.out.println(peerLine(s.peers[m]))
-		}
-	}
-	return nil
+	c.Flags().DurationVar(&dur, "for", 0, "stop after this long (default: until Ctrl-C)")
+	return c
 }
 
-func cmdName(ctx context.Context, g *globals, args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: totemctl name <new name>")
+func newPeersCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "peers",
+		Short: "List bonded Totems and points of interest",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			// The device only sends Peer Sync once Static Data was delivered.
+			if _, err := s.fetchStatic(g.wait(30*time.Second), nil); err != nil {
+				return err
+			}
+			if err := s.send(protocol.RequestPeerSync()); err != nil {
+				return err
+			}
+			m, err := s.await(g.wait(30*time.Second), is[protocol.PeerSync])
+			if err != nil {
+				return fmt.Errorf("no peer list from the Totem: %w", err)
+			}
+			want := m.(protocol.PeerSync).Peers
+			if s.c.HalfDuplex() { // legacy mode requests details as the Peer Sync ack
+				all, _ := protocol.RequestPeerDetails()
+				if err := s.send(all); err != nil {
+					return err
+				}
+			}
+			// One Peer Ping per peer follows, roughly one per second.
+			missing := func() bool {
+				for _, mac := range want {
+					if _, ok := s.peers[mac]; !ok {
+						return true
+					}
+				}
+				return false
+			}
+			if missing() {
+				limit := g.wait(time.Duration(len(want)+10) * 2 * time.Second)
+				if _, err := s.await(limit, func(protocol.Message) bool { return !missing() }); err != nil {
+					g.log.Warn("not every peer reported details", "reported", len(s.peers), "bonded", len(want))
+				}
+			}
+			if len(s.peers) == 0 {
+				g.out.status("no bonded peers or points of interest")
+				return nil
+			}
+			macs := make([]protocol.MAC, 0, len(s.peers))
+			for m := range s.peers {
+				macs = append(macs, m)
+			}
+			slices.SortFunc(macs, func(a, b protocol.MAC) int { return strings.Compare(s.peers[a].Name, s.peers[b].Name) })
+			for _, m := range macs {
+				if g.out.json {
+					g.out.emit(s.peers[m])
+				} else {
+					g.out.println(peerLine(s.peers[m]))
+				}
+			}
+			return nil
+		},
 	}
-	name := strings.Join(args, " ")
-	f, err := protocol.SetName(name)
-	if err != nil {
-		return err
+}
+
+func newNameCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:   "name <new name>",
+		Short: "Rename the Totem",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := strings.Join(args, " ")
+			f, err := protocol.SetName(name)
+			if err != nil {
+				return err
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(f); err != nil {
+				return err
+			}
+			if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.Name == name }); err != nil {
+				return fmt.Errorf("sent, but the Totem did not report the new name: %w", err)
+			}
+			g.out.status("renamed to %q", name)
+			return nil
+		},
 	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	if err := s.send(f); err != nil {
-		return err
-	}
-	if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.Name == name }); err != nil {
-		return fmt.Errorf("sent, but the Totem did not report the new name: %w", err)
-	}
-	g.out.status("renamed to %q", name)
-	return nil
 }
 
 type compassChange struct {
@@ -198,53 +214,40 @@ type compassChange struct {
 	power              protocol.PowerMode
 }
 
-func cmdCompass(ctx context.Context, g *globals, args []string) error {
-	var lock, north, blink, power *string
-	if _, err := subflags("compass", args, func(fs *flag.FlagSet) {
-		lock = onOffValue(fs, "lock", "compass lock")
-		north = onOffValue(fs, "north", "persistent north")
-		blink = onOffValue(fs, "blink", "blink peers on the ring")
-		power = fs.String("power", "", "power mode (eco|normal)")
-	}); err != nil {
-		return err
+func newCompassCmd(g *globals) *cobra.Command {
+	var lock, north, blink switchFlag
+	var power powerFlag
+	c := &cobra.Command{
+		Use:     "compass",
+		Short:   "Change compass settings",
+		Example: "  totemctl compass --lock on --north off",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return applyCompass(cmd.Context(), g, compassChange{lock.val, north.val, blink.val, protocol.PowerMode(power)})
+		},
 	}
-	var ch compassChange
-	for _, o := range []struct {
-		name string
-		val  *string
-		dst  **bool
-	}{{"lock", lock, &ch.lock}, {"north", north, &ch.north}, {"blink", blink, &ch.blink}} {
-		if *o.val == "" {
-			continue
-		}
-		b, err := parseOnOff(o.name, *o.val)
-		if err != nil {
-			return err
-		}
-		*o.dst = &b
-	}
-	if *power != "" {
-		p, err := parsePower(*power)
-		if err != nil {
-			return err
-		}
-		ch.power = p
-	}
-	if ch == (compassChange{}) {
-		return errors.New("nothing to change; pass at least one of -lock, -north, -blink, -power")
-	}
-	return applyCompass(ctx, g, ch)
+	c.Flags().Var(&lock, "lock", "compass lock")
+	c.Flags().Var(&north, "north", "persistent north")
+	c.Flags().Var(&blink, "blink", "blink peers on the ring")
+	c.Flags().Var(&power, "power", "power mode")
+	c.MarkFlagsOneRequired("lock", "north", "blink", "power")
+	return c
 }
 
-func cmdPower(ctx context.Context, g *globals, args []string) error {
-	if err := wantArgs(args, 1, "totemctl power eco|normal"); err != nil {
-		return err
+func newPowerCmd(g *globals) *cobra.Command {
+	return &cobra.Command{
+		Use:       "power eco|normal",
+		Short:     "Switch power mode (eco dims the LEDs)",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{"eco", "normal"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p, err := parsePower(args[0])
+			if err != nil {
+				return err
+			}
+			return applyCompass(cmd.Context(), g, compassChange{power: p})
+		},
 	}
-	p, err := parsePower(args[0])
-	if err != nil {
-		return err
-	}
-	return applyCompass(ctx, g, compassChange{power: p})
 }
 
 // applyCompass merges the requested change into the Totem's current
@@ -269,7 +272,7 @@ func applyCompass(ctx context.Context, g *globals, ch compassChange) error {
 	if ch.blink != nil {
 		prefs.PeerBlink = *ch.blink
 	} else {
-		g.log.Warn("the Totem does not report peer blink; it will be set to off (pass -blink on to keep it on)")
+		g.log.Warn("the Totem does not report peer blink; it will be set to off (pass --blink on to keep it on)")
 	}
 	if err := s.send(protocol.SetCompassPrefs(prefs)); err != nil {
 		return err
@@ -319,102 +322,148 @@ func (s *session) confirmPower(want protocol.PowerMode) error {
 	return nil
 }
 
-func cmdWiFi(ctx context.Context, g *globals, args []string) error {
-	if len(args) == 0 {
-		return errors.New("usage: totemctl wifi scan | set <ssid> [password]")
-	}
-	switch args[0] {
-	case "scan":
-		s, err := open(ctx, g)
-		if err != nil {
-			return err
-		}
-		defer s.close()
-		if err := s.send(protocol.ClearWiFiScan(), protocol.ScanWiFi()); err != nil {
-			return err
-		}
-		g.out.status("scanning (the Totem needs a few seconds)…")
-		m, err := s.await(g.wait(60*time.Second), is[protocol.WiFiNetworks])
-		if err != nil {
-			return err
-		}
-		if g.out.json {
-			g.out.emit(m)
+func newWiFiCmd(g *globals) *cobra.Command {
+	scan := &cobra.Command{
+		Use:   "scan",
+		Short: "List the networks the Totem can see",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(protocol.ClearWiFiScan(), protocol.ScanWiFi()); err != nil {
+				return err
+			}
+			g.out.status("scanning (the Totem needs a few seconds)…")
+			m, err := s.await(g.wait(60*time.Second), is[protocol.WiFiNetworks])
+			if err != nil {
+				return err
+			}
+			if g.out.json {
+				g.out.emit(m)
+				return nil
+			}
+			for _, ssid := range m.(protocol.WiFiNetworks).SSIDs {
+				g.out.println(ssid)
+			}
 			return nil
-		}
-		for _, ssid := range m.(protocol.WiFiNetworks).SSIDs {
-			g.out.println(ssid)
-		}
-		return nil
-	case "set":
-		if len(args) < 2 || len(args) > 3 {
-			return errors.New("usage: totemctl wifi set <ssid> [password]")
-		}
-		pass := ""
-		if len(args) == 3 {
-			pass = args[2]
-		}
-		f, err := protocol.SaveWiFi(args[1], pass)
-		if err != nil {
-			return err
-		}
-		s, err := open(ctx, g)
-		if err != nil {
-			return err
-		}
-		defer s.close()
-		if err := s.send(f); err != nil {
-			return err
-		}
-		if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.WiFiSSID == args[1] }); err != nil {
-			return fmt.Errorf("sent, but the Totem did not report the new network: %w", err)
-		}
-		g.out.status("saved WiFi network %q", args[1])
-		return nil
+		},
 	}
-	return fmt.Errorf("unknown wifi subcommand %q", args[0])
+	set := &cobra.Command{
+		Use:   "set <ssid> [password]",
+		Short: "Save the network the Totem uses for firmware updates",
+		Args:  cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ssid, pass := args[0], ""
+			if len(args) == 2 {
+				pass = args[1]
+			}
+			f, err := protocol.SaveWiFi(ssid, pass)
+			if err != nil {
+				return err
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(f); err != nil {
+				return err
+			}
+			if _, err := s.fetchStatic(g.wait(30*time.Second), func(d protocol.StaticData) bool { return d.WiFiSSID == ssid }); err != nil {
+				return fmt.Errorf("sent, but the Totem did not report the new network: %w", err)
+			}
+			g.out.status("saved WiFi network %q", ssid)
+			return nil
+		},
+	}
+	return group("wifi", "Scan for WiFi networks or save the one used for updates", scan, set)
 }
 
-func cmdPeer(ctx context.Context, g *globals, args []string) error {
-	const use = "usage: totemctl peer color <mac> <colour> | hide <mac> | show <mac> | delete <mac> | select <mac> | select -stop"
-	var stopSel bool
-	pos, err := subflags("peer", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&stopSel, "stop", false, "close the peer-management UI (select only)")
-	})
-	if err != nil {
-		return err
+func newPeerCmd(g *globals) *cobra.Command {
+	color := &cobra.Command{
+		Use:     "color <mac> <colour>",
+		Aliases: []string{"colour"},
+		Short:   "Change the peer's colour on the ring (palette name, #rrggbb or r,g,b)",
+		Args:    cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			mac, err := protocol.ParseMAC(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := protocol.ParseRGB(args[1])
+			if err != nil {
+				return err
+			}
+			return updatePeer(cmd.Context(), g, mac, func(u *protocol.PeerUpdate) { u.Color = c })
+		},
 	}
-	if len(pos) == 0 {
-		return errors.New(use)
-	}
-	if pos[0] == "select" && stopSel {
-		return oneShot(ctx, g, protocol.StopPeerManagement(), "peer management closed")
-	}
-	if len(pos) < 2 {
-		return errors.New(use)
-	}
-	switch pos[0] {
-	case "color", "colour":
-		if len(pos) != 3 {
-			return errors.New(use)
-		}
-	case "hide", "show", "delete", "select":
-		if len(pos) != 2 {
-			return errors.New(use)
-		}
-	default:
-		return errors.New(use)
-	}
-	mac, err := protocol.ParseMAC(pos[1])
-	if err != nil {
-		return err
-	}
-	var color protocol.RGB
-	if len(pos) == 3 {
-		if color, err = protocol.ParseRGB(pos[2]); err != nil {
-			return err
+	// byMAC builds a command that takes just the peer's MAC.
+	byMAC := func(use, short string, change func(*protocol.PeerUpdate)) *cobra.Command {
+		return &cobra.Command{
+			Use:   use + " <mac>",
+			Short: short,
+			Args:  cobra.ExactArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				mac, err := protocol.ParseMAC(args[0])
+				if err != nil {
+					return err
+				}
+				return updatePeer(cmd.Context(), g, mac, change)
+			},
 		}
 	}
+
+	var stop bool
+	sel := &cobra.Command{
+		Use:   "select <mac>",
+		Short: "Open the Totem's peer-management UI on a peer (--stop closes it)",
+		Args: func(_ *cobra.Command, args []string) error {
+			if len(args) > 1 || stop == (len(args) == 1) {
+				return errors.New("pass one peer MAC, or --stop")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if stop {
+				return oneShot(cmd.Context(), g, protocol.StopPeerManagement(), "peer management closed")
+			}
+			mac, err := protocol.ParseMAC(args[0])
+			if err != nil {
+				return err
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			p, err := s.fetchPeer(mac, g.wait(30*time.Second))
+			if err != nil {
+				return err
+			}
+			if err := s.send(protocol.SelectPeer(mac)); err != nil {
+				return err
+			}
+			g.out.status("selected %q on the Totem", p.Name)
+			return s.settle()
+		},
+	}
+	sel.Flags().BoolVar(&stop, "stop", false, "close the peer-management UI")
+
+	return group("peer", "Manage a bonded peer",
+		color,
+		byMAC("hide", "Hide the peer from the ring", func(u *protocol.PeerUpdate) { u.Hidden = true }),
+		byMAC("show", "Show a hidden peer on the ring again", func(u *protocol.PeerUpdate) { u.Hidden = false }),
+		byMAC("delete", "Forget the peer", func(u *protocol.PeerUpdate) { u.Delete = true }),
+		sel,
+	)
+}
+
+// updatePeer applies change to the peer's current ring entry and confirms
+// the result.
+func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*protocol.PeerUpdate)) error {
 	s, err := open(ctx, g)
 	if err != nil {
 		return err
@@ -425,20 +474,7 @@ func cmdPeer(ctx context.Context, g *globals, args []string) error {
 		return err
 	}
 	upd := protocol.PeerUpdate{MAC: mac, Color: p.Color, Hidden: p.Hidden}
-	switch pos[0] {
-	case "color", "colour":
-		upd.Color = color
-	case "hide", "show":
-		upd.Hidden = pos[0] == "hide"
-	case "delete":
-		upd.Delete = true
-	case "select":
-		if err := s.send(protocol.SelectPeer(mac)); err != nil {
-			return err
-		}
-		g.out.status("selected %q on the Totem", p.Name)
-		return s.settle()
-	}
+	change(&upd)
 	if err := s.send(protocol.UpdatePeer(upd)); err != nil {
 		return err
 	}
@@ -460,74 +496,78 @@ func cmdPeer(ctx context.Context, g *globals, args []string) error {
 	return nil
 }
 
-func cmdPOI(ctx context.Context, g *globals, args []string) error {
-	const use = "usage: totemctl poi add -name N -lat X -lon Y [-color C] [-sticky] [-id MAC] | delete <id>"
+func newPOICmd(g *globals) *cobra.Command {
 	var name, color, id string
 	var lat, lon float64
 	var sticky bool
-	pos, err := subflags("poi", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&name, "name", "", "label shown in the app")
-		fs.Float64Var(&lat, "lat", 0, "latitude")
-		fs.Float64Var(&lon, "lon", 0, "longitude")
-		fs.StringVar(&color, "color", "white", "ring colour: palette name, #rrggbb or r,g,b")
-		fs.BoolVar(&sticky, "sticky", false, "keep pointing at this POI")
-		fs.StringVar(&id, "id", "", "6-byte id (default: random, locally administered)")
-	})
-	if err != nil {
-		return err
-	}
-	if len(pos) == 0 {
-		return errors.New(use)
-	}
-	switch pos[0] {
-	case "add":
-		if len(pos) != 1 || name == "" || (lat == 0 && lon == 0) {
-			return errors.New(use)
-		}
-		poi := protocol.POI{Name: name, Lat: float32(lat), Lon: float32(lon), Sticky: sticky}
-		if poi.Color, err = protocol.ParseRGB(color); err != nil {
-			return err
-		}
-		if id != "" {
-			if poi.ID, err = protocol.ParseMAC(id); err != nil {
+	add := &cobra.Command{
+		Use:     "add",
+		Short:   "Add a point of interest the compass can point to",
+		Example: `  totemctl poi add --name "Main Stage" --lat 50.0671 --lon 19.9124 --sticky`,
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := checkCoords(lat, lon); err != nil {
 				return err
 			}
-		} else {
-			poi.ID = randomPOIID()
-		}
-		f, err := protocol.AddPOI(poi)
-		if err != nil {
-			return err
-		}
-		s, err := open(ctx, g)
-		if err != nil {
-			return err
-		}
-		defer s.close()
-		if err := s.send(f); err != nil {
-			return err
-		}
-		p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second))
-		if err != nil {
-			return fmt.Errorf("sent, but the Totem did not list the POI: %w", err)
-		}
-		if g.out.json {
-			g.out.emit(p)
-		} else {
-			g.out.printf("added %s\n", peerLine(p))
-		}
-		return nil
-	case "delete":
-		if len(pos) != 2 {
-			return errors.New(use)
-		}
-		mac, err := protocol.ParseMAC(pos[1])
-		if err != nil {
-			return err
-		}
-		return oneShot(ctx, g, protocol.UpdatePeer(protocol.PeerUpdate{MAC: mac, Delete: true}), "deleted "+mac.String())
+			poi := protocol.POI{Name: name, Lat: float32(lat), Lon: float32(lon), Sticky: sticky}
+			var err error
+			if poi.Color, err = protocol.ParseRGB(color); err != nil {
+				return err
+			}
+			if id != "" {
+				if poi.ID, err = protocol.ParseMAC(id); err != nil {
+					return err
+				}
+			} else {
+				poi.ID = randomPOIID()
+			}
+			f, err := protocol.AddPOI(poi)
+			if err != nil {
+				return err
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(f); err != nil {
+				return err
+			}
+			p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second))
+			if err != nil {
+				return fmt.Errorf("sent, but the Totem did not list the POI: %w", err)
+			}
+			if g.out.json {
+				g.out.emit(p)
+			} else {
+				g.out.printf("added %s\n", peerLine(p))
+			}
+			return nil
+		},
 	}
-	return errors.New(use)
+	add.Flags().StringVar(&name, "name", "", "label shown in the app")
+	add.Flags().Float64Var(&lat, "lat", 0, "latitude")
+	add.Flags().Float64Var(&lon, "lon", 0, "longitude")
+	add.Flags().StringVar(&color, "color", "white", "ring colour: palette name, #rrggbb or r,g,b")
+	add.Flags().BoolVar(&sticky, "sticky", false, "keep pointing at this POI")
+	add.Flags().StringVar(&id, "id", "", "6-byte id (default: random, locally administered)")
+	for _, f := range []string{"name", "lat", "lon"} {
+		_ = add.MarkFlagRequired(f) // the flags exist, so this cannot fail
+	}
+
+	del := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Remove a point of interest",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			mac, err := protocol.ParseMAC(args[0])
+			if err != nil {
+				return err
+			}
+			return oneShot(cmd.Context(), g, protocol.UpdatePeer(protocol.PeerUpdate{MAC: mac, Delete: true}), "deleted "+mac.String())
+		},
+	}
+	return group("poi", "Add or remove a point of interest to navigate to", add, del)
 }
 
 // randomPOIID returns a unicast, locally administered address, which no
@@ -539,106 +579,118 @@ func randomPOIID() protocol.MAC {
 	return m
 }
 
-func cmdLocation(ctx context.Context, g *globals, args []string) error {
-	var acc float64
-	pos, err := subflags("location", args, func(fs *flag.FlagSet) {
-		fs.Float64Var(&acc, "acc", 10, "horizontal accuracy in meters")
-	})
-	if err != nil {
-		return err
-	}
-	if err := wantArgs(pos, 2, "totemctl location <lat> <lon> [-acc meters]"); err != nil {
-		return err
-	}
-	lat, err1 := strconv.ParseFloat(pos[0], 32)
-	lon, err2 := strconv.ParseFloat(pos[1], 32)
-	if err := errors.Join(err1, err2); err != nil {
-		return fmt.Errorf("bad coordinates: %w", err)
-	}
+func checkCoords(lat, lon float64) error {
 	if lat < -90 || lat > 90 || lon < -180 || lon > 180 {
 		return fmt.Errorf("bad coordinates %v,%v: latitude must be within ±90 and longitude within ±180", lat, lon)
 	}
-	now := time.Now()
-	f := protocol.SendPhoneFix(protocol.PhoneFix{
-		Lat: float32(lat), Lon: float32(lon), HAcc: acc,
-		Unix: int32(now.Unix()), UnixMS: int16(now.Nanosecond() / 1e6), Focused: true,
-	})
-	return oneShot(ctx, g, f, fmt.Sprintf("sent fix %.6f,%.6f ±%.0fm", lat, lon, acc))
+	return nil
 }
 
-func cmdOTA(ctx context.Context, g *globals, args []string) error {
+func newLocationCmd(g *globals) *cobra.Command {
+	var lat, lon, acc float64
+	c := &cobra.Command{
+		Use:     "location",
+		Short:   "Send a phone GNSS fix and the time (used when the Totem has no fix)",
+		Example: "  totemctl location --lat 37.3349 --lon -122.009",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := checkCoords(lat, lon); err != nil {
+				return err
+			}
+			now := time.Now()
+			f := protocol.SendPhoneFix(protocol.PhoneFix{
+				Lat: float32(lat), Lon: float32(lon), HAcc: acc,
+				Unix: int32(now.Unix()), UnixMS: int16(now.Nanosecond() / 1e6), Focused: true,
+			})
+			return oneShot(cmd.Context(), g, f, fmt.Sprintf("sent fix %.6f,%.6f ±%.0fm", lat, lon, acc))
+		},
+	}
+	c.Flags().Float64Var(&lat, "lat", 0, "latitude")
+	c.Flags().Float64Var(&lon, "lon", 0, "longitude")
+	c.Flags().Float64Var(&acc, "acc", 10, "horizontal accuracy in meters")
+	for _, f := range []string{"lat", "lon"} {
+		_ = c.MarkFlagRequired(f) // the flags exist, so this cannot fail
+	}
+	return c
+}
+
+func newOTACmd(g *globals) *cobra.Command {
 	var yes bool
 	req := protocol.OTARequest{Cmd: 1, EndpointID: 1}
-	if _, err := subflags("ota", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&yes, "yes", false, "really reboot into the updater")
-		fs.StringVar(&req.Version, "version", "latest", "release code to install")
-		fs.StringVar(&req.Branch, "branch", "totem", "release branch")
-	}); err != nil {
-		return err
+	c := &cobra.Command{
+		Use:   "ota",
+		Short: "Reboot the Totem into a WiFi firmware update",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !yes {
+				return errors.New("this reboots the Totem and updates it over its saved WiFi network (see `wifi set`); it needs a charged battery. Re-run with --yes")
+			}
+			f, err := protocol.StartOTA(req)
+			if err != nil {
+				return err
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(f); err != nil {
+				return err
+			}
+			select {
+			case <-s.c.Done():
+				g.out.status("the Totem disconnected to reboot into the updater")
+			case <-time.After(g.wait(20 * time.Second)):
+				return errors.New("the Totem did not reboot; it refuses to update unless the battery is charged")
+			case <-cmd.Context().Done():
+				return cmd.Context().Err()
+			}
+			return nil
+		},
 	}
-	if !yes {
-		return errors.New("this reboots the Totem and updates it over its saved WiFi network (see `wifi set`); it needs a charged battery. Re-run with -yes")
-	}
-	f, err := protocol.StartOTA(req)
-	if err != nil {
-		return err
-	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	if err := s.send(f); err != nil {
-		return err
-	}
-	select {
-	case <-s.c.Done():
-		g.out.status("the Totem disconnected to reboot into the updater")
-	case <-time.After(g.wait(20 * time.Second)):
-		return errors.New("the Totem did not reboot; it refuses to update unless the battery is charged")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	return nil
+	c.Flags().BoolVar(&yes, "yes", false, "really reboot into the updater")
+	c.Flags().StringVar(&req.Version, "version", "latest", "release code to install")
+	c.Flags().StringVar(&req.Branch, "branch", "totem", "release branch")
+	return c
 }
 
-func cmdRaw(ctx context.Context, g *globals, args []string) error {
+func newRawCmd(g *globals) *cobra.Command {
 	var conn bool
 	var listen time.Duration
-	pos, err := subflags("raw", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&conn, "conn", false, "write to the conn-status characteristic instead of data")
-		fs.DurationVar(&listen, "listen", 10*time.Second, "how long to print replies")
-	})
-	if err != nil {
-		return err
+	c := &cobra.Command{
+		Use:   "raw <hex>",
+		Short: "Send a raw frame and print what comes back",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			b, err := hex.DecodeString(strings.NewReplacer(" ", "", ":", "").Replace(strings.Join(args, "")))
+			if err != nil {
+				return err
+			}
+			if len(b) < 2 {
+				return errors.New("a frame needs at least the (cat_id, cmd_id) bytes")
+			}
+			f := protocol.Frame{Channel: protocol.Data, Bytes: b}
+			if conn {
+				f.Channel = protocol.ConnStatus
+			}
+			s, err := open(cmd.Context(), g)
+			if err != nil {
+				return err
+			}
+			defer s.close()
+			if err := s.send(f); err != nil {
+				return err
+			}
+			s.echo = true
+			if _, err := s.await(listen, nil); !errors.Is(err, errTimeout) {
+				return err
+			}
+			return nil
+		},
 	}
-	if len(pos) == 0 {
-		return errors.New("usage: totemctl raw [-conn] <hex>")
-	}
-	b, err := hex.DecodeString(strings.NewReplacer(" ", "", ":", "").Replace(strings.Join(pos, "")))
-	if err != nil {
-		return err
-	}
-	if len(b) < 2 {
-		return errors.New("a frame needs at least the (cat_id, cmd_id) bytes")
-	}
-	f := protocol.Frame{Channel: protocol.Data, Bytes: b}
-	if conn {
-		f.Channel = protocol.ConnStatus
-	}
-	s, err := open(ctx, g)
-	if err != nil {
-		return err
-	}
-	defer s.close()
-	if err := s.send(f); err != nil {
-		return err
-	}
-	s.echo = true
-	if _, err := s.await(listen, nil); !errors.Is(err, errTimeout) {
-		return err
-	}
-	return nil
+	c.Flags().BoolVar(&conn, "conn", false, "write to the conn-status characteristic instead of data")
+	c.Flags().DurationVar(&listen, "listen", 10*time.Second, "how long to print replies")
+	return c
 }
 
 // oneShot sends a single frame and waits until the device has had a chance

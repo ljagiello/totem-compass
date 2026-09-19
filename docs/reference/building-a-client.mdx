@@ -326,8 +326,8 @@ before relying on them:
 | Item | Status | How to confirm |
 | --- | --- | --- |
 | Home channel | default 6 (**Confirmed**), runtime-settable (**Partial**) | sniff the fleet — the live channel can be changed via `set_channel` |
-| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl -trace info`, or add `-half-duplex` to compare |
-| Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl -half-duplex -trace watch` on such a host |
+| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl --trace info`, or add `--half-duplex` to compare |
+| Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl --half-duplex --trace watch` on such a host |
 | Mesh payload field semantics | struct layouts **Confirmed**, per-field meaning **Partial** | correlate captured frames against known device state |
 | Demi-god OTA frame | **Partial / missing** | `(cat, cmd)` + struct not recovered — do not fabricate |
 | Runtime-only values | **Partial** | venue code, group id, and device name live in runtime state / bytecode, not the static image |
