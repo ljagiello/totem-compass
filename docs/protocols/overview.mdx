@@ -57,7 +57,7 @@ each element by how firmly the firmware binary supports it.
 | Message addressing `(cat_id, cmd_id)` | ✅ Confirmed | `[BLE] DataXfer cat_id/cmd_id`, `ConnStatus` logs |
 | Category values 0x01 / 0x03 / 0x06 | ✅ Confirmed | `DataTransfer (0x01,0x02)` Static, `(0x03,0x01)` Live, `(0x06,0x07)` Peer Sync |
 | Category taxonomy (Static/Live/Peer/Conn/OTA/WiFi/Options/DemiGod) | ✅ Confirmed | `*_cmd_id` symbols + ACK log lines |
-| GATT service & characteristic UUIDs | ✅ Confirmed | literal UUID strings in rodata |
+| GATT service & characteristic UUIDs | ✅ Confirmed | literal UUID strings in rodata; v5.0.3 adds `…-0003` (`chars__on_demand`, file-upload chunks) |
 | BLE connection handshake (ConnStatus Ready, half-duplex, handoff) | ✅ Confirmed | `send_data_v2` log lines |
 | Chunking / file-transfer semantics (file_id, chunk_no, resume, ACK) | ✅ Confirmed | `[Upload]` + `Chunk No:` log lines |
 | ESP-NOW relay | ✅ Confirmed | `_relay_frame`, hop-count fields |
@@ -68,7 +68,8 @@ each element by how firmly the firmware binary supports it.
 | Wire struct layouts (catalog of `struct` formats) | ✅ Confirmed | format strings in rodata |
 | **Exact `cmd_id` enumeration per category** (`TOTEM_MSG_MAP`) | ✅ Recovered | flat `(cat_id, cmd_id)` dict decoded from `espnow_conn_v2.py` bytecode (see below); adds categories `0x00` / `0x02` / `0x07` |
 | **Which `struct` format binds to which message** | ✅ Recovered | bindings decoded from `TOTEM_MSG_MAP` / `EXTENDED` (see below) |
-| **`CHUNK_HDR_FMT` exact field order** | ✅ Recovered | wire format `<HBBBiHiB` (16 B) confirmed from live `struct.pack_into` in `chunking.gen_transfer_buff`; the names `CHUNK_HDR_FMT` / `CHUNK_HDR_SZ` also appear as importable symbols in `f_ble/file_upload.py`, so the name→value binding is high-confidence (no literal assignment survives in the frozen `chunking` module) |
+| **Chunk / transfer headers** | ✅ Recovered | transfer header `<HBBBiHiB` (16 B) from the live `struct.pack_into` in `chunking.gen_transfer_buff`; v5.0.3 defines `CHUNK_HDR_FMT = '<HHiH'` / `CHUNK_HDR_SZ = 12` for the separate per-chunk header (v5.0.2 imported those names without defining them) |
+| BLE transmit modes | ✅ Confirmed, hardware-tested | `frame_schema_id == 0` runs the legacy `send_data` loop (notifications plus app acks); `> 0` runs half-duplex `send_data_v2` (indications with a 500 ms confirmation timeout), which stalls on macOS/iOS |
 
 ### Recovered from bytecode
 
@@ -120,26 +121,22 @@ The 57-B and 69-B `(0x00, 0x00)` schemas are the fixed-size mesh frames. Categor
 (Peer Sync) is **absent** from this registry — it is handled by separate peer-sync logic,
 not the payload-format map.
 
-**`CHUNK_HDR_FMT` = `<HBBBiHiB`** (`CHUNK_HDR_SZ` = 16 B), packed at offset 2 of the
-transfer buffer by `chunking.gen_transfer_buff`. Field order: `file_id` (H), `status_id`
-(B), `action_id` (B), `file_type_id` (B), `byte_pos` (i), `chunk_no` (H), `file_size` (i),
-reserved (B, packed as the literal `0`). The packed wire format and field order are
-**confirmed** from the live `struct.pack_into`. The names `CHUNK_HDR_FMT` and
-`CHUNK_HDR_SZ` are themselves real firmware symbols — `f_ble/file_upload.py` does
-`from f_ble.chunking import … CHUNK_HDR_FMT, CHUNK_HDR_SZ` and reuses them in an identical
-offset-2 `struct.pack_into` plus a `CHUNK_HDR_SZ`-length header slice — but the frozen
-`chunking` module carries no module-level `CHUNK_HDR_FMT = …` assignment (it packs the
-literal inline), so the `CHUNK_HDR_FMT` name→value binding stays **inferred (high
-confidence)**.
+**Chunk headers.** `chunking.gen_transfer_buff` packs the 16-byte **transfer** header
+`<HBBBiHiB` at offset 2 of a `[0x02, 0x02, …]` frame: `file_id` (H), `status_id` (B),
+`action_id` (B), `file_type_id` (B), `byte_pos` (i), `chunk_no` (H), `file_size` (i), then a
+byte that is literal `0` in v5.0.2 and `pack_flags(is_last_chunk, is_origin_compass)` in
+v5.0.3. The name `CHUNK_HDR_FMT` belongs to a different header. v5.0.3 binds it to the
+12-byte per-chunk header `'<HHiH'` streamed on `…-0003`. v5.0.2 imported the name without
+defining it, so its uploader was dead code. See [chunking](/protocols/message-format#chunking).
 
 <Note>
 **Verdict.** The protocol's transport, addressing scheme, category taxonomy, GATT
 identifiers, connection state machine, chunking/file-transfer, and the demi-god command
 set are **fully captured**. The three items that were previously pending in bytecode — the
 per-category `cmd_id` map (`TOTEM_MSG_MAP`), the `struct`-to-message bindings, and the
-`CHUNK_HDR_FMT` field order — have now been recovered by disassembling the frozen
+chunk-header layout — have now been recovered by disassembling the frozen
 MicroPython modules: `TOTEM_MSG_MAP` and its bindings live in `espnow_conn_v2.py`, and
-`CHUNK_HDR_FMT` is packed in `f_ble/chunking.py` (see the tables above).
+the chunk headers are packed in `f_ble/chunking.py` and `f_ble/file_upload.py` (see the tables above).
 
 Crucially, **there is no confidentiality or integrity layer to defeat**: ESP-NOW is
 cleartext on both broadcast and unicast (no PMK/LMK ever programmed), the ESP-NOW frame

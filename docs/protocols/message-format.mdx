@@ -50,19 +50,47 @@ Confirmed BLE `(cat_id, cmd_id)` pairs and their labels, taken directly from the
 | `0x06` | **Peer** | `(0x06, 0x02)` per-peer, `(0x06, 0x07)` Peer Sync | peer list / peer sync between Totems |
 | — | **Conn Status** | (handshake) | connection readiness + mode negotiation |
 
-The receive path (`recv_data_msgs`) dispatches app→device commands on `cat_id` through
-**command namespaces** (each a `*_cmd_id` symbol):
+The receive path dispatches app→device commands on `cat_id`. Writes to `…-0002` go to
+`recv_data_msgs`; writes to `…-0001` go to `recv_status_msgs`. The complete map, decoded from
+both handlers (**Confirmed**; identical in v5.0.2 and v5.0.3 except where marked):
 
-| Namespace symbol | cat_id | Sub-protocol |
+**Data characteristic (`…-0002`)**
+
+| `(cat, cmd)` | Payload after the 2-byte header | Effect |
 | --- | --- | --- |
-| `static_data_cmd_id` | `0x01` | Static Data |
-| `wifi_cmd_id` | `0x02` | WiFi credential + hotspot control |
-| `ota_cmd` | `0x04` | OTA control (start/close/status) |
-| `option_cmd_id` | `0x05` | device options / preferences |
-| `peer_cmd_id` | `0x06` | Peer / mesh sync |
+| `(1,0)` | — | ack Static Data (`is_static_data_sent = True`, stops the legacy repeat) |
+| `(1,1)` | — | request Static Data; in half duplex also sets `evt_is_tx_owner` |
+| `(2,0)` | — | forget the cached WiFi scan (acks the WiFi list) |
+| `(2,1)` | — | scan WiFi (`nearby_wifi`); result arrives as `(2,2)` + JSON list of SSIDs |
+| `(2,3)` | JSON `{"nw": ssid, "join": key}` | save the update WiFi network (`user-config.json`) |
+| `(2,5)` | — | demi-god "update nearby devices" broadcast (affects other Totems) |
+| `(4,cmd)` | `<bBbbbh` = ota_cmd, flags, branch_len, version_len, 0, endpoint_id; then branch, version | `cb__start_ota`: saves `perform.ota` and soft-reboots into WiFi OTA (needs a charged battery) |
+| `(5,3)` | JSON `{"name": name}` | rename the device |
+| `(6,0)` | — | close the on-device peer-management UI |
+| `(6,1)` | — | request Peer Sync (`peer_cmd_id = 1`) |
+| `(6,3)` | `mac(6)`, `<BBB` rgb, flags (bit0 delete, bit2 hidden) | edit or delete a peer / POI |
+| `(6,5)` | peer MAC as lowercase hex string | open peer management on that peer |
+| `(6,6)` | 1 byte, `mac(6)`, `<ffbBBBhiiBBbbbhhiiib` (44 B), name | add a peer / point of interest (`add_new_bond`; flags: sos, is_poi, is_sticky_heading, is_hidden, is_locked) |
+| `(6,8)` | none (all peers) or count, 0, `mac(6)`… | queue Peer Pings (`Controller needs Peer details sent`) |
+| `(6,9)` | 1 byte, `mac(6)`, `<iff3bB` = unix, lat, lon, p_acc, 0, speed, flags(bit0 sos) | update a peer's position from the cloud; v5.0.3 also marks the phone as online |
+| `(7,3)` | `<b` 0, flags(bit0 persistent north, bit1 compass lock), flags(bit2 peer blink), flags, power byte (bits0-2: 1 eco, 2 normal, 0 unchanged) | compass settings (all at once) |
+| `(10,x)` | `<B5bBBB6B`; `buff[11:17]` target MAC | developer options (only `dev_tgt_peer` is used) |
+| `(12,3)` | `<ffbBih` = lat, lon, h_acc, flags, unix, unix_ms | phone GNSS fix and clock. flags: bit1 app UI closed, bit2 focused; **v5.0.3**: bit0 phone has internet (`ble_ticks_app_internet`, an upload gate) |
+| `(14,x)` | `buff[2]` = 1 / 3 / 4 | 1: reboot into WiFi OTA; 3 / 4: reboot into the BLE transfer service (`svc_ble_transfer`, mode 1 / 2) |
 
-ACKs are logged per category and prove the receive side of each:
-`BLE ACK Static Data`, `BLE ACK Live Data`, `BLE ACK Peer Ping`, `BLE ACK Peer Sync`,
+**Conn-status characteristic (`…-0001`)**
+
+| `(cat, cmd)` | Payload | Effect |
+| --- | --- | --- |
+| `(0,1)` | `conn_mode, frame_schema_id[, caps]` | Ready (see [BLE handshake](/protocols/ble#connstatus-ready-frame)) |
+| `(0,3)` | — | graceful disconnect request |
+| `(2,3)` | `<BBHbBBiHiB` upload reply | **v5.0.3**: `FileUploader.on_header` (see [file transfer](#file-transfer)) |
+| `(3,x)` | bitfield: isActive, isFocused, isLocked, isUiClosed, isService, isDisconn | app runtime state; bit5 lets the device drop BLE on its own schedule |
+| `(4,3)` | flags: bit1 grant, bit0 revoke | half-duplex TX handoff |
+
+The legacy transmit loop logs its sends per category (`Sending static data`,
+`Sending BLE | DataTransfer (0x06, 0x07)`, …), and the half-duplex loop logs a confirmation per
+record: `BLE ACK Static Data`, `BLE ACK Live Data`, `BLE ACK Peer Ping`, `BLE ACK Peer Sync`,
 `BLE ACK Comms Handoff`.
 
 ## BLE message formats (`gen_*`) — what a client reads
@@ -116,7 +144,8 @@ encodes `config.power_mode` in bits[0:3].
 
 `buff[2] = total_len & 255`; `buff[3:9] = MAC` (6 bytes); then
 `struct <biHBBBbBBBbhhiiibbb` at **offset 9** (`calcsize` = 34); then three
-length-prefixed UTF-8 strings from offset 43. 19 packed values:
+UTF-8 strings concatenated from offset 43 (no per-string prefix; the lengths are fields
+17–19). 19 packed values:
 
 | # | code | Field | Meaning |
 | --- | --- | --- | --- |
@@ -135,7 +164,7 @@ length-prefixed UTF-8 strings from offset 43. 19 packed values:
 | 18 | `b` | `len(branch)` | string #2 length |
 | 19 | `b` | `len(wifi_ssid)` | string #3 length |
 
-Then, from offset 43, three length-prefixed UTF-8 blobs: `device_name`, git `branch`
+Then, from offset 43, the three strings back to back: `device_name`, git `branch`
 (`'N/A'` if none), `wifi_ssid` (`''`).
 
 ### Peer Ping — `(0x06, 0x02)` `gen_peer_ping`
@@ -264,20 +293,26 @@ This lets a message flood the mesh once and be dropped as a duplicate on re-rece
 
 ## Chunking
 
-Payloads larger than the link buffer (185 B data-characteristic value) are fragmented by
-a common chunking layer (`f_ble/chunking.py`). The relevant constants:
+Files larger than one GATT write are moved by a common chunking layer (`f_ble/chunking.py`,
+used by BLE OTA and, since v5.0.3, by the log uploader). Two headers are involved:
 
-| Symbol | Role |
-| --- | --- |
-| `CHUNK_HDR_FMT` | `struct` format of the per-chunk header |
-| `CHUNK_HDR_SZ` | header size in bytes |
-| `CHUNK_BUFF_SZ` | chunk buffer size (247) |
-| `FrameSchemaId` | negotiated frame schema per connection |
+| Header | Format | Size | Carried on | Role |
+| --- | --- | --- | --- | --- |
+| Transfer header | `<HBBBiHiB` at offset 2 of `[0x02, 0x02, …]` | 16 B (+ SHA-256, name, `err_no`) | `…-0001` (uploader, indicated) | announce / finish / abort a file |
+| Chunk header (v5.0.3) | `CHUNK_HDR_FMT = '<HHiH'` at offset 2 of `[0x00, 0x02, …]` | `CHUNK_HDR_SZ = 12` B incl. prefix | `…-0003` (`chars__on_demand`) | one data chunk |
 
-The chunk header prefixes each fragment. Its format and field order are recovered from
-the live `struct.pack_into` call in `chunking.gen_transfer_buff`: `CHUNK_HDR_FMT` =
-`<HBBBiHiB` (**`CHUNK_HDR_SZ` = 16 bytes**), written at **offset 2** of the transfer
-buffer (`buff[0] = 2`, `buff[1] = 2` are a separate 2-byte frame prefix).
+<Note>
+  In **v5.0.2** `f_ble/file_upload.py` imported `CHUNK_HDR_FMT` and `CHUNK_HDR_SZ` from
+  `chunking`, but `chunking` never defined them, and nothing imported the uploader. Earlier
+  versions of this page inferred `CHUNK_HDR_FMT = '<HBBBiHiB'` from that. **v5.0.3** defines
+  both names explicitly, and they describe the 12-byte **chunk** header. `<HBBBiHiB` is the
+  transfer header packed inline by `gen_transfer_buff`.
+</Note>
+
+### Transfer header (`gen_transfer_buff`)
+
+`buff[0] = 2`, `buff[1] = 2`, then `struct.pack_into('<HBBBiHiB', buff, 2, …)`
+(**Confirmed**, both versions):
 
 | # | code | Field | Type | Meaning |
 | --- | --- | --- | --- | --- |
@@ -285,17 +320,23 @@ buffer (`buff[0] = 2`, `buff[1] = 2` are a separate 2-byte frame prefix).
 | 2 | `B` | `status_id` | uint8 | transfer status (see below) |
 | 3 | `B` | `action_id` | uint8 | transfer action (see below) |
 | 4 | `B` | `file_type_id` | uint8 | content type (see below) |
-| 5 | `i` | `byte_pos` | int32 LE | byte offset of this chunk in the file |
+| 5 | `i` | `byte_pos` | int32 LE | byte offset |
 | 6 | `H` | `chunk_no` | uint16 LE | chunk index |
 | 7 | `i` | `file_size` | int32 LE | total file size (bytes) |
-| 8 | `B` | reserved (packed as `0`) | uint8 | literal 0 |
+| 8 | `B` | flags | uint8 | v5.0.2: literal `0`. **v5.0.3**: `pack_flags(is_last_chunk, is_origin_compass)` |
 
 After the 16-byte header: `buff[18:50]` = 32-byte SHA-256 (when set); `buff[50]` =
-`name_len`, then the UTF-8 file name; then a trailing `err_no` byte.
+`name_len` (v5.0.3 writes `0` when there is no name), then the UTF-8 file name, then a
+trailing `err_no` byte.
 
-The header carries **`file_size`** (the total file size), **not** a per-chunk size. Chunk
-size appears only in the per-chunk log line below (`Chunk Size: {}`), never in
-`CHUNK_HDR_FMT`.
+### Chunk header (v5.0.3, `FileUploader._stream`)
+
+`[0x00, 0x02]` + `struct.pack_into('<HHiH', buff, 2, file_id, n, byte_pos, chunk_no)` + `n`
+data bytes, written to `…-0003` with `send_update=True`. `n` is the bytes read for this chunk
+and `byte_pos` its offset (**Confirmed** from the operands); `chunk_no` counts from 1
+(**Inferred** from the counter variable). The payload per chunk is
+`min(ble.mtu_payload(), 247) - CHUNK_HDR_SZ` (20 − 12 before the MTU is known). v5.0.3
+tracks the negotiated MTU in `BleLite.mtu` for this purpose.
 
 ### Header enums (Confirmed)
 
@@ -308,24 +349,35 @@ size appears only in the per-chunk log line below (`Chunk Size: {}`), never in
 | `file_type_id` | `2` | upload-to-app |
 
 `file_id` is derived from the file's SHA-256: `file_id = sha256[0] | sha256[1] << 8`
-(u16). The transfer *destination* enum is separate (`SAVE_TO_VFS = 1`, `SAVE_TO_OTA = 2`).
-Only `file_type_id = 2` was observed on the app-upload path; other values are **Partial**.
+(u16). The transfer *destination* enum is separate: `SAVE_TO_VFS = 1`, `SAVE_TO_OTA = 2`, and
+v5.0.3 adds `UPLOAD_TO_APP = 3`.
 
 ## File transfer
 
-`f_ble/file_upload.py` implements resumable, acknowledged file transfer over the chunk
-layer. The per-chunk log line enumerates the protocol fields:
+`f_ble/file_upload.py` (`FileUploader`) pushes device log files (`events-*` files) to the
+app so the app can forward them to the cloud. It is **new in practice in v5.0.3**: v5.0.2
+shipped the module but never imported it. In v5.0.3 `ble_manager` starts it as the
+`ble_file_upload` task, and it only runs when every gate is open:
 
-```text
-Chunk No: {}/{} | Pct: {:.3f} | File ID: {} | Chunk Size: {} |
-Byte Pos: {} | File Size: {} | Run Time: {} | Latency: {} | len: {} | queued: {}
-```
+| Gate (`_gate` / `_pause_reason`) | Condition |
+| --- | --- |
+| build switch | `modes.is_ble_log_upload` (`[Upload] Disabled in this build (modes.is_ble_log_upload = 0)`) |
+| app capability | Ready frame `caps` bit 0 (`app lacks upload support`; otherwise `suspended until BLE is next turned on`) |
+| phone online | `modes.ble_ticks_app_internet` recent, set by `(12,3)` flags bit 0 or a `(6,9)` cloud update (`no internet`) |
+| link idle | not while the app owns TX, critical records are in flight, an ESP-NOW window is open, or `…-0003` is busy |
+| device state | Vibe mode, no peer task, no scheduled disconnect, enough free memory (`MIN_MEM_FREE`) |
+
+Uploads mark themselves as the half-duplex **non-critical owner** (`noncrit_owner = 'upload'`),
+which may delay the next TX handoff by up to 2 s. After `MAX_FILE_RETRIES` failures a file is
+suspended until BLE is next turned on. v5.0.3 also toggles nav-log fast rotation depending on
+whether a backlog exists.
 
 ### App→device reply header (`FileUploader.on_header`)
 
 The app replies with an 18-byte header, `struct <BBHbBBiHiB` (**Confirmed**, guarded by
-`len(data) >= 18`). Used fields: `file_id = t[2]` (`H`, matched to the device's
-`file.file_id`), `status = t[3]` (`b`), `action = t[4]` (`B`), `chunk = t[7]` (`H`).
+`len(data) >= 18`), starting `(0x02, 0x03)`. In v5.0.3 it is written to **`…-0001`**:
+`recv_status_msgs` routes `(2,3)` to `uploader.on_header`. Used fields: `file_id = t[2]`,
+`status = t[3]`, `action = t[4]`, `chunk = t[7]`.
 Log: `[Upload] App header | status: {} | action: {} | chunk: {} | err: {}`.
 
 | App field | Value | Meaning |
@@ -338,16 +390,15 @@ Log: `[Upload] App header | status: {} | action: {} | chunk: {} | err: {}`.
 
 | Event | Meaning |
 | --- | --- |
-| `App header \| status: {} \| action: {} \| chunk: {} \| err: {}` | transfer control frame |
-| `Resuming at chunk {}` | resume an interrupted transfer |
-| `Chunk {} acknowledged successfully` | per-chunk ACK |
-| `Ignoring header for file_id {} (in flight: {})` | de-dupe concurrent transfers |
-| `Streamed {} B in {} chunks \| {} ms` | completion summary |
+| `[Upload] Starting {} \| mem_free: {}` | a file is being offered |
+| `[Upload] App header \| status: {} \| action: {} \| chunk: {} \| err: {}` | app reply |
+| `[Upload] Resuming at chunk {}` | resume an interrupted transfer |
+| `[Upload] App did not answer the header` | no reply within `HEADER_TIMEOUT_MS` |
+| `[Upload] Streamed {} B in {} chunks \| {} ms \| mem_free: {}` | all chunks sent |
+| `[Upload] No server confirmation from App` | no terminal status within `CONFIRM_TIMEOUT_MS` |
+| `[Upload] Delivered and deleted {}` | success: the file is removed from the device |
 
 ### Result codes (Confirmed)
 
 `RES_DONE = 1`, `RES_NO_APP = 2`, `RES_RETRY = 3`, `RES_FAILED = 4`, `RES_CANCEL = 5`,
-`RES_ABORT = 6`.
-
-Named files moved over this path include `content.json`, `config.json`, `commslog.bin`,
-`ble_keys.bin`, `debug.bin`, and AssistNow GNSS data (`assist-now-b.bin`).
+`RES_ABORT = 6` (logged as `result: {} (1=done 2=no app 3=retry 4=failed 5=cancel 6=abort)`).

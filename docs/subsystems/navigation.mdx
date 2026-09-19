@@ -5,8 +5,8 @@ description: "u-blox GNSS, AssistNow, IMU fusion, and World Magnetic Model decli
 
 The navigation stack turns GNSS position, IMU orientation, and magnetic heading into a
 "point me to my friend / to the meetup" compass. It spans `compass.py`, `compassing.py`,
-`ubx_gnss.py`, `imu_fusion.py`, `imu_fusion_auto.py`, `mag_wmm_data.py`,
-`task_mag_declination.py`, `nav_helpers.py`, and `nav_logger.py`.
+`ubx_gnss.py`, `imu_fusion_auto.py`, `mag_wmm_data.py`, `task_mag_declination.py`,
+`nav_helpers.py`, `nav_logger.py`, and `peer_helpers.py`.
 
 ## GNSS (u-blox)
 
@@ -51,8 +51,11 @@ covered by the [message-format subsystem](/protocols/message-format), not the GN
 
 ## IMU fusion
 
-`imu_fusion.py` / `imu_fusion_auto.py` fuse accelerometer and gyroscope data for
-orientation and motion:
+`imu_fusion_auto.py` fuses accelerometer and gyroscope data for orientation and motion.
+In v5.0.3 it is the **sole** fusion module (byte-identical to v5.0.2), imported by
+`compass`, `compassing`, `ble_manager`, `espnow_conn_v2`, `nav_logger`, and `debugger`.
+v5.0.2 also froze an older `imu_fusion.py` — an unused Madgwick `Fusion`/`Cal`
+implementation that nothing imported — which v5.0.3 removes. The fusion engine provides:
 
 - **Orientation filter** is a Madgwick AHRS with an adaptive beta gain (`madgwick`,
   `is_adaptive_beta`, `_BETA_MIN_SCALE`).
@@ -72,13 +75,16 @@ declination.
 | Concept | Evidence |
 | --- | --- |
 | 2D and 3D calibration | `_switch_to_3d`, `Bias handoff 2D->3D`, `_CAL3D_MAX_ACCEL_DEV` |
-| Sample collection | `--- Magnetic Calibration Samples ---` |
 | Quality metric | `gap_xy={:.1f}uT` (residual field gap in microtesla) |
 | Persistence | `2D bias restored from config \| age={}s \| cals={}` |
 | Finish / fail | `_finish_calibration`, `_last_calibrated`; a rejected 3D fit logs `3D cal rejected: mag={:.1f} std={:.1f} cov={:.2f} change={:.1f}` |
 
 The 2D→3D "bias handoff" upgrades from a flat-plane heading to a full 3D solution once
 enough motion is seen: `Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT | 2D age={}s | cals={}`.
+All of this calibration telemetry lives in `imu_fusion_auto`; it is unrelated to Vibe Mode
+(`new_vibe.py`, a sound-reactive LED effect — see [Power, input & sensors](/subsystems/power)).
+The `--- Magnetic Calibration Samples ---` string cited in earlier revisions existed only in
+the unused v5.0.2 `imu_fusion.py` and is gone in v5.0.3.
 
 ### Declination (World Magnetic Model)
 
@@ -117,6 +123,38 @@ The compass surface the UI consumes:
 | `evt_nav_log_scheduled`, `rec_nav_logs` | scheduled recording |
 | `demigod_gen_add_nav_log_rule` | push a logging rule via [demi-god](/protocols/demigod) |
 | `cloud_nav_peer` | upload nav data to the cloud |
+| `is_nav_log_fast_rotate` | v5.0.3: fast log rotation while BLE log uploads are active |
+
+`nav_logger.check_log_storage` normally rotates `events.bin` at 7100 B. In v5.0.3, when
+`modes.is_nav_log_fast_rotate` is set — by the BLE log uploader when no `events-*.gz`
+backlog exists — it rotates at **≥1024 B** instead
+(`Nav log fast rotation at {} B (BLE uploads active, backlog empty)`).
+
+## Peer staleness & proximity display
+
+How a bonded peer is shown on the ring depends on whether its coordinates are fresh.
+v5.0.3 changes both the staleness timeout and how stale peers are displayed:
+
+| Behavior | v5.0.3 | v5.0.2 |
+| --- | --- | --- |
+| `peer_helpers.is_peer_stale` sets `is_unknown` after no coordinates for | **7200 s** (2 h) | 14400 s (4 h) |
+| Stale peers in `compassing.get_peer_led_prox` | proximity path: RSSI ≥ −41 → shown "nearby"; within the accuracy distance → `is_unknown=1`, then nearby; no distance → RSSI tiers | always a directional spread |
+
+## Promo activation
+
+`compass.activation_check` creates a **time-limited promo point of interest** (log strings
+`Add Promo Activation: {} | Secs until start: {}`, `Creating promo activation in: {}`,
+`No promo activation`, `[activation_check] Activation expired`,
+`[activation_check] Activation doesn't start for 12hrs`). In v5.0.2 the function existed but
+was never called; v5.0.3 launches it from `backend_checks`.
+
+| | v5.0.3 | v5.0.2 |
+| --- | --- | --- |
+| Promo name | `Totem Secret Meetup` | `Three City Stages: Tinie Tempah` (unused) |
+| Active window | 2026-09-21 03:20–04:00 UTC | n/a (`activation_check` never called) |
+
+The promo's coordinates are embedded in the firmware and are intentionally not reproduced
+here.
 
 ## Receiver lifecycle & auto-reset
 

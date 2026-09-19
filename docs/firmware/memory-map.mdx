@@ -5,16 +5,17 @@ description: "The seven segments of the ESP32 application image and their load a
 
 ## Segments
 
-The image contains seven segments. Executable code lives in IROM (flash-mapped) and
+The v5.0.3 image contains seven segments. DROM grew by 6,528 bytes and IROM by 996 bytes over
+v5.0.2; IRAM and the RTC segments are unchanged in size. Executable code lives in IROM (flash-mapped) and
 IRAM; constants and the frozen Python bytecode live in DROM.
 
 | Seg | Load address | Size (bytes) | Region | Perms | Contents |
 | --- | --- | --- | --- | --- | --- |
-| 0 | `0x3f400020` | 448,836 | DROM | R | `esp_app_desc_t`, then rodata: qstr pool, string constants, **frozen Python bytecode** |
+| 0 | `0x3f400020` | 455,364 | DROM | R | `esp_app_desc_t`, then rodata: qstr pool, string constants, **frozen Python bytecode** |
 | 1 | `0x3ff80060` | 28 | RTC fast | RW | RTC-retained data (`.rtc.data`, data bus) |
-| 2 | `0x3ffbdb60` | 9,864 | DRAM | RW | initialized data |
-| 3 | `0x400d0020` | 1,108,228 | IROM | R-X | MicroPython VM + ESP-IDF code |
-| 4 | `0x3ffc01e8` | 13,384 | DRAM | RW | initialized data |
+| 2 | `0x3ffbdb60` | 3,336 | DRAM | RW | initialized data |
+| 3 | `0x400d0020` | 1,109,224 | IROM | R-X | MicroPython VM + ESP-IDF code |
+| 4 | `0x3ffbe868` | 19,912 | DRAM | RW | initialized data |
 | 5 | `0x40080000` | 111,788 | IRAM | RWX | time-critical code, ISRs |
 | 6 | `0x400c0000` | 96 | RTC fast | RWX | RTC-retained code (`.rtc.text`, instruction bus) |
 
@@ -32,9 +33,10 @@ Structural details of the layout above:
   load `0x20` above their 64-KiB-aligned MMU page bases (`0x3f400000` / `0x400d0000`):
   the 24-byte `esp_image_header_t` and the 8-byte segment-0 header occupy the first
   `0x20` bytes in flash, ahead of the segment payload.
-- **Segments 2 and 4 are contiguous in DRAM.** `0x3ffbdb60 + 0x2688 = 0x3ffc01e8`
+- **Segments 2 and 4 are contiguous in DRAM.** `0x3ffbdb60 + 0xd08 = 0x3ffbe868`
   (seg 4's start), so the two initialized-data segments form one continuous region
-  even though the IROM segment sits between them in image order.
+  even though the IROM segment sits between them in image order. v5.0.2 split the same
+  23,248-byte region differently (`0x2688` + `0x3448` at `0x3ffc01e8`).
 </Note>
 
 Entry point is `0x40081144`, in IRAM (segment 5). The disassembled prologue is the

@@ -1,13 +1,15 @@
 ---
 title: "Totem Compass Firmware"
-description: "Reverse-engineering documentation for the Totem Compass ESP32 firmware, version 5.0.2."
+description: "Reverse-engineering documentation for the Totem Compass ESP32 firmware, version 5.0.3."
 ---
 
 <Note>
 This is independent, unofficial reverse-engineering documentation produced by static
-analysis of a publicly downloadable firmware image. It is not affiliated with or
-endorsed by Totem Labs. No code was executed on a device and no services were attacked;
-all findings come from reading the firmware binary and the companion mobile app.
+analysis of publicly downloadable firmware images. It is not affiliated with or
+endorsed by Totem Labs. No services were attacked. Findings come from reading the firmware
+binaries and the companion mobile app. The BLE protocol was additionally exercised with the
+`totemctl` client against the author's own device (firmware 4.1.3 and 5.0.3); where that
+changed a conclusion, the page says so.
 </Note>
 
 ## What this documents
@@ -19,19 +21,21 @@ firmware), a light-up capacitive touch crystal (the app's "Touch Crystal";
 three 2.4 GHz radios. Groups of Totems bond into a mesh so friends can find
 each other, send taps and messages, and navigate to a shared point.
 
-This site documents firmware **v5.0.2** at the level recoverable from the binary:
+This site documents firmware **v5.0.3** at the level recoverable from the binary. It started
+from v5.0.2; [What changed in 5.0.3](/firmware/changes-5.0.3) lists the differences.
 
 - The firmware is an **ESP32** application built on **ESP-IDF v5.4**.
 - The device runs **MicroPython v1.25.0**; all of Totem's own logic is **Python**,
-  frozen into the image as compiled bytecode across **96 modules** (plus 2 on-flash VFS
-  source files, `boot.py` and `webrepl_cfg.py`, for 98 total `.py` files).
+  frozen into the image as compiled bytecode across **94 modules** (plus 2 on-flash VFS
+  source files, `boot.py` and `webrepl_cfg.py`, for 96 total `.py` files; v5.0.2 had 96
+  frozen modules).
 - Three radios share the 2.4 GHz band: **BLE** (phone app), **ESP-NOW** (Totem-to-Totem
   mesh, called the "Unity Mesh" in the companion app; `MODE_ESP_NOW_*` / `MESH_*` in
   firmware), and **WiFi** (station-mode OTA updates; the device-hosted hotspot path is sunset).
 
 <CardGroup cols={2}>
   <Card title="Firmware architecture" icon="microchip" href="/firmware/architecture">
-    MicroPython app layout, the 96 frozen modules, and how they fit together.
+    MicroPython app layout, the 94 frozen modules, and how they fit together.
   </Card>
   <Card title="2.4 GHz protocols" icon="tower-broadcast" href="/protocols/overview">
     BLE, ESP-NOW mesh, WiFi OTA — message format, categories, and framing.
@@ -49,14 +53,14 @@ This site documents firmware **v5.0.2** at the level recoverable from the binary
 | Property | Value |
 | --- | --- |
 | Product | Totem Compass |
-| Version | 5.0.2 (S3 branch `totem`); release id 335 is a frozen-bytecode constant, not present in the binary strings (needs disassembly) |
+| Version | 5.0.3 (S3 branch `totem`), release id 339: `f_ota/system.py` constants `release_code = '5.0.3'`, `release_id = 339`; the device reports the same in its BLE Static Data |
 | SoC | ESP32 (original), Xtensa dual-core (LX6, inferred), chip id 0 (inferred; `ESP_CHIP_ID_ESP32`) |
 | Framework | ESP-IDF v5.4 (`-dirty`) |
-| Runtime | MicroPython v1.25.0 |
-| Build date | Aug 27 2026, 15:08:47 |
-| Image size | 1,692,352 bytes |
-| SHA-256 (image file) | `a6d05597f0f88f64313ba512287f89af25b9c31e2cd80dc85c8cf426c7bf8896` (of the flashable `.bin`; matches the release API and the download) |
-| App ELF SHA-256 | `311224730a53aeab5f6b57b9475d88aefcc1199e290cf0f4886836a0e5dd0638` (`esp_app_desc_t.app_elf_sha256`, pins the source ELF — confirmed in the binary; a distinct value from the image-file hash above) |
+| Runtime | MicroPython v1.25.0 (`MicroPython v1.25.0-dirty on 2026-09-16`) |
+| Build date | Sep 12 2026, 16:11:34 |
+| Image size | 1,699,872 bytes |
+| SHA-256 (image file) | `bfe1f5a4c39790d068ab4f041a6a56766f4b21f48289518d83d831b323450dc4` (of the flashable `.bin`; matches the release API and the download) |
+| App ELF SHA-256 | `97a29359fa06661ac57840a7d041650ed1fdb08aca8712ec2373d91ea37b5777` (`esp_app_desc_t.app_elf_sha256`, pins the source ELF; a distinct value from the image-file hash above) |
 | Flash | 4 MB, DIO @ 40 MHz (read from the image header via `esptool`) |
 | Segments | 7 (see [memory map](/firmware/memory-map)) |
 

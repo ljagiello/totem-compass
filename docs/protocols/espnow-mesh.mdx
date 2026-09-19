@@ -81,9 +81,11 @@ The Wi-Fi-coexist modes (`MODE_ESP_NOW_WIFI`, `MODE_ESP_NOW_WIFI_BLE`) fall back
 mode — **cannot** exchange frames while the totem runs the common ESP-NOW-only / ESP-NOW+BLE
 modes: a client must be an Espressif device configured with `WIFI_PROTOCOL_LR` on channel 6.
 
-The app never calls `wlan.config(lorate=...)`, so the LR data rate (`WIFI_PHY_RATE_LORA_250K`
-vs `WIFI_PHY_RATE_LORA_500K`) is left at the ESP-IDF default (500K) — a client should leave
-it unset too. *(PHY: Confirmed; lorate rate: Partial — IDF default, not set by the app.)*
+The LR data rate is set on the ESP-NOW object, not via `wlan.config(lorate=...)`:
+`EspConn.power_on` and `EspConn.recover` both call `self.e.config(rate=41)`, and 41 = `0x29` =
+`WIFI_PHY_RATE_LORA_250K`. v5.0.3's WiFi-kick path re-applies it after restarting the driver.
+A client should use **LR 250K** to match. *(PHY and rate: Confirmed in v5.0.2 and v5.0.3.
+Earlier versions of this page said the IDF default of 500K applied; that was wrong.)*
 
 ## Peers & bonding
 
@@ -122,6 +124,9 @@ Received remote bond
 
 Wrong-group joins are ignored (`Incorrect auto-bond group, ignore request`). Broadcast
 discovery itself rides `gen_public_chirp` / `advertise_burst` (`Created public chirp`).
+A cancel frame (`instruction_id == -1`) ends the group. Since v5.0.3 it also does so when only
+the group UID matches (not just while `smart_grp_ticks` is set), and it also resets
+`auto_bond_timeout` and `client_exit_auto_bond`.
 
 ### Bonding flow
 
@@ -138,6 +143,11 @@ sequenceDiagram
   Note over A,B: each side registers the peer via add_peer(mac) — no keys, cleartext
   A->>B: peer sync (cat_id 0x06, cleartext)
 ```
+
+If a bond request arrives from a device that is already a peer and was seen within 6 s
+(`Both devices already bonded`), v5.0.3 answers it before `cb_already_bonded`. The answer is
+five unicast peer ACKs (`gen_peer_msg(cmd_id=1, is_ack=1, is_return=True)`, cat 6) sent 80 ms
+apart, so the requester stops retrying.
 
 ## Encryption — there is none
 
@@ -183,6 +193,28 @@ Ping** liveness. Delivery is buffered and relayed:
 Peer updates can also be pushed to the phone: `Adding Peer: {} to BLE outbox`, and are
 ACKed as `BLE ACK Peer Sync` / `BLE ACK Peer Ping`.
 
+### Transmit back-pressure (v5.0.3)
+
+v5.0.2 sent an all-peer message as one driver call, `e.send(None, msg)`. v5.0.3 changes
+`send_now` for all-peer and explicit-MAC sends, and adds a supervisor:
+
+- **All-peer sends** (`mac` None / `'all'`, used by `_send_outbox`) are a **unicast loop** over
+  the non-POI peers. Each send goes to at most `_tx_free()` peers, and the start index rotates
+  so peers skipped last time go first.
+- **Free-buffer estimate:** `_tx_free()` is `32 − 4 − pending_tx()`. It is 0 for 2 s after the
+  driver refuses a frame with `ESP_ERR_ESPNOW_NO_MEM`. `pending_tx()` is `tx_pkts − tx_responses`
+  from `e.stats()`, relative to a rebased baseline.
+- **Dropping sends:** with no free buffers, explicit-MAC and broadcast sends, including
+  demi-god broadcasts, are dropped locally (`tx_skipped`).
+- **Phantom-pending probe:** `_tx_probe` checks whether a stuck pending count is real. It
+  triggers at ≥ 20 pending for 30 s, at most once per 120 s.
+- **`NO_MEM` is back-pressure, not a fault.** v5.0.2 logged `ESP_ERR_ESPNOW_NO_MEM` and set
+  `is_silent_reboot`. v5.0.3 only records the refusal (`tx_refused`) and backs off.
+- **Supervisor:** the comms task now runs under `communicate_supervised`. It restarts
+  `communicate_v2` after a `RuntimeError`/`OSError` (`communicate_v2 died; restarting`).
+- **WiFi kick coordination:** the task waits out the new BLE-side WiFi driver kick
+  (`is_kicking`, `evt_kick_idle`) before light-sleeping or re-activating the WLAN.
+
 ### Relay & multi-hop
 
 The Unity Mesh is a **flooding mesh with slotted relay suppression**, not tree routing.
@@ -200,6 +232,13 @@ Node Slots disabled, relaying all (too few nearby nodes)
 When too few nodes are nearby, slotting is disabled and every frame is relayed. Origin
 and relay state is tracked per frame (`origin_mesh`, `originator`, `mesh_honored`,
 `mesh_relayed`).
+
+v5.0.3 sheds relay load. `handle_mesh_msg` drops mesh frames whose originator is not a
+bonded peer in two cases, and such frames are neither processed nor relayed:
+
+- `-9` (`relay_skip_drop`): the receiver is overloaded (the driver's `rx_dropped` counter grew
+  since the last cycle).
+- `-10` (`relay_skip_pool`): `load_fps ≥ 4` and at least 8 frames are pending TX.
 
 The mesh tunables are resolved from the frozen `project_data` module (and the `gen_mesh_msg`
 default for `max_hops`); all Confirmed from the disassembly:

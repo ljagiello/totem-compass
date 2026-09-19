@@ -5,9 +5,13 @@ description: "How this firmware was analyzed, the tools used, and how to close t
 
 ## Approach
 
-Everything here comes from **static analysis** of two public artifacts: the firmware
-image and the companion Android app. No code was run on a device; no network service was
-attacked. The releases API and S3 objects are served openly.
+The firmware findings come from **static analysis** of public artifacts: the v5.0.2 and
+v5.0.3 firmware images and the companion Android app. No network service was attacked; the
+releases API and S3 objects are served openly. The BLE protocol was additionally checked
+end to end with the `totemctl` client (`cmd/totemctl` in this repository) against the
+author's own device on firmware 4.1.3 and 5.0.3. That test found the
+[transmit-mode](/protocols/ble#transmit-modes) behaviour on macOS, which static analysis
+alone had missed.
 
 ### Tools
 
@@ -35,8 +39,10 @@ attacked. The releases API and S3 objects are served openly.
     Native strings reveal MicroPython v1.25.0 — the app is Python, frozen as bytecode.
   </Step>
   <Step title="Recover the symbol table">
-    Extract the qstr pool (2,479 identifiers) and rodata strings (11,857) — the
-    application's method/attribute/class names and every log line.
+    Extract the qstr pools and rodata strings: the application's method, attribute and
+    class names and every log line. The first v5.0.2 pass counted 2,479 identifiers and
+    11,857 strings by string scanning. Walking the pools directly gives 4,086 qstrs for
+    v5.0.2 (228 core + 972 const + 2,886 frozen) and 4,162 for v5.0.3 (228 + 975 + 2,959).
   </Step>
   <Step title="Reconstruct behavior">
     Map modules, classes, protocol categories, and subsystem behavior from those symbols
@@ -115,18 +121,19 @@ Each payload format begins with `BB` = the echoed `cat_id`/`cmd_id` header:
 | `(1, 7)` | `<3Bbb` | 5 B |
 | `(7, 1)` | `<BBHbffb` | 14 B |
 
-### `CHUNK_HDR_FMT` — format & field order confirmed
+### Transfer header — format & field order confirmed
 
 `CHUNK_HDR_FMT = <HBBBiHiB`, `CHUNK_HDR_SZ = 16` bytes — packed by `f_ble/chunking.py`'s
 `gen_transfer_buff` via `struct.pack_into` at buffer offset 2. The format string, field order,
 **and field names** are **confirmed** from the live `pack_into` opcode stream: `gen_transfer_buff`
 calls `struct.pack_into('<HBBBiHiB', buff, 2, self.file_id, self.status_id, self.action_id, self.file_type_id, self.byte_pos, self.chunk_no, self.file_size, 0)`
-(`LOAD_ATTR` order in the bytecode). The `CHUNK_HDR_FMT` name-to-value binding is
-**inferred (high confidence)** — `f_ble/file_upload.py` does `from f_ble.chunking import FileTransfer, UPLOAD_TO_APP, CHUNK_HDR_FMT, CHUNK_HDR_SZ`,
-so both names are real module-level exports of `chunking` consumed elsewhere (`CHUNK_HDR_SZ`
-is used as the header size in the transfer loop), and `<HBBBiHiB` is `chunking`'s sole struct
-format — but no literal `CHUNK_HDR_FMT = "…"` module-level assignment appears in the frozen
-bytecode; the format is packed inline.
+(`LOAD_ATTR` order in the bytecode). The first pass also bound the *name* `CHUNK_HDR_FMT` to
+this format, because `f_ble/file_upload.py` imports `CHUNK_HDR_FMT` and `CHUNK_HDR_SZ` from
+`chunking`. **That inference was wrong.** v5.0.2's `chunking` never defines those names, so
+the import could not have succeeded. v5.0.3 defines them explicitly, as the separate 12-byte
+**chunk** header: `CHUNK_HDR_FMT = '<HHiH'`, `CHUNK_HDR_SZ = 12`, `UPLOAD_TO_APP = 3`. See
+[chunking](/protocols/message-format#chunking). v5.0.3 also turns the last byte below into
+a flags byte.
 
 | `struct` code | Field | Type |
 | --- | --- | --- |
@@ -137,7 +144,7 @@ bytecode; the format is packed inline.
 | `i` | `byte_pos` | int32 LE |
 | `H` | `chunk_no` | uint16 LE |
 | `i` | `file_size` | int32 LE |
-| `B` | *(literal 0, reserved/flags)* | uint8 |
+| `B` | literal 0 in v5.0.2; `pack_flags(is_last_chunk, is_origin_compass)` in v5.0.3 | uint8 |
 
 ### How it was done
 
@@ -178,6 +185,50 @@ bytecode; the format is packed inline.
 An alternative dynamic approach — running the exact MicroPython build under an ESP32
 emulator or on hardware and dumping `TOTEM_MSG_MAP` / `CHUNK_HDR_FMT` from a REPL — would
 yield the same values faster if a device or matching build is available.
+
+## Diffing firmware versions
+
+The v5.0.3 image was processed with the same reconstruction and compared to v5.0.2 function
+by function:
+
+<Steps>
+  <Step title="Carve and find anchors">
+    Carve the 7 segments from the image header. Then locate the structures the
+    reconstructor needs by their shape rather than by fixed addresses:
+    - **qstr pools:** headers `{prev, total_prev_len, alloc, len, hashes*, lengths*,
+      qstrs[]}`, validated by the NUL terminator at each declared length.
+    - **Type objects:** `mp_type_type` is the only type object whose base points to itself;
+      `str`, `bytes`, `tuple`, `float` and `int` point to it and carry their name qstr at +6.
+    - **Frozen module table:** the longest run of pointers to `{qstr_table, obj_table,
+      proto}` records whose first qstr ends in `.py`.
+
+    On v5.0.2 this reproduces every hand-found address. On v5.0.3 it finds the frozen pool at
+    seg0 `0x5f59c` (base 1203, 2,959 qstrs), the const pool at `0x22208` (975) and the module
+    table at `0x3f4287b0`–`0x3f428924` (94 modules).
+  </Step>
+  <Step title="Reconstruct and disassemble">
+    Re-serialize every frozen module as a standalone v6.3 `.mpy` and disassemble it with
+    MicroPython's own `mpy-tool.py -d`: 96/96 modules for v5.0.2 and 94/94 for v5.0.3, with
+    no unknown opcodes, truncated functions or dangling children.
+  </Step>
+  <Step title="Diff">
+    Split each disassembly into functions, drop the byte-offset column, and compare
+    added, removed and changed functions plus the qstr and constant tables. 74 modules are
+    identical, 20 changed and 2 were removed. See
+    [What changed in 5.0.3](/firmware/changes-5.0.3).
+  </Step>
+</Steps>
+
+<Warning>
+**Core-qstr off-by-one in the first v5.0.2 pass.** The reconstructor looked up core qstr
+*g* at `qstrs + 4*(g-1)`. The core pool's `qstrs[0]` is the null qstr, so this read the
+name of qstr *g − 1*, the alphabetical predecessor. Every core name in the old disassembly
+was shifted by one: `keys` stood for `len`, `find` for `format`, `sep` for `set`,
+`values` for `write`, `from_bytes` for `get`, `step`/`split` for `stop`/`start`, and
+`Ellipsis` for `Exception`. Frozen and const-pool names were unaffected, and so were all
+constants, struct formats and control flow. The protocol findings on these pages were
+re-checked against the corrected disassembly.
+</Warning>
 
 ## Artifacts
 

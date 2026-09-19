@@ -4,9 +4,10 @@ description: "How firmware updates are packaged, delivered, written, verified, a
 ---
 
 Updates are handled by the `f_ota/` package and `f_lib/firmware_*` modules, with two
-delivery transports (BLE and WiFi) feeding one install path. On current firmware the
-WiFi path runs over station WiFi — `OTA Hotspot has been sunset` — with the hotspot
-join kept only as a legacy path for older firmware.
+delivery transports (BLE and WiFi) feeding one install path. On current firmware (v5.0.3,
+`release_code` `5.0.3` / `release_id` 339 in `f_ota/system.py`) the WiFi path runs over
+station WiFi — `OTA Hotspot has been sunset` — with the hotspot join kept only as a legacy
+path for older firmware.
 
 ## Delivery paths
 
@@ -19,15 +20,19 @@ join kept only as a legacy path for older firmware.
     Current WiFi OTA runs over station WiFi: the release is resolved via
     `http://api.totemportal.com`, the package is fetched from datapeak S3, and the
     update is command-triggered over a WebSocket channel. The legacy hotspot path
-    (`OTA Hotspot has been sunset`) — triple *tap* SOS (capacitive `TouchButtonV2`;
-    the SOS→OTA-trigger binding is inferred from symbol adjacency, not string-provable),
-    join `totemupdate`, download over HTTP — remains only for older firmware. See
-    [WiFi OTA](/protocols/wifi-ota).
+    (`OTA Hotspot has been sunset`) — join `totemupdate`, download over HTTP — remains
+    only for older firmware. See [WiFi OTA](/protocols/wifi-ota).
   </Card>
 </CardGroup>
 
 A [demi-god](/protocols/demigod) broadcast (`demigod_gen_ota_update`) can also tell a
 group of nearby devices to update at once.
+
+Locally, a **triple tap of the physical SOS button** calls `start_ota`
+(`sw_sos.cb_triple_tap`, wired in `compass`; **confirmed**, identical in v5.0.2 and
+v5.0.3). The SOS button is a `button.AsyncButton`, not the capacitive Touch Crystal
+(`touch_button_v2`) — earlier revisions of this page had that wrong. See
+[physical buttons](/subsystems/power#physical-buttons-power--sos).
 
 ## Package formats
 
@@ -63,9 +68,13 @@ key, client certificate, HMAC, or image signature** anywhere on this path (see
     (`get_release_from_api`). `{MAC}` is the uppercase-hex device MAC (`get_mac_addr`):
 
     ```json
-    {"version": "5.0.2", "endpoint_id": 1, "device_type_id": 1,
-     "lat": 0.0, "lon": 0.0, "gnss_time": 0, "release_id": 42}
+    {"version": "5.0.3", "endpoint_id": 1, "device_type_id": 1,
+     "lat": 0.0, "lon": 0.0, "gnss_time": 0, "release_id": 339}
     ```
+
+    (`version` and `release_id` are the device's own `release_code` / `release_id` from
+    `f_ota/system.py`: `5.0.3` / 339 on v5.0.3, `5.0.2` / 335 on v5.0.2. The other values are
+    illustrative.)
   </Step>
   <Step title="Server returns a release object">
     The reply (`get_release_details`) must expose these fields:
@@ -117,7 +126,7 @@ flowchart TD
 | Battery gate | `Battery too low for OTA update` (string in `compass.py`; exact voltage/percent threshold lives in bytecode — not recoverable from strings) |
 | Block write | WiFi `.bin` streams through `f_lib/firmware_ota.py` (`BlockDevWriter`, `Ota.from_firmware_file`); the slot/volume writer `ota_block_writer.py` (`OtaWriter`, `BlockDev`, `Volume`) reports `Firmware successfully written to: {}`. `download_size` / `downloaded_bytes` are `OtaStatus` fields (`f_ota/config.py`) |
 | Progress | `\rDownloaded: {} of {} bytes \| {}% complete` (`f_lib/requests.py`) |
-| Callbacks | `ota_callback.py` (`record_release`, `show_ota`), `ota_daemon.py` (`start_ota`, defaults `cmd=1, version='latest'`); `cb_start_ota` is a callback attribute wired on `compass` / `espnow_conn_v2`; `close_ota` (`f_ble/chunking.py`) and `Closing OTA writer` (`ota_block_writer.py`) close the writer |
+| Callbacks | `ota_callback.py` (`record_release`, `show_ota`), `ota_daemon.py` (`start_ota`, defaults `cmd=1, version='latest'`); `cb_start_ota` is a callback attribute wired on `compass` / `espnow_conn_v2`, and `compass.start_ota` is also the SOS button's triple-tap callback (`sw_sos.cb_triple_tap`); `close_ota` (`f_ble/chunking.py`) and `Closing OTA writer` (`ota_block_writer.py`) close the writer |
 | Clean exit | `Cleanly exiting OTA` (`f_ota/main.py`) |
 | Status/error types | `OtaStatus` (fields `block_no`, `code`, `downloaded_bytes`, `download_size`) and `OtaErr` (an exception carrying `msg`, `code`) — both classes in `f_ota/config.py`. `OTA_ACTIVE` = 2 is a separate `WdtConditions` watchdog state (`wdt_manager.py`), not an `OtaStatus` member; `OTA_MIN` / `OTA_MAX` belong to rollback (below) |
 
@@ -145,8 +154,9 @@ orange blink specifically to OTA failure or rollback.
 <Note>
 The strings `ota data invalid, no current app. Assuming factory`, `not found otadata`,
 `Rollback is not possible…`, and `Running firmware is factory` do **not** appear in any of
-the 96 frozen modules and are not part of `f_lib/firmware_rollback.py`; the module's
-decision logic is carried in bytecode as shown above.
+the 94 frozen modules of v5.0.3 (nor in v5.0.2's 96) and are not part of
+`f_lib/firmware_rollback.py`; the module's decision logic is carried in bytecode as shown
+above.
 </Note>
 
 ## Integrity
@@ -155,9 +165,12 @@ decision logic is carried in bytecode as shown above.
   `f_ble/chunking.py` (fed by `ota_ble.py`) compares a digest: `File integrity confirmed!`
   on match, `SHA256 hash does NOT match` on mismatch (`SHA256 final : {}`,
   `SHA256 origin: {}`; qstrs `sha256_expected`, `sha256_feed`, `sha256_hash`). In the
-  disassembly `sha256*` appears **only** in `f_ble_chunking.dis`, `ota_ble.dis`, and
-  `f_ble_file_upload.dis` — there is **no** SHA-256 in `f_ota/install_ota.py` or in the WiFi
-  streaming writer `f_lib/firmware_ota.py`.
+  v5.0.3 disassembly `sha256` appears in `f_ble_chunking.dis`, `ota_ble.dis`,
+  `f_ble_file_upload.dis`, and `f_lib_file_mgr.dis` — the last is new in v5.0.3, where
+  `f_lib/file_mgr.py` gains an async SHA-256 helper `gen_file_hash(path, buff=None, yield_every=4)`
+  — plus unrelated references in `mip` and `peer_helpers` (present in both versions). There
+  is **no** SHA-256 in `f_ota/install_ota.py` or in the WiFi streaming writer
+  `f_lib/firmware_ota.py`.
 - **The WiFi `.bin` path relies on the ESP-IDF bootloader image hash.**
   `f_lib/firmware_ota.py` (`BlockDevWriter` / `Ota.from_firmware_file`) streams blocks to
   the inactive slot and sets the boot partition

@@ -9,11 +9,13 @@ Driven by `f_lib/wifi.py` / `wifi_v2.py`, `f_lib/firmware_ota.py`, `f_lib/reques
 and `ota_daemon`.
 
 <Note>
-In v5.0.2 the phone-**hotspot** OTA path is **sunset** (`OTA Hotspot has been sunset`).
-The live path is **station-mode WiFi** (updates performed "via WiFi"), typically kicked
-off by an OTA command received over the device's API WebSocket. The hotspot section
-lower down is retained as **legacy**: its credentials and soft-AP machinery are still
-compiled in, but it is no longer the current update mechanism.
+In v5.0.3 (as in v5.0.2) the phone-**hotspot** OTA path is **sunset**
+(`OTA Hotspot has been sunset`, still in `f_ota/main.py`). The live path is
+**station-mode WiFi** (updates performed "via WiFi"), kicked off by an OTA command received
+over the device's API WebSocket or locally by a triple tap of the physical SOS button
+(`start_ota`). The hotspot section lower down is retained as **legacy**: its credentials
+and soft-AP machinery are still compiled in, but it is no longer the current update
+mechanism.
 </Note>
 
 ## The current path: station-mode WiFi OTA
@@ -37,14 +39,16 @@ reboots into the new slot (`OTA completed successfully!`). See
 
 ### Command-triggered over the API WebSocket
 
-The device opens a **client WebSocket** to the API host and can be told to update over it
-— this, not a user gesture, is the non-sunset trigger.
+The device opens a **client WebSocket** to the API host and can be told to update over it.
+OTA can also be started on the device itself: a triple tap of the physical SOS button
+calls `start_ota` (see the trigger note below).
 
 | Signal | Evidence |
 | --- | --- |
 | WebSocket to API | `WebSocket Connection initiated...` / `WebSocket Init Request...`, sitting beside `http://api.totemportal.com` |
 | OTA command | `Sending OTA command to update nearby devices`, `Demigod to update nearby devices`, qstr `demigod_gen_ota_update` |
 | OTA daemon | symbols `ota_daemon` / `ota_cmd` (`from ota_daemon import *`) |
+| Local gesture | SOS button triple tap → `start_ota` (`sw_sos.cb_triple_tap`, **confirmed**, same in v5.0.2 and v5.0.3) |
 
 After the command is received, the device runs the station-WiFi download described above.
 
@@ -71,9 +75,13 @@ image signature** anywhere on this path.
     (`get_release_from_api`). `{MAC}` is the uppercase-hex device MAC (`get_mac_addr`):
 
     ```json
-    {"version": "5.0.2", "endpoint_id": 1, "device_type_id": 1,
-     "lat": 0.0, "lon": 0.0, "gnss_time": 0, "release_id": 42}
+    {"version": "5.0.3", "endpoint_id": 1, "device_type_id": 1,
+     "lat": 0.0, "lon": 0.0, "gnss_time": 0, "release_id": 339}
     ```
+
+    (`version` and `release_id` are the device's own `release_code` / `release_id` from
+    `f_ota/system.py`: `5.0.3` / 339 on v5.0.3, `5.0.2` / 335 on v5.0.2. The other values are
+    illustrative.)
   </Step>
   <Step title="Server returns a release object">
     The reply (`get_release_details`) must expose these fields:
@@ -107,8 +115,9 @@ image signature** anywhere on this path.
 The device fetches release metadata from the Totem API and downloads the package from S3.
 On-device, the payload is **resolved through `contents.json`** (a JSON array of
 filenames) rather than a fixed filename: version is tracked as a **release code**
-(`release_code` / `release_id` / `MPY_OTA_VER`), and `5.0.2` appears only as a version
-banner, never as a path or filename.
+(`release_code` / `release_id` / `MPY_OTA_VER`). The running version appears only as the
+`release_code` `5.0.3` / `release_id` 339 constants in `f_ota/system.py` (v5.0.2: `5.0.2` /
+335), never as a path or filename.
 
 The confirmed on-device host literal uses **`http://`** (see Transport security below):
 
@@ -118,13 +127,13 @@ http://datapeak-developer.s3.us-east-1.amazonaws.com/{}
 
 <Note>
 A phone-app-style URL such as
-`http://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.2/firmware_v5.0.2.bin`
+`http://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.3/firmware_v5.0.3.bin`
 is a **phone-app construction**, not a device literal. The filename component
 `firmware_v<code>.bin` does **not** appear anywhere in this firmware (zero matches across
-all segments `seg0`–`seg6` and the ELF). What *is* confirmed on-device is the bucket /
-product / branch dirs (`totem_compass`, `totem_compass/totem`) plus the templated host
-`…/{}`; the concrete filename is built app-side. See
-[download URL](/reference/download-url) for the full breakdown.
+all segments `seg0`–`seg6` and the ELF; re-checked on the v5.0.3 segments). What *is*
+confirmed on-device is the bucket / product / branch dirs (`totem_compass`,
+`totem_compass/totem`) plus the templated host `…/{}`; the concrete filename is built
+app-side. See [download URL](/reference/download-url) for the full breakdown.
 </Note>
 
 The device-side endpoints are `http://api.totemportal.com/devices/{MAC}/ota` (release
@@ -142,16 +151,18 @@ The observed OTA download URLs use **HTTP**, not HTTPS
 (appended SHA-256 and the ESP-IDF OTA validation / rollback), not on TLS. The mbedTLS
 stack is compiled in and used elsewhere, but the update fetch itself was seen over
 cleartext. There is **no image signature** on the OTA path — integrity is the SHA-256
-digest only (confirmed in `f_ota/install_ota.py`); the ECDSA/mbedTLS machinery in the
-image is unused here, so a custom OTA server needs no signing key.
+digest only (checked on the BLE transfer path and by the ESP-IDF bootloader, not in
+`f_ota/install_ota.py`, which contains no SHA-256; see [OTA integrity](/subsystems/ota#integrity));
+the ECDSA/mbedTLS machinery in the image is unused here, so a custom OTA server needs no
+signing key.
 </Warning>
 
 ## The hotspot method (legacy / sunset)
 
 <Warning>
-This path is **sunset** in v5.0.2 (`OTA Hotspot has been sunset`). The credentials and
-soft-AP machinery are still present in the image, but it is no longer the active update
-mechanism. Documented here for completeness.
+This path is **sunset** in v5.0.3, as it was in v5.0.2 (`OTA Hotspot has been sunset`).
+The credentials and soft-AP machinery are still present in the image, but it is no longer
+the active update mechanism. Documented here for completeness.
 </Warning>
 
 Historically the device joined a **phone personal hotspot** configured with fixed
@@ -162,17 +173,20 @@ credentials, then pulled the update over plain HTTP.
 | SSID | `totemupdate` |
 | Password | `totem1234` |
 | Band | 2.4 GHz (iOS "Maximize Compatibility", Android "Compatibility Mode") |
-| Trigger | historically a triple-**tap** of the SOS button (see note below) |
+| Trigger | triple tap of the physical SOS button → `start_ota` (still wired in v5.0.3; see note below) |
 
 <Steps>
   <Step title="Trigger">
-    The SOS button is a **capacitive touch** button (`TouchButtonV2` / `touch_button_v2`,
-    callback `cb_triple_tap`) — a triple-**tap**, not a "click". In this firmware the
-    triple-tap gesture is associated with **SOS** (`start_sos`, `sos_led`, `enable_sos`),
-    and there is **no** `update mode` / `updater` string in the image; OTA appears to be
-    **command-triggered** over the API WebSocket (above), not entered by this gesture.
-    The "searching for WiFi" halo animation is supported (`anim_gnss_search`,
-    `Searching for WiFi network`).
+    The SOS button is a **physical** push button driven by `button.AsyncButton`
+    (`sw_sos = AsyncButton(0, hold_ms=800, long_hold_ms=10000)` in `compass`), **not** the
+    capacitive Touch Crystal (`touch_button_v2`, a separate input). Its triple tap is wired
+    to `start_ota` (`sw_sos.cb_triple_tap`) — **confirmed**, identical in v5.0.2 and v5.0.3;
+    SOS itself is started by *holding* the button (`start_sos`). Earlier revisions of this
+    page said the triple tap belonged to the Touch Crystal and SOS rather than OTA; that was
+    wrong. There is **no** `update mode` / `updater` string in the image: the gesture calls
+    the same `compass.start_ota` entry point that the ESP-NOW (`cb_start_ota`) and BLE
+    (`cb__start_ota`) triggers use. The "searching for WiFi" halo animation is supported
+    (`anim_gnss_search`, `Searching for WiFi network`).
   </Step>
   <Step title="Join totemupdate">
     Station mode connects to the `totemupdate` SSID on 2.4 GHz (`conn_to_wifi`).

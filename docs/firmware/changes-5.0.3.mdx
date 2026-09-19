@@ -1,0 +1,85 @@
+---
+title: "What changed in 5.0.3"
+description: "Function-level differences between firmware v5.0.2 (release 335) and v5.0.3 (release 339)."
+---
+
+v5.0.3 (release 339, built Sep 12 2026) is a hardening release on the same ESP-IDF v5.4 /
+MicroPython v1.25.0 base. **The BLE and ESP-NOW wire formats are unchanged.** Every record
+layout, `TOTEM_MSG_MAP`, `EXTENDED` and `COMM_SPEED` entry is identical. Clients written for
+v5.0.2 keep working, and the new BLE features are opt-in.
+
+The comparison reconstructs every frozen module from both images, disassembles them with
+MicroPython's own `mpy-tool.py`, and diffs them function by function (see
+[methodology](/reference/methodology#diffing-firmware-versions)). **74 modules are identical,
+20 changed, 2 were removed.**
+
+## At a glance
+
+| Area | Change |
+| --- | --- |
+| Image | 1,692,352 → 1,699,872 bytes; DROM +6,528 B, IROM +996 B; new build date and hashes ([firmware image](/firmware/overview)) |
+| Modules | 96 → 94 frozen: `imu_fusion.py` and `io_mgr.py` removed (neither was imported in v5.0.2) |
+| BLE | third characteristic `…-0003`; optional upload-capability byte in Ready; 15 s hung-link guard; log upload over BLE actually wired up |
+| ESP-NOW | TX back-pressure, relay shedding under load, supervised comms task, `NO_MEM` no longer triggers a reboot |
+| Device | battery-% curve, button debounce, Vibe mode tuning, stale-peer handling, BLE schedule hardening, WiFi-driver "kick" |
+
+## BLE
+
+| Change | Effect on clients |
+| --- | --- |
+| New characteristic `7913b588-0003-…` (`chars__on_demand`, queue 3) | carries upload chunks only; ignore it unless you accept uploads |
+| Ready frame accepts a 5th byte; bit0 = app supports uploads (`is_upload_supported`) | optional; a 4-byte Ready keeps uploads suspended |
+| Hung-link guard: no Ready within **15 s** → stall logged, disconnect scheduled; after 2 stalls in a row BLE stays off 90 s (was 30 s) | send Ready promptly |
+| `(2,3)` on `…-0001` routes to `FileUploader.on_header` | the upload reply channel |
+| `(12,3)` phone-fix flags bit0 = phone has internet (`ble_ticks_app_internet`); `(6,9)` cloud updates also mark it | optional; one of the upload gates |
+| Transfer header's last byte becomes `pack_flags(is_last_chunk, is_origin_compass)`; `CHUNK_HDR_FMT = '<HHiH'`, `CHUNK_HDR_SZ = 12`, `UPLOAD_TO_APP = 3` defined | the v5.0.2 uploader imported these names without defining them: it was dead code |
+| `Characteristic.indicate` serialised by a module-level `asyncio.Lock`; `OSError` (link down) handled | fewer crashes on disconnect; still 500 ms confirmation timeout |
+| Half duplex: `evt_tx_idle` plus a 2 s "non-critical hold" before handing TX to the app | none for legacy-mode clients |
+| Live Data timestamp is 0 when the clock reads before 2024-01-01 (was: when `evt_rtc_ready` unset) | same field, different gate |
+| `BleLite` tracks the negotiated MTU (`mtu_payload()`); WiFi-driver kick (`wifikick`, `_kick_task`) with WDT blocker | internal |
+| `ble_schedule_mgr` caps the "outbox empty" wait at 20 s and waits for the uploader to go idle | fewer hung scheduled disconnects |
+
+Unchanged: the command map, all `gen_*` record layouts, and both transmit loops. The legacy
+full-duplex loop that works on macOS behaves exactly as in v5.0.2; see
+[transmit modes](/protocols/ble#transmit-modes). A v5.0.3 device was tested end to end with
+`totemctl`.
+
+## ESP-NOW mesh
+
+The module body of `espnow_conn_v2` (imports, message maps, class construction) is opcode-
+identical. Changes are inside `EspConn` ([details](/protocols/espnow-mesh#transmit-back-pressure-v503)):
+
+- **All-peer sends** unicast to non-POI peers in a rotating order, limited by an estimate of
+  free driver TX buffers.
+- **Back-pressure:** sends are dropped locally (`tx_skipped`) when no buffers are free.
+- **`ESP_ERR_ESPNOW_NO_MEM`** is treated as back-pressure. In v5.0.2 it set
+  `is_silent_reboot`.
+- **Relay shedding:** mesh frames from non-peers are no longer relayed when the receiver
+  drops frames or the TX pool is busy.
+- **Supervisor:** `communicate_supervised` restarts the comms task after a crash.
+- **Bonding:** an already-bonded requester gets five peer ACKs. A Smart Group cancel now also
+  matches by UID.
+
+The LR PHY rate is 250K (`e.config(rate=41)`) in **both** versions. Earlier docs said 500K.
+
+## Device behaviour
+
+| Area | v5.0.3 |
+| --- | --- |
+| Battery % | top of the voltage table (4.13–4.38 V) removed: 4.12 V now reads 100% (was 61%), 3.8 V reads 50% (was 31%) |
+| Buttons | the 50 ms post-press `debounce` coroutine is replaced by a 30 ms edge lockout on press and release |
+| Vibe mode (`new_vibe`, 1.9 → 1.10) | sound-reactive ring effect: faster auto-gain (13 → 25), cleaner peak hold, ~30% dimmer; debug telemetry removed |
+| Peers | `is_unknown` after 2 h without coordinates (was 4 h); stale peers use the proximity display (nearby by RSSI ≥ −41) |
+| Nav logging | fast `events.bin` rotation (≥ 1024 B) while the uploader has no backlog |
+| Promo | `activation_check`, never called in v5.0.2, now runs; it carries a time-limited "Totem Secret Meetup" POI (2026-09-21, 03:20–04:00 UTC) |
+| Peer management | restores the default crystal colour when it ends while the device is upright |
+| Watchdog | new `WLAN_KICK` blocker |
+| Files | async `gen_file_hash` (SHA-256) and `get_oldest_file` in `f_lib/file_mgr.py` |
+| Debug builds only | SOS single tap triggers a BLE log upload |
+
+## Removed modules
+
+| Module | What it was |
+| --- | --- |
+| `imu_fusion.py` | an older Madgwick `Fusion` / `Cal` implementation with no importer; `imu_fusion_auto.py` (unchanged) is the fusion engine |
+| `io_mgr.py` | a stub containing only `import io` |

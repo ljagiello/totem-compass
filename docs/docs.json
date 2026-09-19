@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Totem Compass Firmware",
-  "description": "Reverse-engineering documentation for the Totem Compass ESP32 firmware (v5.0.2).",
+  "description": "Reverse-engineering documentation for the Totem Compass ESP32 firmware (v5.0.3).",
   "colors": {
     "primary": "#E5387E",
     "light": "#F58BB5",
@@ -25,6 +25,7 @@
             "pages": [
               "index",
               "firmware/overview",
+              "firmware/changes-5.0.3",
               "firmware/architecture",
               "firmware/memory-map",
               "firmware/boot-flow"
