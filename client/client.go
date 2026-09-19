@@ -42,6 +42,7 @@ type Event struct {
 	Raw     []byte
 	Msg     protocol.Message // nil when Err is set
 	Err     error
+	At      time.Time // when the frame arrived
 }
 
 // Options tune a session.
@@ -115,14 +116,15 @@ func (c *Client) receiver(ch protocol.Channel) func([]byte) {
 	return func(buf []byte) {
 		b := append([]byte(nil), buf...)
 		c.logFrame("rx", ch, b)
+		at := time.Now()
 		msg, err := protocol.Parse(ch, b)
 		if h, ok := msg.(protocol.Handoff); ok && h.ToApp {
 			c.onHandoff()
 		}
-		if !c.opts.HalfDuplex {
-			c.legacyAck(msg)
+		if !c.opts.HalfDuplex && ch == protocol.Data {
+			c.legacyAck(b)
 		}
-		c.deliver(Event{Channel: ch, Raw: b, Msg: msg, Err: err})
+		c.deliver(Event{Channel: ch, Raw: b, Msg: msg, Err: err, At: at})
 	}
 }
 
@@ -155,14 +157,23 @@ func (c *Client) deliver(ev Event) {
 // a request made again later (e.g. Static Data re-read to confirm a setting)
 // must be acked again or the device repeats it forever and stops sending
 // Live Data. Extra acks are harmless.
-func (c *Client) legacyAck(m protocol.Message) {
+//
+// The record is recognized by its header, not by decoding it: one the
+// client cannot parse (Static Data for a name over 127 bytes, say) must
+// still be acked, or the device would repeat it forever. (The half-duplex
+// loop needs none of this: it counts a confirmed indication as the ack and
+// does not gate Peer Sync on Static Data.)
+func (c *Client) legacyAck(frame []byte) {
+	if len(frame) < 2 {
+		return
+	}
 	var ack protocol.Frame
-	switch m.(type) {
-	case protocol.StaticData:
+	switch cat, cmd := frame[0], frame[1]; {
+	case cat == protocol.CatStaticData && cmd == 0x02:
 		ack = protocol.AckStaticData()
-	case protocol.WiFiNetworks:
+	case protocol.IsWiFiList(frame):
 		ack = protocol.ClearWiFiScan()
-	case protocol.PeerSync:
+	case cat == protocol.CatPeer && cmd == 0x07:
 		ack, _ = protocol.RequestPeerDetails()
 	default:
 		return

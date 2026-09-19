@@ -183,6 +183,26 @@ func TestLegacyAcksEveryRequest(t *testing.T) {
 	l.expectNoWrite(t)
 }
 
+// A repeated record the client cannot parse is still acked: Static Data for
+// a name over 127 bytes (the length byte goes negative) used to leave the
+// device repeating it forever, with no Live Data.
+func TestUnparseableRecordsAreAcked(t *testing.T) {
+	c, l := newClient(t, client.Options{})
+	b, err := static.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[40] = 0x90 // name length -112
+	l.inject(protocol.Data, b)
+	l.expectWrite(t, protocol.AckStaticData())
+	if ev := nextEvent(t, c); ev.Err == nil {
+		t.Errorf("event = %+v, want a parse error", ev)
+	}
+	// The same header on conn-status is not Static Data.
+	l.inject(protocol.ConnStatus, b)
+	l.expectNoWrite(t)
+}
+
 // A WiFi list cut off in transit is still the list, and still acked: the
 // device repeats it until acked, ahead of Live Data.
 func TestTruncatedWiFiListIsAcked(t *testing.T) {
@@ -472,15 +492,18 @@ func FuzzReceive(f *testing.F) {
 		if h, ok := ev.Msg.(protocol.Handoff); ok && h.ToApp && c.Handoffs() != 1 {
 			t.Fatalf("handoff to the app not counted: %d", c.Handoffs())
 		}
-		// Legacy mode acks exactly the records the device repeats until acked.
+		// Legacy mode acks exactly the records the device repeats until
+		// acked, recognized by header whether or not they parse.
 		var ack protocol.Frame
-		switch ev.Msg.(type) {
-		case protocol.StaticData:
-			ack = protocol.AckStaticData()
-		case protocol.WiFiNetworks:
-			ack = protocol.ClearWiFiScan()
-		case protocol.PeerSync:
-			ack, _ = protocol.RequestPeerDetails()
+		if ch == protocol.Data && len(orig) >= 2 {
+			switch {
+			case orig[0] == protocol.CatStaticData && orig[1] == 0x02:
+				ack = protocol.AckStaticData()
+			case protocol.IsWiFiList(orig):
+				ack = protocol.ClearWiFiScan()
+			case orig[0] == protocol.CatPeer && orig[1] == 0x07:
+				ack, _ = protocol.RequestPeerDetails()
+			}
 		}
 		if ack.Bytes != nil && !halfDuplex {
 			l.expectWrite(t, ack)

@@ -45,6 +45,49 @@ func TestLateDisconnectDoesNotReachNewLink(t *testing.T) {
 	onDisconnect(l.addr) // and nothing breaks on a repeat
 }
 
+// A Totem first heard by its service UUID alone, with the name "totem" in a
+// later scan response, used to be reported only nameless, so -d totem never
+// matched it.
+func TestScanReportsANameThatArrivesLate(t *testing.T) {
+	var seen seenDevices
+	for _, tc := range []struct {
+		addr, name string
+		want       bool
+	}{
+		{"a", "", true},       // first heard, no name yet
+		{"a", "", false},      // nothing new
+		{"a", "totem", true},  // the name arrives
+		{"a", "totem", false}, // reported with its name already
+		{"a", "", false},      // a later nameless advertisement
+		{"b", "totem", true},  // named from the start
+		{"b", "", false},
+	} {
+		if got := seen.first(tc.addr, tc.name); got != tc.want {
+			t.Errorf("first(%q, %q) = %v, want %v", tc.addr, tc.name, got, tc.want)
+		}
+	}
+}
+
+// A connect that completes after its dial was canceled is dropped, unless a
+// newer link to the Totem exists: the OS shares one connection per device,
+// so dropping it would end the newer session.
+func TestLateConnectSparesANewerLink(t *testing.T) {
+	dropped := 0
+	disconnect := func() error { dropped++; return nil }
+
+	dropLateConnect("x", disconnect)
+	if dropped != 1 {
+		t.Fatalf("an orphaned connection was not dropped")
+	}
+	up := true
+	links.Store("x", testLink("x", &up))
+	defer links.Delete("x")
+	dropLateConnect("x", disconnect)
+	if dropped != 1 {
+		t.Fatal("dropping the late connection would have ended the newer link")
+	}
+}
+
 // If the OS cannot say, the callback is believed.
 func TestDisconnectWithUnknownState(t *testing.T) {
 	l := &bleLink{addr: "a", gone: make(chan struct{}), connected: func() (bool, error) { return false, errors.New("no such object") }}

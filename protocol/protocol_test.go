@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"reflect"
 	"strings"
@@ -424,6 +425,39 @@ func TestReviewFindings(t *testing.T) {
 	}
 	if f := SendPhoneFix(PhoneFix{HAcc: math.NaN()}); int8(f.Bytes[10]) != 127 {
 		t.Errorf("NaN accuracy sent as %d, want 127", int8(f.Bytes[10]))
+	}
+}
+
+// The firmware never sends NaN or ±Inf; a corrupt record with them decodes
+// as the firmware's "none" (0, no accuracy), which --json can print: the
+// JSON encoder rejects non-finite floats, which used to drop the record.
+func TestNonFiniteFloatsDecodeAsNone(t *testing.T) {
+	nan, inf := float32(math.NaN()), float32(math.Inf(1))
+	b, err := LiveData{Lat: nan, Lon: inf, BattVolts: nan, PosAccuracyM: &nan}.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := Parse(Data, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := m.(LiveData)
+	if d.Lat != 0 || d.Lon != 0 || d.BattVolts != 0 || d.PosAccuracyM != nil {
+		t.Errorf("live data = %+v", d)
+	}
+	if _, err := json.Marshal(d); err != nil {
+		t.Error(err)
+	}
+	b, err = PeerPing{Lat: nan, Lon: -inf, Volts: nan}.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, err := Parse(Data, b); err != nil {
+		t.Fatal(err)
+	} else if p := m.(PeerPing); p.Lat != 0 || p.Lon != 0 || p.Volts != 0 {
+		t.Errorf("peer ping = %+v", p)
+	} else if _, err := json.Marshal(p); err != nil {
+		t.Error(err)
 	}
 }
 

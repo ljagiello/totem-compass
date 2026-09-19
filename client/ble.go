@@ -76,8 +76,10 @@ func isTotemName(name string) bool {
 	return strings.HasPrefix(strings.ToLower(name), "totem")
 }
 
-// Scan reports every Totem it hears until ctx is done, each device once.
-// With all set it reports every BLE device instead.
+// Scan reports every Totem it hears until ctx is done: each device once,
+// and once more if its name arrives only after its first advertisement (in
+// a scan response). With all set it reports every BLE device instead. No
+// report comes after Scan returns.
 func Scan(ctx context.Context, all bool, found func(Device)) error {
 	if err := enable(); err != nil {
 		return err
@@ -85,8 +87,17 @@ func Scan(ctx context.Context, all bool, found func(Device)) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	var mu sync.Mutex
+	var (
+		mu      sync.Mutex
+		seen    seenDevices
+		stopped bool
+	)
+	defer func() {
+		// CoreBluetooth can still deliver an advertisement after StopScan.
+		mu.Lock()
+		stopped = true
+		mu.Unlock()
+	}()
 	scanDone := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() {
 		// StopScan fails until adapter.Scan has registered the scan, which
@@ -108,11 +119,9 @@ func Scan(ctx context.Context, all bool, found func(Device)) error {
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		key := r.Address.String()
-		if seen[key] {
+		if stopped || !seen.first(r.Address.String(), r.LocalName()) {
 			return
 		}
-		seen[key] = true
 		d := Device{Address: r.Address, Name: r.LocalName(), RSSI: r.RSSI}
 		for _, u := range r.ServiceUUIDs() {
 			d.Services = append(d.Services, u.String())
@@ -127,16 +136,33 @@ func Scan(ctx context.Context, all bool, found func(Device)) error {
 	})
 }
 
+// seenDevices remembers which devices Scan reported, and whether with a
+// name.
+type seenDevices map[string]bool // address -> reported with a name
+
+// first reports whether a device heard with this name is news: never
+// reported, or reported before its name was known.
+func (s *seenDevices) first(addr, name string) bool {
+	if *s == nil {
+		*s = seenDevices{}
+	}
+	named, ok := (*s)[addr]
+	if ok && (named || name == "") {
+		return false
+	}
+	(*s)[addr] = name != ""
+	return true
+}
+
 // ErrNotFound is returned by Find when no matching Totem advertised in time.
 var ErrNotFound = errors.New("no Totem found")
 
 // Find scans for the first Totem whose name or address contains match
 // (case-insensitive); an empty match takes the first Totem heard.
-func Find(ctx context.Context, match string) (Device, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func Find(parent context.Context, match string) (Device, error) {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	var dev *Device
-	parent := ctx
+	var dev *Device // written only by Scan's callback, which ends before Scan returns
 	err := Scan(ctx, false, func(d Device) {
 		if dev == nil && matches(d, match) {
 			dev = &d
@@ -234,7 +260,7 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 		// a connected Totem stops advertising and could not be found again.
 		go func() {
 			if r := <-done; r.err == nil {
-				_ = r.dev.Disconnect()
+				dropLateConnect(l.addr, r.dev.Disconnect)
 			}
 		}()
 		return nil, ctx.Err()
@@ -251,6 +277,16 @@ func dial(ctx context.Context, d Device) (*bleLink, error) {
 		return nil, err
 	}
 	return l, nil
+}
+
+// dropLateConnect disconnects a connection that completed after its dial
+// was canceled, unless a newer link to the same Totem exists: the OS keeps
+// one connection per device, so the disconnect would end that one.
+func dropLateConnect(addr string, disconnect func() error) {
+	if _, ok := links.Load(addr); ok {
+		return
+	}
+	_ = disconnect()
 }
 
 func (l *bleLink) discover() error {
@@ -302,7 +338,7 @@ func (l *bleLink) Close() error {
 	err := l.dev.Disconnect()
 	select {
 	case <-l.gone:
-	case <-time.After(250 * time.Millisecond):
+	case <-time.After(closeWait):
 	}
 	links.CompareAndDelete(l.addr, l)
 	l.markGone()

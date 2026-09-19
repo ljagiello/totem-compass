@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -275,12 +276,29 @@ func Parse(ch Channel, b []byte) (Message, error) {
 		// apart by whether it asked for a scan. Without that context: a
 		// frame starting ["  or [] is the list, anything else a chunk. (A
 		// chunk whose FileID is 0x225b or 0x5d5b would be misread.)
-		if len(b) > 3 && b[2] == '[' && (b[3] == '"' || b[3] == ']') {
+		if IsWiFiList(b) {
 			return parseWiFiNetworks(b[2:])
 		}
 		return parseFileChunk(b)
 	}
 	return unknown()
+}
+
+// IsWiFiList reports whether a (2,2) data frame is the WiFi list rather
+// than a file chunk, by its first bytes: [" or [].
+func IsWiFiList(frame []byte) bool {
+	return len(frame) > 3 && frame[0] == CatWiFi && frame[1] == 0x02 &&
+		frame[2] == '[' && (frame[3] == '"' || frame[3] == ']')
+}
+
+// finite returns f, or 0 for NaN and ±Inf. The firmware never sends those
+// (it packs 0 for a missing location or voltage), so they can only be
+// corruption; 0 reads as "none", and JSON could not carry them anyway.
+func finite(f float32) float32 {
+	if math.IsNaN(float64(f)) || math.IsInf(float64(f), 0) {
+		return 0
+	}
+	return f
 }
 
 // parseWiFiNetworks decodes the JSON list of SSIDs, keeping the complete
@@ -342,7 +360,7 @@ func parseLiveData(b []byte) (Message, error) {
 		return nil, err
 	}
 	d := LiveData{
-		SatCount: w.SatCount, Lat: w.Lat, Lon: w.Lon, BattVolts: w.BattVolts, BattPct: w.BattPct,
+		SatCount: w.SatCount, Lat: finite(w.Lat), Lon: finite(w.Lon), BattVolts: finite(w.BattVolts), BattPct: w.BattPct,
 		Channel: w.Channel, PowerMode: PowerMode(w.PowerBits & 0x07), PowerLevel: w.PowerLevel,
 		MaxHopCnt: w.MaxHopCnt, MeshRx: w.MeshRx, MeshRelayed: w.MeshRelayed,
 		Time: unixTime(w.Unix), ColorID: w.ColorID, Orientation: w.Orientation, SolutionID: w.Solution,
@@ -351,7 +369,7 @@ func parseLiveData(b []byte) (Message, error) {
 		SOS: bit(w.Flags, 0), Eco: bit(w.Flags, 1), FullBright: bit(w.Flags, 2), HasLocation: bit(w.Flags, 3),
 		LowBattery: bit(w.Flags, 4), Charging: bit(w.Flags, 5), MagCalNeeded: bit(w.Flags, 7),
 	}
-	if w.PAcc != -1 {
+	if w.PAcc != -1 && finite(w.PAcc) == w.PAcc {
 		d.PosAccuracyM = &w.PAcc
 	}
 	if w.Altitude != -500 {
@@ -395,11 +413,11 @@ func parsePeerPing(b []byte) (Message, error) {
 		return nil, err
 	}
 	p := PeerPing{
-		MeshHops: b[9], Lat: w.Lat, Lon: w.Lon, PosAccuracyM: w.PAcc, SpeedKPH: w.Speed,
+		MeshHops: b[9], Lat: finite(w.Lat), Lon: finite(w.Lon), PosAccuracyM: w.PAcc, SpeedKPH: w.Speed,
 		Bearing: w.Azimuth, Color: RGB{w.R, w.G, w.B}, DTIM: w.DTIM, RSSI: w.RSSI,
 		MsgRx: w.MsgRx, MsgTx: w.MsgTx, MeshRx: w.MeshRx, MeshSendCount: w.MeshSendCount,
 		LastUpdate: w.LastUpdate, LastCoords: unixTime(w.LastCoordsUnix), DistanceDiff: w.DistanceDiff,
-		Orientation: w.Orientation, Volts: w.Volts,
+		Orientation: w.Orientation, Volts: finite(w.Volts),
 		SOS: bit(w.FlagsA, 0), POI: bit(w.FlagsA, 1), ViaMesh: bit(w.FlagsA, 2), Stale: bit(w.FlagsA, 3),
 		Collected: bit(w.FlagsA, 4), Idle: bit(w.FlagsA, 5), Unknown: bit(w.FlagsA, 6),
 		Hidden: bit(w.FlagsB, 0), Locked: bit(w.FlagsB, 1),

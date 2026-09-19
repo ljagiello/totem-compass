@@ -749,6 +749,103 @@ func TestSendRespectsCallerDeadline(t *testing.T) {
 	}
 }
 
+// viper reads a bare number from the environment or a config file as a
+// duration in ns: `scan-timeout: 30` made every scan end at once. It is
+// rejected now, like anything under a second.
+func TestScanTimeoutSetting(t *testing.T) {
+	for in, want := range map[string]time.Duration{"30s": 30 * time.Second, "1.5s": 1500 * time.Millisecond, "2m": 2 * time.Minute} {
+		t.Setenv("TOTEM_SCAN_TIMEOUT", in)
+		h := newHarness()
+		h.mustRun(t, "info")
+		if h.g.scanTimeout != want {
+			t.Errorf("TOTEM_SCAN_TIMEOUT=%s: %v, want %v", in, h.g.scanTimeout, want)
+		}
+	}
+	for _, in := range []string{"30", "0", "5ms", "-3s", "soon"} {
+		t.Setenv("TOTEM_SCAN_TIMEOUT", in)
+		h := newHarness()
+		if err := h.run(t, "info"); err == nil || !strings.Contains(err.Error(), "scan-timeout") || h.dials != 0 {
+			t.Errorf("TOTEM_SCAN_TIMEOUT=%s: err %v, dials %d", in, err, h.dials)
+		}
+	}
+}
+
+// A mistyped MAC is rejected from the peer list in one round trip, not
+// after a fetchPeer timeout.
+func TestUnknownPeerFailsFast(t *testing.T) {
+	for _, args := range [][]string{
+		{"peer", "hide", "0a0b0c0d0e0f"},
+		{"peer", "select", "0a0b0c0d0e0f"},
+		{"poi", "delete", "0a0b0c0d0e0f"},
+	} {
+		h := newHarness()
+		withPeers(h)
+		start := time.Now()
+		err := h.run(t, args...)
+		if !errors.Is(err, errNoPeer) {
+			t.Errorf("%v: %v", args, err)
+		}
+		if d := time.Since(start); d > time.Second {
+			t.Errorf("%v took %v", args, d)
+		}
+	}
+}
+
+// A peer edit's result is output (stdout, JSON with --json), not progress.
+func TestPeerEditPrintsResult(t *testing.T) {
+	h := newHarness()
+	withPeers(h)
+	h.mustRun(t, "--json", "peer", "color", peerA.String(), "blue")
+	var line struct {
+		Type string
+		Data struct{ MAC string }
+	}
+	if err := json.Unmarshal(h.out.Bytes(), &line); err != nil || line.Type != "PeerPing" || line.Data.MAC != peerA.String() {
+		t.Errorf("--json peer color printed %q (%v)", h.out.String(), err)
+	}
+
+	h = newHarness()
+	withPeers(h)
+	h.mustRun(t, "-q", "peer", "hide", peerA.String())
+	if !strings.Contains(h.out.String(), "hidden") {
+		t.Errorf("-q hid the result: %q", h.out.String())
+	}
+}
+
+// Peers with the same name come out in one order, by MAC.
+func TestPeersOrderIsStable(t *testing.T) {
+	for range 5 {
+		h := newHarness()
+		h.totem.Peers = []protocol.PeerPing{
+			{MAC: protocol.MAC{2, 3}, Name: "Stage", POI: true, RSSI: 100},
+			{MAC: protocol.MAC{2, 1}, Name: "Stage", POI: true, RSSI: 100},
+			{MAC: protocol.MAC{2, 2}, Name: "Stage", POI: true, RSSI: 100},
+		}
+		h.mustRun(t, "peers")
+		lines := strings.Split(strings.TrimSpace(h.out.String()), "\n")
+		if len(lines) != 3 || !strings.HasPrefix(lines[0], "0201") || !strings.HasPrefix(lines[1], "0202") || !strings.HasPrefix(lines[2], "0203") {
+			t.Fatalf("order:\n%s", h.out.String())
+		}
+	}
+}
+
+// settle waits for Live Data the device sent after the command; one still
+// queued from before used to count, so deletes reported success at once.
+func TestSettleIgnoresQueuedLiveData(t *testing.T) {
+	h := newHarness()
+	s := h.session(t)
+	time.Sleep(50 * time.Millisecond) // Live Data piles up unread
+	if err := s.send(protocol.StopPeerManagement()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.settle(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.eventAt.After(s.sentAt) {
+		t.Errorf("settle returned on Live Data from %v, before the send at %v", s.eventAt, s.sentAt)
+	}
+}
+
 // `poi delete` sends a frame that deletes any peer: it must refuse a
 // bonded Totem, which only re-bonding in person restores.
 func TestPOIDeleteOnlyDeletesPOIs(t *testing.T) {

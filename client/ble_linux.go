@@ -4,6 +4,11 @@ package client
 
 import "time"
 
+// closeWait is how long Close waits for the disconnect callback. None here:
+// tinygo's BlueZ backend runs the handler inside Disconnect, before the
+// link is down, so the callback cannot confirm anything.
+const closeWait = 0
+
 // watchLink polls the connection state until the link goes. BlueZ reports a
 // disconnect only as a D-Bus property change, which tinygo's central role
 // does not pass to the connect handler: a Totem dropping the link (e.g. to

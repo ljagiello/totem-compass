@@ -214,7 +214,13 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 		}
 	}
 	g.device = v.GetString("device")
+	// viper (via spf13/cast) reads a number without a unit as nanoseconds,
+	// so `scan-timeout: 30` would end every scan at once: require a real
+	// duration.
 	g.scanTimeout = v.GetDuration("scan-timeout")
+	if g.scanTimeout < time.Second {
+		return fmt.Errorf("scan-timeout %q: want a duration with a unit, at least 1s (e.g. 60s or 2m)", v.GetString("scan-timeout"))
+	}
 	g.halfDuplex = v.GetBool("half-duplex")
 	g.blink = nil
 	if b := v.GetString("blink"); b != "" {

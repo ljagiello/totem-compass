@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -181,7 +182,13 @@ func newPeersCmd(g *globals) *cobra.Command {
 			for m := range s.peers {
 				macs = append(macs, m)
 			}
-			slices.SortFunc(macs, func(a, b protocol.MAC) int { return strings.Compare(s.peers[a].Name, s.peers[b].Name) })
+			// By name, then MAC, so peers with the same name keep one order.
+			slices.SortFunc(macs, func(a, b protocol.MAC) int {
+				if c := strings.Compare(s.peers[a].Name, s.peers[b].Name); c != 0 {
+					return c
+				}
+				return bytes.Compare(a[:], b[:])
+			})
 			for _, m := range macs {
 				if g.out.json {
 					g.out.emit(s.peers[m])
@@ -520,6 +527,9 @@ func newPeerCmd(g *globals) *cobra.Command {
 				return err
 			}
 			defer s.close()
+			if err := s.requirePeer(mac); err != nil {
+				return err
+			}
 			p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
 			if err != nil {
 				return err
@@ -550,6 +560,9 @@ func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*
 		return err
 	}
 	defer s.close()
+	if err := s.requirePeer(mac); err != nil {
+		return err
+	}
 	p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
 	if err != nil {
 		return err
@@ -571,13 +584,17 @@ func updatePeer(ctx context.Context, g *globals, mac protocol.MAC, change func(*
 	p, err = s.fetchPeer(mac, g.wait(30*time.Second), func(p protocol.PeerPing) bool {
 		return p.Color == upd.Color && p.Hidden == upd.Hidden
 	})
-	if errors.Is(err, errTimeout) {
+	switch {
+	case errors.Is(err, errUnconfirmed):
 		return fmt.Errorf("sent, but the Totem still reports colour %s hidden %v", p.Color, p.Hidden)
+	case err != nil:
+		return fmt.Errorf("sent, but could not confirm the change: %w", err)
 	}
-	if err != nil {
-		return err
+	if g.out.json {
+		g.out.emit(p)
+	} else {
+		g.out.println(peerLine(p))
 	}
-	g.out.status("%s", peerLine(p))
 	return nil
 }
 
@@ -625,7 +642,11 @@ func newPOICmd(g *globals) *cobra.Command {
 			if err := s.send(f); err != nil {
 				return err
 			}
-			p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second), nil)
+			// A ping sent before the frame was applied (the old POI under this
+			// id, say) may still be queued: wait for one that shows this POI.
+			p, err := s.fetchPeer(poi.ID, g.wait(30*time.Second), func(p protocol.PeerPing) bool {
+				return p.POI && p.Name == poi.Name && p.Lat == poi.Lat && p.Lon == poi.Lon
+			})
 			if err != nil {
 				return fmt.Errorf("sent, but the Totem did not list the POI: %w", err)
 			}
@@ -663,6 +684,9 @@ func newPOICmd(g *globals) *cobra.Command {
 			defer s.close()
 			// The delete frame removes any peer: make sure this one is a POI,
 			// since a deleted bond needs the Totems side by side to restore.
+			if err := s.requirePeer(mac); err != nil {
+				return err
+			}
 			p, err := s.fetchPeer(mac, g.wait(30*time.Second), nil)
 			if err != nil {
 				return err

@@ -23,6 +23,9 @@ type session struct {
 	peers map[protocol.MAC]protocol.PeerPing
 	// echo prints every message as it is received (watch mode).
 	echo bool
+	// sentAt is when the last send completed, eventAt when the event being
+	// matched arrived: settle tells fresh records from queued ones by them.
+	sentAt, eventAt time.Time
 }
 
 // open connects to the Totem and sends the Ready handshake.
@@ -94,6 +97,9 @@ func (s *session) sendBy(deadline time.Time, frames ...protocol.Frame) error {
 	if errors.Is(err, context.DeadlineExceeded) && s.ctx.Err() == nil {
 		return fmt.Errorf("%w: %w", errTimeout, err)
 	}
+	if err == nil {
+		s.sentAt = time.Now()
+	}
 	return err
 }
 
@@ -121,6 +127,7 @@ func (s *session) awaitCtx(ctx context.Context, match func(protocol.Message) boo
 				s.g.log.Warn("bad frame", "channel", ev.Channel, "data", hex.EncodeToString(ev.Raw), "err", ev.Err)
 				continue
 			}
+			s.eventAt = ev.At
 			s.track(ev.Msg)
 			if s.echo {
 				s.out.message(ev.Msg)
@@ -153,72 +160,84 @@ func (s *session) track(m protocol.Message) {
 
 func is[T protocol.Message](m protocol.Message) bool { _, ok := m.(T); return ok }
 
-// fetchStatic requests Static Data and waits until check accepts a record.
-// Records sent before a change may still be queued, so it keeps reading and
-// only asks again after a quiet spell (a setting can take a moment to apply).
-func (s *session) fetchStatic(timeout time.Duration, check func(protocol.StaticData) bool) (protocol.StaticData, error) {
-	accept := func(m protocol.Message) bool {
-		d, ok := m.(protocol.StaticData)
-		return ok && (check == nil || check(d))
+// fetch sends req and reads records until accept takes one, asking again
+// after a quiet spell, until the timeout: records sent before a change may
+// still be queued, and a change can take a moment to apply. It returns the
+// accepted record, or an error wrapping errTimeout.
+func fetch[T protocol.Message](s *session, req protocol.Frame, timeout time.Duration, accept func(T) bool) (T, error) {
+	var zero T
+	match := func(m protocol.Message) bool {
+		v, ok := m.(T)
+		return ok && accept(v)
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := s.sendBy(deadline, protocol.RequestStaticData()); err != nil {
-			return protocol.StaticData{}, err
+		if err := s.sendBy(deadline, req); err != nil {
+			return zero, err
 		}
-		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
+		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), match)
 		if err == nil {
-			return m.(protocol.StaticData), nil
+			return m.(T), nil
 		}
 		if !errors.Is(err, errTimeout) || !time.Now().Before(deadline) {
-			return protocol.StaticData{}, err
+			return zero, err
 		}
 	}
 }
 
-// errNoPeer is returned by fetchPeer when the Totem sent no ping for the MAC.
-var errNoPeer = errors.New("no such peer")
+// fetchStatic requests Static Data until check accepts a record (nil
+// accepts any).
+func (s *session) fetchStatic(timeout time.Duration, check func(protocol.StaticData) bool) (protocol.StaticData, error) {
+	return fetch(s, protocol.RequestStaticData(), timeout, func(d protocol.StaticData) bool {
+		return check == nil || check(d)
+	})
+}
+
+var (
+	// errNoPeer: the Totem does not list the MAC.
+	errNoPeer = errors.New("no such peer")
+	// errUnconfirmed: the Totem kept reporting a peer, but not as asked.
+	errUnconfirmed = errors.New("change not confirmed")
+)
 
 // fetchPeer requests Peer Pings for mac until check accepts one (nil
-// accepts any). Like fetchStatic, it keeps reading, since pings queued
-// before a change may still arrive, and asks again after a quiet spell. If
-// pings came but none passed, it returns the last one with errTimeout.
+// accepts any). If pings came but none passed check, it returns the last
+// one with errUnconfirmed; if none came, an error wrapping errTimeout.
 func (s *session) fetchPeer(mac protocol.MAC, timeout time.Duration, check func(protocol.PeerPing) bool) (protocol.PeerPing, error) {
 	req, err := protocol.RequestPeerDetails(mac)
 	if err != nil {
 		return protocol.PeerPing{}, err
 	}
 	var last *protocol.PeerPing
-	accept := func(m protocol.Message) bool {
-		p, ok := m.(protocol.PeerPing)
-		if !ok || p.MAC != mac {
+	p, err := fetch(s, req, timeout, func(p protocol.PeerPing) bool {
+		if p.MAC != mac {
 			return false
 		}
 		last = &p
 		return check == nil || check(p)
+	})
+	switch {
+	case err == nil:
+		return p, nil
+	case errors.Is(err, errTimeout) && last != nil:
+		return *last, errUnconfirmed
+	case errors.Is(err, errTimeout):
+		return protocol.PeerPing{}, fmt.Errorf("no Peer Ping from the Totem for %s: %w", mac, err)
 	}
-	deadline := time.Now().Add(timeout)
-	for {
-		if err := s.sendBy(deadline, req); err != nil {
-			if errors.Is(err, errTimeout) && last != nil {
-				return *last, errTimeout
-			}
-			return protocol.PeerPing{}, err
-		}
-		m, err := s.await(min(time.Until(deadline), s.g.wait(3*time.Second)), accept)
-		if err == nil {
-			return m.(protocol.PeerPing), nil
-		}
-		if !errors.Is(err, errTimeout) {
-			return protocol.PeerPing{}, err
-		}
-		if !time.Now().Before(deadline) {
-			if last == nil {
-				return protocol.PeerPing{}, fmt.Errorf("%w: %s is not on this Totem (see `totemctl peers`)", errNoPeer, mac)
-			}
-			return *last, errTimeout
-		}
+	return protocol.PeerPing{}, err
+}
+
+// requirePeer fails fast if the Totem does not list mac, instead of
+// waiting out a fetchPeer timeout for a mistyped MAC.
+func (s *session) requirePeer(mac protocol.MAC) error {
+	macs, err := s.peerList()
+	if err != nil {
+		return err
 	}
+	if !slices.Contains(macs, mac) {
+		return fmt.Errorf("%w: %s is not on this Totem (see `totemctl peers`)", errNoPeer, mac)
+	}
+	return nil
 }
 
 // peerList returns the bonded peers (and POIs) the Totem lists.
@@ -260,10 +279,13 @@ func (s *session) refuseBond(mac protocol.MAC) error {
 
 // settle waits until the device has had a chance to act on what was just
 // sent: its next TX handoff in half-duplex mode, or its next Live Data
-// record (one pass of the send loop) in legacy mode.
+// record (one pass of the send loop) in legacy mode. A record received
+// before the send, still queued, does not count.
 func (s *session) settle() error {
 	if !s.c.HalfDuplex() {
-		_, err := s.await(s.g.wait(10*time.Second), is[protocol.LiveData])
+		_, err := s.await(s.g.wait(10*time.Second), func(m protocol.Message) bool {
+			return is[protocol.LiveData](m) && s.eventAt.After(s.sentAt)
+		})
 		if errors.Is(err, errTimeout) {
 			return nil // commands are processed independently of the send loop
 		}
