@@ -290,11 +290,19 @@ func FuzzInput(f *testing.F) {
 		now := h.now.Add(bootDebounce)
 		for _, s := range steps {
 			in := Input(s % 3)
-			switch s % 3 {
+			// Tap and HoldFor are in here too: the console reaches the
+			// recogniser through them, and a tap followed by a hold once
+			// spun HoldFor for ever. A hang shows up as the test timing
+			// out, which is the right way to find out.
+			switch s % 6 {
 			case 0:
 				h.n.Press(in, now)
 			case 1:
 				h.n.Release(in, now)
+			case 2:
+				h.n.Tap(in, 1+int(s%3), now)
+			case 3:
+				h.collect(h.n.HoldFor(in, time.Duration(1+s%50)*100*time.Millisecond, now))
 			default:
 				h.n.pollInputs(now)
 			}
