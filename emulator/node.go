@@ -244,6 +244,9 @@ type Node struct {
 	// 5 ms, and a driver stuck out of range would otherwise say the same
 	// thing two hundred times a second for as long as the board is on.
 	saidVolts, saidPct, saidAzimuth bool
+	// azimuth is the last compass reading that was a bearing, which is
+	// what a reading that is not one falls back to.
+	azimuth int16
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
 	// given the default one made from its MAC. A saved name does not
@@ -586,25 +589,38 @@ func (n *Node) read(now time.Time) {
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
+	// An orientation the frame has a meaning for. New settles this for
+	// what it is given and a source set later never passed through it,
+	// so a driver that leaves the field alone reported "unknown" to
+	// every peer — and Config(), which answers from the reading now,
+	// handed it out as well.
+	if n.sensors.Orientation == mesh.OrientationUnknown {
+		n.sensors.Orientation = mesh.OrientationVertical
+	}
 	// A bearing that is one, wherever the reading came from: a config, a
 	// driver or a simulation. SetHeading refuses its own argument, but
 	// that is one door of several, and an azimuth of 900 reaches every
 	// status frame through any of the others.
 	//
-	// Brought into range rather than zeroed. The field has no value
-	// meaning "unknown" — HeadingOfMotion and PosAccuracyM carry -1 for
-	// that and this one does not — so zeroing it would have the device
-	// tell every peer it points due north, which is a bearing someone
-	// could act on. 900° is 180°, and that is the best this can say
-	// about a reading that is otherwise thrown away.
+	// The last one that was a bearing is kept, rather than a new one
+	// being made up. This field has no value meaning "unknown" — the
+	// ones beside it carry -1 for that and this one does not — so
+	// whatever goes here is a direction every peer's compass will point
+	// in. Zeroing says due north. Folding modulo 360 is right for an
+	// angle that genuinely wrapped, and wrong for everything else: -1 is
+	// what this package writes when it means "no value", and folding
+	// turns it into 359, one degree west of north, which SetHeading
+	// refuses outright as not a bearing. Keeping the last accepted
+	// reading says only what the compass last really saw.
 	if a := n.sensors.Azimuth; a < 0 || a > 359 {
-		was := a
-		n.sensors.Azimuth = ((a % 360) + 360) % 360
 		if !n.saidAzimuth {
 			n.saidAzimuth = true
-			n.log.Warn("heading is outside a full turn, bringing it into one",
-				"heading", was, "using", n.sensors.Azimuth)
+			n.log.Warn("heading is not a bearing, keeping the last one that was",
+				"heading", a, "using", n.azimuth)
 		}
+		n.sensors.Azimuth = n.azimuth
+	} else {
+		n.azimuth = a
 	}
 	// A reading the frame can carry, asked of every reading rather than
 	// of the config alone: a source set later — SetSensors takes a real

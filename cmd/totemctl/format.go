@@ -48,6 +48,14 @@ func (p *printer) status(format string, args ...any) {
 // time it prints something new.
 func (p *printer) emit(v any) {
 	t := reflect.TypeOf(v)
+	if t == nil {
+		// A nil interface, which reflect has no type for: asking it for
+		// a name panics, and this is the mode a stream is watched in.
+		// The text mode degrades quietly on the same value, so crashing
+		// only here is the asymmetry the fallback below exists to end.
+		p.println(`{"type":"","error":"nothing to encode"}`)
+		return
+	}
 	b, err := json.Marshal(struct {
 		Type string `json:"type"`
 		Data any    `json:"data"`

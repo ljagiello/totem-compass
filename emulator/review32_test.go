@@ -119,15 +119,73 @@ func TestSetBatteryAndHeadingReportTheirRefusals(t *testing.T) {
 	if err := h.n.SetHeading(900, h.now); err == nil {
 		t.Error("SetHeading(900) was accepted")
 	}
-	// And nothing moved on the way to being refused — asked of the frame
-	// the device would send, which is what a peer would see, rather than
-	// of the reading: both setters return before anything reads the
-	// sensors at all, so a check there cannot fail whatever they do.
-	f := h.n.status(h.now, mesh.PeerStatus, false)
-	if f.BattPct != was.Battery.Percent || f.Azimuth != was.Azimuth {
-		t.Errorf("a refused setting reached the air: batt %d%%, azimuth %d", f.BattPct, f.Azimuth)
-	}
+	// Nothing is asserted about the reading here. Both setters return
+	// before anything touches the sensors, so a check on them — or on
+	// the frame, which status() builds from the same sensors — cannot
+	// fail whatever the setters do. What matters is that a value that
+	// gets past a setter does not reach the air, and that is
+	// TestAHeadingThatIsNotABearing, which drives one in through a door
+	// with no check on it at all.
+	_ = was
 	if err := h.n.SetPosition(&Position{Lat: 91, Lon: 0}, h.now); err == nil {
 		t.Error("SetPosition(91) was accepted")
+	}
+}
+
+// TestASentinelIsNotABearing: the compass field has no value meaning
+// "unknown", and -1 is what this package writes when it means that —
+// HeadingOfMotion, SpeedKPH and PosAccuracyM all use it. Folding an
+// out-of-range reading modulo 360 turned that -1 into 359, one degree
+// west of north, and put it on the air as a direction every peer's
+// compass would point in. SetHeading refuses -1 outright, so the two
+// doors disagreed about the same value.
+func TestASentinelIsNotABearing(t *testing.T) {
+	pack := Battery{Volts: 4.1, Percent: 90}
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Azimuth: 187, Battery: pack})
+	})
+	h.advance(time.Second)
+	if got := h.n.Sensors().Azimuth; got != 187 {
+		t.Fatalf("the compass reads %d before anything went wrong", got)
+	}
+
+	for _, bad := range []int16{-1, -30, 360, 900, -32768} {
+		h.n.SetSensors(NewStatic(Sensors{Azimuth: bad, Battery: pack}), h.now)
+		got := h.n.Sensors().Azimuth
+		if got < 0 || got > 359 {
+			t.Errorf("a reading of %d came back as %d, which is not a bearing", bad, got)
+		}
+		if got != 187 {
+			t.Errorf("a reading of %d became %d; the last bearing the compass saw was 187", bad, got)
+		}
+		// And it is not on the air either.
+		if f := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; f != 187 {
+			t.Errorf("a reading of %d reached the air as %d", bad, f)
+		}
+	}
+
+	// A real bearing still takes.
+	h.n.SetSensors(NewStatic(Sensors{Azimuth: 42, Battery: pack}), h.now)
+	if got := h.n.Sensors().Azimuth; got != 42 {
+		t.Errorf("a bearing of 42 came back as %d", got)
+	}
+}
+
+// TestAnOrientationTheFrameHasAMeaningFor: New settles this for what it
+// is given, and a source set later never passes through New — so a
+// driver that leaves the field alone told every peer "unknown", and
+// Config() handed the same out through the front door.
+func TestAnOrientationTheFrameHasAMeaningFor(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Battery: Battery{Volts: 4.1, Percent: 90}})
+	})
+	if got := h.n.Sensors().Orientation; got == mesh.OrientationUnknown {
+		t.Error("a source that said nothing about orientation was left saying unknown")
+	}
+	if got := h.n.Config().Orientation; got == mesh.OrientationUnknown {
+		t.Error("Config reports an orientation of unknown")
+	}
+	if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got == mesh.OrientationUnknown {
+		t.Error("a status frame carried an orientation of unknown")
 	}
 }

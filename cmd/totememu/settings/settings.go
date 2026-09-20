@@ -202,11 +202,11 @@ func (s *Store) Save(n *emulator.Node) {
 // needs writing: the state with its free-running counters zeroed.
 //
 // One function for the three places that make one, because a nil is
-// worth the same warning wherever it happens. It cannot happen today —
-// SettingsKey encodes a state that has already marshaled — but a nil
-// key stored is a Store whose next save compares nil against nil, finds
-// them equal, and returns having written nothing and said nothing. A
-// fault nobody can see is worse than a branch nobody reaches.
+// worth the same warning wherever it happens — and two of them used to
+// store it without a word. It cannot happen today: SettingsKey encodes
+// a state that has already marshaled. The warning is here so that if it
+// ever does, the console says so rather than a save quietly writing
+// nothing.
 func (s *Store) keyOf(st store.State) []byte {
 	key := emulator.SettingsKey(st)
 	if key == nil {

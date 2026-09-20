@@ -618,7 +618,8 @@ func (p *printer) meshFrame(f MeshFrame, raw bool) {
 		// The raw hex is on the line either way, and it is the record
 		// that matters.
 		if _, err := json.Marshal(f.Frame); err != nil {
-			f.Frame, f.Error = nil, fmt.Sprintf("decoded frame cannot be written as JSON: %v", err)
+			f.Frame = nil
+			f.Error = fmt.Sprintf("decoded frame cannot be written as JSON: %v", err)
 		}
 		p.emit(f)
 		return
