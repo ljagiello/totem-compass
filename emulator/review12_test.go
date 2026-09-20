@@ -114,6 +114,14 @@ func TestNewTakesItsOwnCopies(t *testing.T) {
 // forgotten stretch stands until the next poll and then jumps.
 func TestAFactoryResetForgetsThePack(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.25, 100 })
+	// On the charger and settled there: the maximum is learned from the
+	// top of a charge, so it takes a poll to see the peak rise and
+	// another to see it stop.
+	if err := h.n.SetBattery(100, true, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.collect(h.n.Poll(h.now))
+	h.advance(time.Second)
 	h.collect(h.n.Poll(h.now))
 	if h.n.Power().LearnedMaxVolts() == 0 {
 		t.Fatal("nothing was learned to forget")
@@ -141,14 +149,31 @@ func TestAFactoryResetForgetsThePack(t *testing.T) {
 	}
 	h.n.SetSensors(NewStatic(Sensors{Battery: Battery{Volts: 4.15, Percent: 100}}), h.now)
 	h.n.FactoryReset(h.now)
-	// The reset drops the memory and the reading that follows measures
-	// the pack that is actually there — so what is left is the new pack,
-	// never the old one.
+	// The reset drops the memory, and nothing takes its place until the
+	// pack is charged again: a maximum is the top of a charge, so a
+	// device merely running on a battery has nothing to say about where
+	// that pack tops out. This used to read it straight off the next
+	// reading, which is what made the old learned maximum meaningless —
+	// it was the highest voltage seen rather than a charge ceiling.
+	if got := h.n.Power().LearnedMaxVolts(); got != 0 {
+		t.Errorf("a reset kept %v, which is the pack it was told to forget", got)
+	}
+	h.collect(h.n.Poll(h.now))
+	if got := h.n.Power().LearnedMaxVolts(); got != 0 {
+		t.Errorf("a reading off the battery taught it a maximum of %v", got)
+	}
+
+	// On the charger, settled, it learns the new pack — and the new pack
+	// only, less the margin the firmware keeps.
+	h.n.SetSensors(NewStatic(Sensors{Battery: Battery{Volts: 4.15, Percent: 100, Charging: true}}), h.now)
+	h.collect(h.n.Poll(h.now))
+	h.advance(time.Second)
+	h.collect(h.n.Poll(h.now))
 	got := h.n.Power().LearnedMaxVolts()
 	if got == 0 {
-		t.Error("nothing was learned from the pack that is there")
+		t.Fatal("a settled charge taught it nothing")
 	}
-	if got > 4.16 {
-		t.Errorf("a reset kept %v, which is the pack it was told to forget", got)
+	if got > 4.15-battMaxMargin+0.001 || got < 4.15-battMaxMargin-0.001 {
+		t.Errorf("a %v V pack was learned as %v, want %v", 4.15, got, 4.15-battMaxMargin)
 	}
 }

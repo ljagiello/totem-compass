@@ -61,20 +61,33 @@ func manyOwned() []mesh.MAC {
 	return out
 }
 
-// TestTheLearnedMaximumStretchesTheCurve: a pack that charges above the
-// curve's own top read 100% all the way down to 4.12 V, so the first
-// tenth of a volt of discharge looked like none at all. That is what
-// learning the maximum is for.
-func TestTheLearnedMaximumStretchesTheCurve(t *testing.T) {
-	const top = float32(4.25)
-	if got := battPctFor(4.15, 0); got != 100 {
-		t.Errorf("without a learned maximum, 4.15 V reads %d%%, want 100%%", got)
+// TestTheLearnedMaximumScalesTheCurve: what the learned maximum is for,
+// now that it does what the firmware's does.
+//
+// This test used to assert the opposite — that a pack charging above
+// 4.12 V made 4.15 V read under 100%, so the first tenth of a volt of
+// discharge would show. get_batt_pct does not do that. Its rescale fires
+// only when the learned maximum is *below* the table's top, and it lifts
+// the reading so an aging pack's own ceiling still reads full; above the
+// top there is no rescale and a flat 100%. The Totem next to this one
+// reports 4.48 V and 100%, which is the same statement from the device.
+func TestTheLearnedMaximumScalesTheCurve(t *testing.T) {
+	// Above the table's top: no rescale, and full all the way down to it.
+	const high = float32(4.25)
+	for _, v := range []float32{4.12, 4.15, high} {
+		if got := battPctFor(v, high); got != 100 {
+			t.Errorf("a pack that reaches %v V reads %d%% at %v V, want 100%%", high, got, v)
+		}
 	}
-	if got := battPctFor(4.15, top); got >= 100 {
-		t.Errorf("a pack that reaches %v V still reads %d%% at 4.15 V", top, got)
+	// Below it: the reading is scaled up against the pack's own ceiling.
+	const worn = float32(3.95)
+	if got := battPctFor(worn, worn); got != 100 {
+		t.Errorf("a pack that tops out at %v V reads %d%% there, want 100%%", worn, got)
 	}
-	if got := battPctFor(top, top); got != 100 {
-		t.Errorf("a pack at its own maximum reads %d%%", got)
+	plain, scaled := battPctFor(3.80, 0), battPctFor(3.80, worn)
+	if scaled <= plain {
+		t.Errorf("3.80 V reads %d%% unscaled and %d%% against a %v V pack: not lifted",
+			plain, scaled, worn)
 	}
 }
 

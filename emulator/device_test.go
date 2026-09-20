@@ -160,7 +160,11 @@ func TestBatteryCurve(t *testing.T) {
 		volts float32
 		want  int8
 	}{
-		{4.20, 100}, {4.12, 100}, {4.00, 86}, {3.80, 50}, {3.30, 0}, {3.00, 0},
+		// 3.30 V is 2%, not 0: the table's flat end is 3.19 V, which the
+		// six-point curve this replaced put at 3.30. The points above it
+		// are unchanged, because those were the ones the curve was fitted
+		// through in the first place.
+		{4.20, 100}, {4.12, 100}, {4.00, 86}, {3.80, 50}, {3.30, 2}, {3.19, 0}, {3.00, 0},
 	}
 	for _, tt := range tests {
 		if got := battPctFor(tt.volts, 0); got != tt.want {

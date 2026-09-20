@@ -333,24 +333,34 @@ func (s *Sim) battery(now time.Time) Battery {
 // table get_batt_pct does, the other way, so a level set by hand and the
 // voltage reported with it agree: a straight line from 3.3 V to 4.2 V
 // would say 3.75 V at 50%, where the curve reads that as 41%.
+//
+// The table runs from the top of the pack down and holds raw levels
+// rather than percentages, so each entry's percentage comes from
+// battPctOf, exactly as the forward direction takes it.
 func voltsFor(percent int8) float32 {
-	p := min(max(percent, 0), 100)
-	switch {
-	case p <= battCurve[0].pct:
-		return battCurve[0].volts
-	case p >= battCurve[len(battCurve)-1].pct:
-		return battCurve[len(battCurve)-1].volts
+	p := int32(min(max(percent, 0), 100))
+	last := len(battCurve) - 1
+	mv := func(i int) float32 { return float32(battCurve[i].mv) / 1000 }
+	if p >= battPctOf(battCurve[0].raw) {
+		return mv(0)
 	}
-	for i := 1; i < len(battCurve); i++ {
-		hi := battCurve[i]
-		if p > hi.pct {
+	if p <= battPctOf(battCurve[last].raw) {
+		return mv(last)
+	}
+	// hi is the entry above lo, since the table descends.
+	for i := 1; i <= last; i++ {
+		lo, hi := battCurve[i], battCurve[i-1]
+		loPct, hiPct := battPctOf(lo.raw), battPctOf(hi.raw)
+		if p < loPct {
 			continue
 		}
-		lo := battCurve[i-1]
-		span := float32(hi.pct - lo.pct)
-		return lo.volts + (hi.volts-lo.volts)*float32(p-lo.pct)/span
+		if hiPct == loPct {
+			return mv(i)
+		}
+		span := float32(hiPct - loPct)
+		return mv(i) + (mv(i-1)-mv(i))*float32(p-loPct)/span
 	}
-	return battCurve[len(battCurve)-1].volts
+	return mv(last)
 }
 
 // solutionFor is gnss_data.solution_id from the position accuracy.

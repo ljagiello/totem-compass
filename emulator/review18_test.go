@@ -94,6 +94,13 @@ func TestAPowerCycleOwesNoMeshReply(t *testing.T) {
 func TestAPowerCycleStartsTheCountersAgain(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.25, 100 })
 	h.advance(bootDebounce)
+	// On the charger and settled: the maximum comes from the top of a
+	// charge, so one poll sees the peak rise and the next sees it hold.
+	if err := h.n.SetBattery(100, true, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.collect(h.n.Poll(h.now))
+	h.advance(time.Second)
 	h.collect(h.n.Poll(h.now))
 	if h.n.Power().LearnedMaxVolts() == 0 {
 		t.Fatal("nothing was learned to lose")

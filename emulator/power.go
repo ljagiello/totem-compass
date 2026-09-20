@@ -69,64 +69,120 @@ const (
 	otaMinPct = 30
 )
 
-// battCurve is peripherals.get_batt_pct: cell voltage to percentage,
-// piecewise linear. v5.0.3 recalibrated it so that 4.12 V reads 100%
-// (v5.0.2 read 61% there), and the points below come from that curve:
-// 3.8 V is 50% and 4.0 V is 86%. The shape between them is linear, as the
-// table's segments are.
-var battCurve = []struct {
-	volts float32
-	pct   int8
-}{
-	{3.30, 0},
-	{3.50, 10},
-	{3.65, 25},
-	{3.80, 50},
-	{4.00, 86},
-	{4.12, 100},
+// battCurve is peripherals.get_batt_pct's own breakpoint table, decoded
+// out of the 232-byte blob the v5.0.3 bytecode carries as a constant: 58
+// pairs of millivolts and a raw level, each a little-endian u16, running
+// from the top of the pack down. What stood here before was a six-point
+// approximation of the same shape, inferred before the blob was read.
+//
+// The percentage is always round(raw / battFullScale * 100), so the
+// table's own numbers are levels rather than percentages, and the
+// rounding is the firmware's integer arithmetic rather than ours.
+var battCurve = [...]struct{ mv, raw int32 }{
+	{4120, 605}, {4100, 590}, {4080, 580}, {4070, 570},
+	{4050, 560}, {4030, 550}, {4020, 540}, {4010, 530},
+	{4000, 520}, {3990, 510}, {3980, 500}, {3970, 490},
+	{3960, 480}, {3950, 470}, {3940, 455}, {3930, 440},
+	{3920, 430}, {3910, 420}, {3900, 410}, {3890, 400},
+	{3880, 390}, {3870, 380}, {3860, 370}, {3850, 360},
+	{3840, 350}, {3830, 340}, {3820, 330}, {3810, 320},
+	{3800, 305}, {3790, 290}, {3780, 280}, {3770, 270},
+	{3760, 260}, {3750, 250}, {3740, 235}, {3730, 220},
+	{3720, 210}, {3710, 200}, {3700, 190}, {3680, 180},
+	{3670, 170}, {3660, 160}, {3640, 150}, {3630, 140},
+	{3610, 130}, {3600, 120}, {3590, 110}, {3570, 100},
+	{3550, 90}, {3540, 80}, {3530, 70}, {3510, 60},
+	{3500, 50}, {3470, 40}, {3430, 30}, {3360, 20},
+	{3280, 10}, {3190, 0},
 }
 
-// battPctFor maps a cell voltage to a percentage along that curve. top
-// is the highest this pack has been seen at, which stretches the last
-// segment when a pack charges above the curve's own top — otherwise
-// everything from 4.12 V upwards reads 100% and the first tenth of a
-// volt of discharge looks like no discharge at all. Zero means nothing
-// has been learned yet, and the curve is used as written.
-func battPctFor(v float32, top float32) int8 {
-	last := len(battCurve) - 1
-	// The last point moves out to what this pack reaches; it does not
-	// gain a segment of its own. A segment added above the curve's top
-	// left the one below it unstretched, so the two met at different
-	// percentages and the gauge dipped seven points at 4.12 V — 99% then
-	// 92% climbing, and back up again on the way down.
-	full := battCurve[last].volts
-	// plausibleVolts again, although learn() gates on it too: a caller
-	// can hand a Power an implausible top through the config, and a
-	// curve stretched to an infinite maximum tops out at 86%. Removing
-	// this on the grounds that the only writer had already checked is a
-	// change TestBatteryCurve refuses.
-	if top > full && plausibleVolts(top) {
-		full = top
+// battFullScale is the raw level paired with the top of the table, and
+// the divisor every percentage is taken against.
+const battFullScale = 605
+
+// battTopMv and battFlatMv are the two ends of the table, named because
+// the algorithm compares against them directly.
+const (
+	battTopMv  = 4120
+	battFlatMv = 3190
+)
+
+// floorDiv divides the way Python's // does, towards negative infinity.
+// Go truncates towards zero instead, and the rescale below is the one
+// place the difference can show: a cur_mv under the bottom of the table
+// makes the numerator negative.
+func floorDiv(a, b int32) int32 {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
 	}
-	switch {
-	case v <= battCurve[0].volts:
-		return 0
-	case v >= full:
-		return 100
-	}
-	for i := 1; i <= last; i++ {
-		hi, hiVolts := battCurve[i], battCurve[i].volts
-		if i == last {
-			hiVolts = full
-		}
-		if v > hiVolts {
-			continue
-		}
-		lo := battCurve[i-1]
-		return lo.pct + int8(float32(hi.pct-lo.pct)*(v-lo.volts)/(hiVolts-lo.volts))
-	}
-	return 100
+	return q
 }
+
+// battPctFor is peripherals.get_batt_pct(max_volts, cur_volts), arguments
+// swapped to read the way this package's callers do. top is
+// config.batt_max_volts: the highest this pack has been seen at.
+//
+// The rescale is the part worth reading twice, because it runs the
+// opposite way round from what the name suggests. It fires only when the
+// learned maximum is *below* the table's top, and it scales the reading
+// up — compensating for a pack that never reaches 4.12 V, so that its own
+// ceiling still reads 100%. A pack that charges above 4.12 V gets no
+// rescale at all: the clamp just below returns 100 for anything from the
+// table's top upwards.
+//
+// This replaces a stretch that ran the other way, extending the curve out
+// to a learned maximum above 4.12 V. That read 89% at 4.12 V on a pack
+// last seen at 4.48, where a Totem reads 100% — and the Totem sitting
+// next to this one reports exactly 100% at 4.48 V, which is what settled
+// it. The old shape was the nicer gauge and the wrong one: emulating the
+// device is the point, and the device holds at 100% over that last
+// tenth of a volt.
+func battPctFor(v float32, top float32) int8 {
+	if v == 0 {
+		return 0
+	}
+	curMv := int32(float64(v)*1000 + 0.5)
+	// plausibleVolts before the conversion, not only because a maximum
+	// off the flash can be anything, but because Go leaves a float to
+	// int conversion implementation-defined when the value will not fit.
+	// An infinity here happened to land on a large negative on this
+	// machine and take the right branch by luck; there is no reason the
+	// board's toolchain would agree. An implausible maximum is treated as
+	// none, and the table is read as written.
+	if top != 0 && plausibleVolts(top) {
+		maxMv := int32(float64(top)*1000 + 0.5)
+		if battFlatMv < maxMv && maxMv < battTopMv {
+			curMv = battFlatMv + floorDiv((curMv-battFlatMv)*(battTopMv-battFlatMv), maxMv-battFlatMv)
+		}
+		if curMv >= battTopMv {
+			return 100
+		}
+		if curMv < battFlatMv {
+			return 0
+		}
+	}
+	hiMv, hiRaw := battCurve[0].mv, battCurve[0].raw
+	for _, p := range battCurve[1:] {
+		if curMv >= p.mv {
+			raw := p.raw + floorDiv((curMv-p.mv)*(hiRaw-p.raw), hiMv-p.mv)
+			// Both clamps live inside "if max_volts" in the firmware, so
+			// a device that has not learned a maximum yet can come out of
+			// here above 100 — 4.48 V reads 145. On the Totem that value
+			// goes on to struct.pack('<b'), which raises, so it is a fault
+			// the device never survives rather than a number it sends.
+			// Capped instead of reproduced: the frame's field is a signed
+			// byte, and 145 in one is -111.
+			return int8(min(battPctOf(raw), 100))
+		}
+		hiMv, hiRaw = p.mv, p.raw
+	}
+	return 0
+}
+
+// battPctOf turns a raw level into a percentage the way the firmware
+// does: round(raw / battFullScale * 100), in integer arithmetic.
+func battPctOf(raw int32) int32 { return (raw*1000/battFullScale + 5) / 10 }
 
 // Sleep timing, from the light-sleep log line ("Slept for: {} of {} |
 // sleep duty: {:.3f}") and the reasons the firmware gives for staying
@@ -185,43 +241,82 @@ type Power struct {
 	// bounces on the way into the socket does not set it off.
 	chargeSince time.Time
 	chargeShown bool
-	// maxVolts is the highest cell voltage this pack has been seen at
-	// during this run, which device_power learns and logs as "Max volts
-	// updated". It stretches the top of the curve, so a pack that charges
-	// above it is not read as 100% all the way down.
-	maxVolts float32
+	// maxVolts is config.batt_max_volts: the ceiling this pack was last
+	// seen to charge to, which get_batt_pct scales a reading against.
+	// peakVolts is modes.batt_volts_max, the highest reading of this
+	// charge, and prevVolts the peak as it stood a minute ago — the two
+	// one_min_coro compares to decide the pack has stopped taking charge.
+	maxVolts, peakVolts, prevVolts float32
 }
 
 func newPower(now time.Time) *Power {
 	return &Power{lastTick: now, blockers: map[WdtBlocker]bool{}}
 }
 
+// battMaxMargin is the 0.04 V one_min_coro subtracts from the peak
+// before storing it, and the same margin it allows when deciding a new
+// peak is worth recording.
+const battMaxMargin = 0.04
+
 // learn takes what a reading says about the pack itself, which is a
 // different thing from working out a power mode from it. update used to
 // do both, so anything that wanted a mode also, silently, taught the
 // device about the battery — and a factory reset had to clear the
 // calibration twice to work around it.
+//
+// Only while the charger is in. That is the shape of one_min_coro, where
+// the whole block sits under "if modes.is_charging", and it is what
+// makes the number mean anything: config.batt_max_volts is the ceiling
+// this pack was last seen to charge to, so get_batt_pct can scale a pack
+// that no longer reaches 4.12 V against its own top.
+//
+// Learning it on every reading instead — which is what this did — makes
+// it the highest voltage seen at all, and a device that has been
+// discharging since boot has "learned" a maximum equal to roughly where
+// it started. Scaled against that, a half-flat pack reads full. The old
+// curve hid this by stretching rather than scaling, so the mistake cost
+// nothing until the curve was made to match the firmware's.
 func (p *Power) learn(b Battery) {
-	if b.Volts > p.maxVolts && plausibleVolts(b.Volts) {
-		p.maxVolts = b.Volts
+	if !b.Charging {
+		return
+	}
+	if b.Volts > p.peakVolts && plausibleVolts(b.Volts) {
+		p.peakVolts = b.Volts
+	}
+	if p.peakVolts == 0 {
+		return
+	}
+	// Still climbing: remember where it got to and wait.
+	if p.peakVolts > p.prevVolts {
+		p.prevVolts = p.peakVolts
+		return
+	}
+	// It has stopped, so this is the top of the charge. The firmware
+	// also has a slower path, counting five minutes of no rise before it
+	// records the same number, for the case where the peak falls back
+	// below what it already had; both store the peak less the margin.
+	if p.peakVolts > p.maxVolts-battMaxMargin {
+		p.maxVolts = p.peakVolts - battMaxMargin
 	}
 }
 
-// LearnedMaxVolts is the highest cell voltage seen this run. Like the
-// sleep total, the firmware keeps it in modes and starts it at 0 on
-// every boot (project_data sets batt_volts_max to 0 in the constructor),
-// so it is saved as a snapshot and learned again from the pack rather
-// than remembered across a reboot.
+// LearnedMaxVolts is config.batt_max_volts: the top of the last charge,
+// less battMaxMargin. Like the sleep total, the firmware keeps the peak
+// behind it in modes and starts it at 0 on every boot, so it is saved as
+// a snapshot and learned again from the pack rather than remembered
+// across a reboot.
 func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
 
 // ClearLearnedMaxVolts forgets the pack, as a factory reset does.
-func (p *Power) ClearLearnedMaxVolts() { p.maxVolts = 0 }
+func (p *Power) ClearLearnedMaxVolts() { p.maxVolts, p.peakVolts, p.prevVolts = 0, 0, 0 }
 
 // plausibleVolts reports whether a reading is one a single lithium cell
 // could give: above the curve's own floor and not past what a charger
 // will take it to.
 func plausibleVolts(v float32) bool {
-	return v >= battCurve[0].volts && v <= maxPlausibleVolts
+	// The table runs from the top of the pack down, so its last entry is
+	// the flat end. It used to be the first.
+	return v >= float32(battCurve[len(battCurve)-1].mv)/1000 && v <= maxPlausibleVolts
 }
 
 // maxPlausibleVolts is the highest a cell reads, with room above it.
@@ -239,7 +334,8 @@ const maxPlausibleVolts = 4.6
 // whose constructor sets them to zero. A power cycle is a boot, so what
 // the last run slept and what it learned about the pack go with it.
 func (p *Power) startRun(now time.Time) {
-	p.sleptMs, p.awakeMs, p.maxVolts = 0, 0, 0
+	p.sleptMs, p.awakeMs = 0, 0
+	p.ClearLearnedMaxVolts()
 	p.lastTick = now
 	// The charger is not touched at all, neither the mark nor the
 	// debounce. charging() sets chargeShown while the device is down
