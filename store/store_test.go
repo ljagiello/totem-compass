@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"testing"
+	"unicode/utf8"
 )
 
 // memSector is a flash sector in memory: bits only clear on a write, and
@@ -265,5 +266,62 @@ func TestStateMarshalRejects(t *testing.T) {
 	}
 	if _, err := (State{Name: "\xff\xfe"}).MarshalBinary(); err == nil {
 		t.Error("encoded a name that is not UTF-8")
+	}
+}
+
+// TestOversizedSaveKeepsWhatIsThere: a record too big for the sector can
+// never be written, and finding that out after the erase would cost the
+// settings that were already saved.
+func TestOversizedSaveKeepsWhatIsThere(t *testing.T) {
+	sec := newMemSector(512)
+	j := mustOpen(t, sec)
+	if err := j.Save([]byte("the bonds")); err != nil {
+		t.Fatal(err)
+	}
+	erases := sec.erases
+
+	if err := j.Save(make([]byte, 600)); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("a record bigger than the sector returned %v", err)
+	}
+	if sec.erases != erases {
+		t.Error("it erased the sector on its way to failing")
+	}
+	got, err := mustReopen(t, sec).Load()
+	if err != nil || string(got) != "the bonds" {
+		t.Fatalf("after the refused save: %q, %v", got, err)
+	}
+	// And the journal still works.
+	if err := j.Save([]byte("later")); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := mustReopen(t, sec).Load(); string(got) != "later" {
+		t.Fatalf("loaded %q", got)
+	}
+}
+
+// TestSanitizeName: a name comes off the air, where nothing checks it, and
+// ends up in a record this package refuses to encode. Rather than let one
+// bad frame stop every save for good, a caller runs it through here.
+func TestSanitizeName(t *testing.T) {
+	long := string(bytes.Repeat([]byte("é"), 40)) // 80 bytes
+	for in, want := range map[string]string{
+		"LCFs totem": "LCFs totem",
+		"":           "",
+		"ok\xff\xfe": "ok",
+		"\xff":       "",
+	} {
+		if got := SanitizeName(in); got != want {
+			t.Errorf("SanitizeName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	if got := SanitizeName(long); len(got) > maxName || !utf8.ValidString(got) {
+		t.Errorf("a long name came back as %d bytes: %q", len(got), got)
+	}
+	// Whatever it returns has to be encodable, which is the whole point.
+	for _, in := range []string{"ok\xff", long, "\x00\x01", "héllo"} {
+		s := State{Name: SanitizeName(in), Peers: []PeerState{{Name: SanitizeName(in)}}}
+		if _, err := s.MarshalBinary(); err != nil {
+			t.Errorf("a sanitized %q still failed to encode: %v", in, err)
+		}
 	}
 }

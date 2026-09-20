@@ -158,6 +158,30 @@ func (s *State) UnmarshalBinary(b []byte) error {
 	return nil
 }
 
+// SanitizeName makes a name this package can store: at most maxName
+// bytes of valid UTF-8. A peer's name arrives in a frame off the air,
+// where nothing checks it, and a name that cannot be encoded would
+// otherwise stop every save on the device for good — one malformed frame
+// and no bond, colour or setting is ever written again.
+func SanitizeName(s string) string {
+	if !utf8.ValidString(s) {
+		// Keep what is text and drop the rest, rune by rune.
+		out := make([]rune, 0, len(s))
+		for _, r := range s {
+			if r != utf8.RuneError {
+				out = append(out, r)
+			}
+		}
+		s = string(out)
+	}
+	for len(s) > maxName {
+		// Cut whole runes, so what is left is still text.
+		_, size := utf8.DecodeLastRuneInString(s)
+		s = s[:len(s)-size]
+	}
+	return s
+}
+
 func checkName(s string) error {
 	if len(s) > maxName {
 		return fmt.Errorf("store: name of %d bytes, at most %d fit", len(s), maxName)

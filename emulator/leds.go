@@ -17,6 +17,7 @@ package emulator
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -92,6 +93,9 @@ func (c Color) String() string {
 	}
 	return palette[c].name
 }
+
+// LogValue names the colour in a log line, in either format.
+func (c Color) LogValue() slog.Value { return slog.StringValue(c.String()) }
 
 // ParseColor reads a palette name.
 func ParseColor(s string) (Color, error) {
@@ -187,6 +191,9 @@ func (a Animation) String() string {
 	return "idle"
 }
 
+// LogValue names the animation in a log line, in either format.
+func (a Animation) LogValue() slog.Value { return slog.StringValue(a.String()) }
+
 // Animation lengths and frame rates. The firmware's own values live in
 // undisassembled bytecode, so these are chosen to match what the device
 // looks like: a 25 ms frame is 40 a second, fast enough that a spin or a
@@ -236,6 +243,15 @@ type LEDs struct {
 	dialColor Color
 	// progress is the OTA download, 0 to 1.
 	progress float64
+	// off is a device that has powered down: the strip is dark and stays
+	// dark, however often it is ticked.
+	off bool
+	// under is what to fall back to when a timed animation ends: the
+	// alarm, the pairing or the download that was playing beneath it.
+	// Without it a three-second bonded animation would cancel an SOS for
+	// good, and the crystal would stop blinking while the alarm still
+	// went out on the air.
+	under Animation
 }
 
 // fullBrightness and dimBrightness are the two levels toggle_brightness
@@ -253,9 +269,29 @@ func newLEDs(now time.Time, def Color) *LEDs {
 	return l
 }
 
+// openEnded reports whether an animation runs until something stops it,
+// rather than for a fixed time.
+func openEnded(a Animation) bool {
+	switch a {
+	case AnimIdle, AnimPairing, AnimSOS, AnimOTA, AnimWiFi, AnimGNSSSearch:
+		return true
+	}
+	return false
+}
+
 // Play starts an animation. A shorter one over a longer one wins: the
-// firmware's LED task plays the newest event.
+// firmware's LED task plays the newest event, and what was playing
+// underneath comes back when the newer one ends.
 func (l *LEDs) Play(a Animation, now time.Time) {
+	switch {
+	case openEnded(a):
+		l.under = a
+	case openEnded(l.anim) && l.anim != AnimIdle:
+		// A timed animation is starting over one that runs until it is
+		// told to stop. Remember it, or a three-second flash would cancel
+		// an alarm that is still going out on the air.
+		l.under = l.anim
+	}
 	l.anim, l.start, l.frame, l.next = a, now, 0, now
 	switch a {
 	case AnimBoot:
@@ -283,10 +319,31 @@ func (l *LEDs) Play(a Animation, now time.Time) {
 }
 
 // Stop ends an animation that runs until told, and falls back to idle.
+// It also clears it from underneath a timed one, so it does not come
+// back when that ends.
 func (l *LEDs) Stop(a Animation, now time.Time) {
+	if l.under == a {
+		l.under = AnimIdle
+	}
 	if l.anim == a {
 		l.Play(AnimIdle, now)
 	}
+}
+
+// Dark turns the strip off and keeps it off, for a device that has
+// powered down: nothing is drawn and no frame is ever due until it comes
+// back on.
+func (l *LEDs) Dark(off bool, now time.Time) {
+	l.off = off
+	if off {
+		l.under = AnimIdle
+		l.Play(AnimIdle, now)
+		l.fillRing(Off)
+		l.fillCrystal(Off)
+		l.next = time.Time{}
+		return
+	}
+	l.next = now
 }
 
 // Animation is what is playing.
@@ -340,11 +397,19 @@ func (l *LEDs) Next() time.Time { return l.next }
 // Tick draws the frames due at now. It reports whether anything changed,
 // so a driver can skip writing an unchanged strip.
 func (l *LEDs) Tick(now time.Time) bool {
+	if l.off {
+		// A powered-down device draws nothing: the pixels stay as Dark
+		// left them, and no frame is ever due.
+		l.next = time.Time{}
+		return false
+	}
 	if now.Before(l.next) {
 		return false
 	}
 	if !l.until.IsZero() && !now.Before(l.until) {
-		l.Play(AnimIdle, now)
+		// Back to whatever was underneath, which is idle unless an alarm,
+		// a pairing or a download is still running.
+		l.Play(l.under, now)
 	}
 	// A frame number indexes the ring, so it must never go negative: a
 	// caller whose clock has stepped back would otherwise index out of
@@ -413,7 +478,9 @@ func (l *LEDs) draw(now time.Time) {
 		// The download's progress ring, white at 30% (PROGRESS_RGB).
 		n := int(l.progress * RingPixels)
 		for i := 0; i < n; i++ {
-			l.ring[i] = progressRGB
+			// Dimmed with everything else: a tap of the power button dims
+			// the whole strip, not all of it but this.
+			l.ring[i] = l.dim(progressRGB)
 		}
 	case AnimOTAFailed:
 		// ring.fill(ERROR_RGB, True): the whole ring in orange.

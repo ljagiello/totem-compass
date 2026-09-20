@@ -25,9 +25,9 @@ type settings struct {
 	// held is what was written last, so a save that would change nothing
 	// costs no flash write. An erase runs with the radio stalled.
 	held []byte
-	// key is held with the counters zeroed: what a person could have
-	// changed. The boot count and the total sleep grow on their own, and
-	// comparing them would make every save a write.
+	// key is held with the free-running counter zeroed: what a person
+	// could have changed, plus the boot count. The total sleep grows on
+	// its own, and comparing it would make every save a write.
 	key []byte
 	// state is what the device is running with.
 	state store.State
@@ -108,7 +108,10 @@ func (s *settings) save(n *emulator.Node) {
 	}
 	cfg := n.Config()
 	st := store.State{
-		Name: cfg.Name, ColorID: cfg.ColorID,
+		// The names come off the air and out of a build flag, where
+		// nothing checks them. One that cannot be encoded would stop
+		// every save from here on, so they are made storable first.
+		Name: store.SanitizeName(cfg.Name), ColorID: cfg.ColorID,
 		// The brightness a tap of the power button chose, and the sleep
 		// the device has taken, both belong to the device rather than to
 		// this boot.
@@ -122,7 +125,7 @@ func (s *settings) save(n *emulator.Node) {
 		if len(st.Peers) == store.MaxPeers {
 			break
 		}
-		ps := store.PeerState{MAC: [6]byte(p.MAC), Name: p.Status.Name}
+		ps := store.PeerState{MAC: [6]byte(p.MAC), Name: store.SanitizeName(p.Status.Name)}
 		if p.Status.Lat != 0 || p.Status.Lon != 0 {
 			ps.Lat, ps.Lon = p.Status.Lat, p.Status.Lon
 		}
@@ -136,10 +139,11 @@ func (s *settings) save(n *emulator.Node) {
 		s.log.Warn("settings could not be encoded", "err", err)
 		return
 	}
-	// Compare only what a person could have changed. The counters ride
-	// along with a real change; letting them drive one would put a record
-	// on the flash every time anything looked at the settings, filling a
-	// sector — and an erase stalls the radio — for no news at all.
+	// Compare what a person could have changed, and the boot count. The
+	// total sleep is left out: it grows on its own, and letting it drive
+	// a write would put a record on the flash every time anything so much
+	// as looked at the settings, filling a sector — and an erase stalls
+	// the radio — for no news at all.
 	key := settingsKey(st)
 	if key == nil {
 		s.log.Warn("settings could not be encoded")
@@ -163,7 +167,10 @@ func (s *settings) save(n *emulator.Node) {
 // device has been awake compare equal. It returns nil when the state
 // cannot be encoded, which the caller treats as a reason not to write.
 func settingsKey(st store.State) []byte {
-	st.BootCount, st.SleepMs = 0, 0
+	// The boot count is not zeroed: it changes once per boot, and a boot
+	// that writes nothing is a boot that is never recorded — every boot
+	// would then read back the same number.
+	st.SleepMs = 0
 	b, err := st.MarshalBinary()
 	if err != nil {
 		return nil

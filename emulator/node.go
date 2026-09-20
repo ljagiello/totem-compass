@@ -212,15 +212,11 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	if len(cfg.Name) > mesh.MaxPeerName {
-		// Every status frame carries the name, so a name the frame cannot
-		// hold would fail at the point of sending one. Cut it here instead,
-		// on a rune boundary so what is left is still text.
-		short := cfg.Name[:mesh.MaxPeerName]
-		for len(short) > 0 && !utf8.ValidString(short) {
-			short = short[:len(short)-1]
-		}
-		cfg.Logger.Warn("name is longer than a peer frame holds, truncated",
+	if short := fitName(cfg.Name); short != cfg.Name {
+		// Every status frame carries the name, so one the frame cannot
+		// hold would fail at the point of sending it, and one that is not
+		// text would travel on into whatever reads it.
+		cfg.Logger.Warn("name cut to what a peer frame holds",
 			"name", cfg.Name, "bytes", len(cfg.Name), "max", mesh.MaxPeerName, "using", short)
 		cfg.Name = short
 	}
@@ -273,6 +269,28 @@ func New(cfg Config, now time.Time) *Node {
 // hasJob reports whether a job of this kind is already scheduled.
 func (n *Node) hasJob(k jobKind) bool {
 	return slices.ContainsFunc(n.jobs, func(j job) bool { return j.kind == k })
+}
+
+// fitName makes a name a peer frame can carry: at most MaxPeerName bytes
+// of valid UTF-8, cut on rune boundaries.
+func fitName(s string) string {
+	if utf8.ValidString(s) && len(s) <= mesh.MaxPeerName {
+		return s
+	}
+	if !utf8.ValidString(s) {
+		out := make([]rune, 0, len(s))
+		for _, r := range s {
+			if r != utf8.RuneError {
+				out = append(out, r)
+			}
+		}
+		s = string(out)
+	}
+	for len(s) > mesh.MaxPeerName {
+		_, size := utf8.DecodeLastRuneInString(s)
+		s = s[:len(s)-size]
+	}
+	return s
 }
 
 // DefaultName is "emu_totem_" and the last four hex digits of the MAC.
@@ -608,6 +626,10 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute), BattVolts: sense.Battery.Volts,
 		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID,
 		BattPct: sense.Battery.Percent,
+		// Flags bit 0: whether a phone is attached over BLE, which the
+		// power button's double tap toggles. Leaving it out meant no peer
+		// ever saw the flag change.
+		PhoneConnected: c.PhoneConnected,
 	}
 	if f := sense.Fix; f != nil {
 		p.Lat, p.Lon, p.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
@@ -1103,6 +1125,15 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 			}
 			if !slices.Contains(n.cfg.Owned, m.MAC) {
 				n.log.Info("skipping smart group member outside the owned scope", "mac", m.MAC)
+				continue
+			}
+			if _, known := n.peers[m.MAC]; !known && len(n.peers) >= maxBonds {
+				// A group may list more members than a Totem can bond to,
+				// and the ones past the limit would be lost at the next
+				// reboot anyway: the saved list is read back through the
+				// same limit.
+				n.log.Warn("smart group member dropped: already at the bond limit",
+					"mac", m.MAC, "bonds", len(n.peers), "max", maxBonds)
 				continue
 			}
 			p := n.addPeer(m.MAC)

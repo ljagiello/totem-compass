@@ -10,7 +10,6 @@ import (
 	"io"
 	"maps"
 	"math"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -547,8 +546,30 @@ func decodeFrame(l consoleLine) MeshFrame {
 		f.Kind, f.Error = "invalid", err.Error()
 		return f
 	}
-	f.Kind = reflect.TypeOf(f.Frame).Name()
+	f.Kind = kindOf(f.Frame)
 	return f
+}
+
+// kindOf names a frame for the JSON output. The names are written out
+// rather than taken from the Go types: they are part of what this command
+// promises its readers, and a type renamed in the mesh package should not
+// quietly change them.
+func kindOf(m mesh.Message) string {
+	switch m.(type) {
+	case mesh.Peer:
+		return "Peer"
+	case mesh.Locate:
+		return "Locate"
+	case mesh.SmartGroup:
+		return "SmartGroup"
+	case mesh.SmartGroupReply:
+		return "SmartGroupReply"
+	case mesh.DemiGod:
+		return "DemiGod"
+	case mesh.Unknown:
+		return "Unknown"
+	}
+	return "invalid"
 }
 
 // ---- output ----------------------------------------------------------------

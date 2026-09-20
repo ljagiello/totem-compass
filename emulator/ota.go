@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 )
@@ -69,6 +70,9 @@ func (s OTAState) String() string {
 	}
 	return "idle"
 }
+
+// LogValue names the state in a log line, in either format.
+func (s OTAState) LogValue() slog.Value { return slog.StringValue(s.String()) }
 
 // Release is the release object the API returns, logged by the firmware
 // as Product/Branch/Release Code/Release ID/OTA URL.
@@ -286,6 +290,9 @@ func (n *Node) Update(now time.Time) error {
 		return errors.New("ota: an update is already running")
 	}
 	o.state, o.started, o.err, o.done, o.total = OTAChecking, now, nil, 0, 0
+	// The touch blocks this update takes, so they can be given back
+	// exactly as they were found.
+	var blocked []time.Time
 	// The exchange blocks, and the node's clock does not move while it
 	// does, so the time it took is measured against the wall. It is only
 	// ever reported, never used to decide anything.
@@ -294,7 +301,7 @@ func (n *Node) Update(now time.Time) error {
 		o.state, o.err, o.finished, o.took = OTAFailed, err, now, time.Since(began)
 		n.log.Warn("ota failed", "err", err)
 		n.leds.Play(AnimOTAFailed, now)
-		n.unblockTouch()
+		n.unblockTouch(blocked)
 		return err
 	}
 	// The battery gate comes first: an update that reboots a device with
@@ -360,7 +367,7 @@ func (n *Node) Update(now time.Time) error {
 	n.leds.Play(AnimOTA, now)
 	// Block Touch while the package comes down: a tap part way through an
 	// update is not a gesture anyone means.
-	n.blockTouch(now, otaTouchBlock)
+	blocked = n.blockTouch(now, otaTouchBlock)
 	size, sum, err := t.Download(strings.TrimSuffix(rel.OTAURL, "/")+"/"+pkg, func(done, total int64) {
 		o.done, o.total = done, total
 		if total > 0 {
@@ -368,8 +375,12 @@ func (n *Node) Update(now time.Time) error {
 		}
 		// Draw here: an update blocks whichever loop called it, so this
 		// is the only chance the progress ring gets to move while the
-		// package comes down.
-		n.leds.Tick(now.Add(time.Since(began)))
+		// package comes down. The touch block is renewed with it, so a
+		// download slower than the block does not leave the inputs live
+		// halfway through.
+		at := now.Add(time.Since(began))
+		n.leds.Tick(at)
+		n.blockTouch(at, otaTouchBlock)
 	})
 	if err != nil {
 		return fail(fmt.Errorf("ota: downloading %s: %w", pkg, err))
@@ -386,7 +397,7 @@ func (n *Node) Update(now time.Time) error {
 	// board off the mesh.
 	o.state, o.finished, o.took = OTADone, now, time.Since(began)
 	n.leds.Play(AnimIdle, now)
-	n.unblockTouch()
+	n.unblockTouch(blocked)
 	n.log.Info("ota complete", "installed", false,
 		"note", "the emulator runs the exchange but does not write a slot or reboot")
 	return nil
@@ -397,17 +408,25 @@ func (n *Node) Update(now time.Time) error {
 // ends, so a stalled update does not leave the device deaf.
 const otaTouchBlock = 30 * time.Second
 
-// blockTouch and unblockTouch are the firmware's Block Touch, which it
-// holds while something must not be interrupted.
-func (n *Node) blockTouch(now time.Time, d time.Duration) {
+// blockTouch is the firmware's Block Touch, which it holds while
+// something must not be interrupted. It returns what the blocks were, so
+// unblockTouch can put them back rather than clearing whatever else was
+// holding an input — the wait after a boot, most of all.
+func (n *Node) blockTouch(now time.Time, d time.Duration) []time.Time {
+	was := make([]time.Time, len(n.inputs))
 	for i := range n.inputs {
+		was[i] = n.inputs[i].blockedUntil
 		n.inputs[i].block(now, d)
 	}
+	return was
 }
 
-func (n *Node) unblockTouch() {
+// unblockTouch puts back the deadlines blockTouch found.
+func (n *Node) unblockTouch(was []time.Time) {
 	for i := range n.inputs {
-		n.inputs[i].blockedUntil = time.Time{}
+		if i < len(was) {
+			n.inputs[i].blockedUntil = was[i]
+		}
 	}
 }
 
@@ -417,12 +436,9 @@ func (n *Node) versionString() string {
 }
 
 // StartOTA is the SOS button's triple tap (sw_sos.cb_triple_tap ->
-// start_ota) and the demi-god update command.
-func (n *Node) StartOTA(now time.Time) {
-	if err := n.Update(now); err != nil {
-		return
-	}
-}
+// start_ota) and the demi-god update command. Update logs what went
+// wrong, and a gesture has nowhere to return an error to.
+func (n *Node) StartOTA(now time.Time) { _ = n.Update(now) }
 
 // OTA reports the update's state.
 func (n *Node) OTA() *OTA { return n.ota }

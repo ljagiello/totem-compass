@@ -64,9 +64,7 @@ func (n *Node) PowerOff(now time.Time) {
 	n.stopPairing(now)
 	n.power.off, n.power.mode = true, PowerOff
 	n.jobs = nil
-	n.leds.Play(AnimIdle, now)
-	n.leds.fillRing(Off)
-	n.leds.fillCrystal(Off)
+	n.leds.Dark(true, now)
 	n.log.Info("powered down: the radio windows stop here")
 }
 
@@ -77,6 +75,7 @@ func (n *Node) PowerOn(now time.Time) {
 	}
 	n.power.off, n.power.mode = false, PowerNormal
 	n.inputs = newInputs(now)
+	n.leds.Dark(false, now)
 	n.leds.Play(AnimBoot, now)
 	n.scheduleWindow(now)
 	if n.clockSet {
@@ -114,8 +113,11 @@ func (n *Node) device(now time.Time) {
 	// window, as "Block sleep for GNSS RTC Sync" does.
 	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.State() == OTADownloading)
 	n.power.sleep(now, n.Next())
-	n.updateDial()
-	n.leds.Tick(now)
+	if !n.power.Off() {
+		// A device that is off has no compass and no frames to draw.
+		n.updateDial()
+		n.leds.Tick(now)
+	}
 }
 
 // updateDial points the compass at the first bonded peer whose position

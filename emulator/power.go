@@ -14,6 +14,7 @@ package emulator
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -46,6 +47,9 @@ func (p PowerMode) String() string {
 	}
 	return "normal"
 }
+
+// LogValue names the mode in a log line, in either format.
+func (p PowerMode) LogValue() slog.Value { return slog.StringValue(p.String()) }
 
 // Battery thresholds, from device_power.py's strings and the battery
 // curve. The exact numbers the firmware compares against live in

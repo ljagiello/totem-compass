@@ -15,6 +15,7 @@ package emulator
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -42,6 +43,10 @@ func (i Input) String() string {
 	}
 	return "crystal"
 }
+
+// LogValue makes a log line say "sos" rather than 2, in JSON as well as
+// in text: the CLI reads the JSON, and a number there means nothing.
+func (i Input) LogValue() slog.Value { return slog.StringValue(i.String()) }
 
 // Gesture is what the recogniser made of a press.
 type Gesture uint8
@@ -74,6 +79,9 @@ func (g Gesture) String() string {
 	}
 	return "single tap"
 }
+
+// LogValue names the gesture in a log line, in either format.
+func (g Gesture) LogValue() slog.Value { return slog.StringValue(g.String()) }
 
 // Input timings. The firmware's own values, where the disassembly gives
 // them; the native touch driver's validation ranges bracket the rest
@@ -240,18 +248,30 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 	}
 }
 
-// HoldFor is a press held for d, as a console command asks for.
+// HoldFor is a press held for d, as a console command asks for. The
+// gestures come out in the order a finger would have made them — the
+// hold at 800 ms, the long hold at ten seconds — and each is dispatched
+// with the time it would have fired, not the time of the press.
 func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	r := n.input(in)
 	if r == nil {
 		return nil
 	}
+	end := now.Add(d)
 	r.press(now)
-	// The gestures a hold of this length would have fired, in order.
-	for _, g := range r.poll(now.Add(d)) {
-		n.onGesture(in, g, now)
+	// Walk the press forward, firing what each moment brings, rather than
+	// jumping to the end: one poll at the end reports the long hold
+	// before the hold, which is backwards.
+	for {
+		at := r.next()
+		if at.IsZero() || at.After(end) {
+			break
+		}
+		for _, g := range r.poll(at) {
+			n.onGesture(in, g, at)
+		}
 	}
-	r.release(now.Add(d))
+	r.release(end)
 	return n.flush()
 }
 
@@ -325,8 +345,12 @@ func (n *Node) onGesture(in Input, g Gesture, now time.Time) {
 		// The gesture a person uses to pair: hold the crystal until the
 		// animation starts. Pair flushes what it queued, so keep it: the
 		// caller's own flush would otherwise find nothing and the first
-		// bond broadcast would be dropped.
-		n.out = append(n.out, n.Pair(now)...)
+		// bond broadcast would be dropped. The call goes in its own
+		// statement because it empties n.out as a side effect, and the
+		// order the two operands of an append are evaluated in is not
+		// something the language promises.
+		ps := n.Pair(now)
+		n.out = append(n.out, ps...)
 	case in == PowerButton && g == SingleTap:
 		n.ToggleBrightness(now)
 	case in == PowerButton && g == DoubleTap:

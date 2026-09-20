@@ -30,7 +30,9 @@ func TestCrystalHoldStartsPairing(t *testing.T) {
 	if got := h.n.LEDs().Animation(); got != AnimPairing {
 		t.Errorf("animation while pairing = %s", got)
 	}
-	h.advance(pairingWindow + time.Second)
+	// The window opens when the hold matures, not when the press began,
+	// so the wait covers the hold as well.
+	h.advance(crystalPairHold + pairingWindow + time.Second)
 	if h.n.Pairing() {
 		t.Error("pairing did not end with its window")
 	}
@@ -838,5 +840,160 @@ func TestGroupColorReachesTheCrystal(t *testing.T) {
 	}
 	if got := h.n.LEDs().DefaultColor(); got != ColorRed {
 		t.Errorf("crystal colour = %s, want the one the group gave", got)
+	}
+}
+
+// TestPoweredDownStaysDark: a device someone switched off must not light
+// its crystal again on the next tick. The board drives its LED from
+// crystal[0], so this is the light in front of them.
+func TestPoweredDownStaysDark(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.rx(totem, self, -40, statusFrame(t0)) // a peer with coordinates, so the dial has something
+	h.n.PowerOff(h.now)
+
+	for i := 0; i < 20; i++ {
+		h.now = h.now.Add(50 * time.Millisecond)
+		h.collect(h.n.Poll(h.now))
+		for j, p := range h.n.LEDs().Crystal() {
+			if p != Off {
+				t.Fatalf("crystal pixel %d lit again %d ticks after powering down: %v", j, i, p)
+			}
+		}
+		for j, p := range h.n.LEDs().Ring() {
+			if p != Off {
+				t.Fatalf("ring pixel %d lit again %d ticks after powering down: %v", j, i, p)
+			}
+		}
+	}
+	if next := h.n.LEDs().Next(); !next.IsZero() {
+		t.Errorf("a dark strip still wants a frame at %s", next)
+	}
+	// And it lights up again when it comes back.
+	h.n.PowerOn(h.now)
+	h.advance(100 * time.Millisecond)
+	if h.n.LEDs().Crystal()[0] == Off && h.n.LEDs().Animation() == AnimIdle {
+		t.Error("the strip stayed dark after being powered back on")
+	}
+}
+
+// TestTimedAnimationGivesTheAlarmBack: an alarm blinks until it is
+// stopped. A three-second flash on top of it — a peer bonding, a
+// demi-god frame, a low battery — must not cancel it: the alarm is still
+// going out on the air.
+func TestTimedAnimationGivesTheAlarmBack(t *testing.T) {
+	h := newHarness(t, nil)
+	h.n.SetSOS(true)
+	if got := h.n.LEDs().Animation(); got != AnimSOS {
+		t.Fatalf("animation = %s, want the alarm", got)
+	}
+	h.n.LEDs().Play(AnimBonded, h.now)
+	h.advance(bondedAnim + time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimSOS {
+		t.Errorf("animation after the flash = %s, want the alarm back", got)
+	}
+	// Turning the alarm off really does end it.
+	h.n.SetSOS(false)
+	h.n.LEDs().Play(AnimDemiGod, h.now)
+	h.advance(demiGodBlink + time.Second)
+	if got := h.n.LEDs().Animation(); got == AnimSOS {
+		t.Error("the alarm came back after being switched off")
+	}
+}
+
+// TestGroupCannotExceedTheBondLimit: a Smart Group beacon may list more
+// members than a Totem can bond to. The ones past the limit would be
+// lost at the next reboot anyway, because the saved list is read back
+// through the same limit.
+func TestGroupCannotExceedTheBondLimit(t *testing.T) {
+	var owned []mesh.MAC
+	var members []mesh.SmartGroupMember
+	for i := 0; i < 12; i++ {
+		m := mesh.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, byte(i)}
+		owned = append(owned, m)
+		members = append(members, mesh.SmartGroupMember{MAC: m})
+	}
+	owned = append(owned, totem)
+	h := newHarness(t, func(c *Config) { c.Owned = owned })
+	h.collect(h.n.Pair(h.now))
+	h.take()
+	beacon := mesh.SmartGroup{Instruction: mesh.SmartGroupAdvertise, UID: 90, TimeoutMs: 30000}
+	h.rx(totem, mesh.Broadcast, -20, beacon)
+	beacon.Members = []mesh.SmartGroupMember{{MAC: self}}
+	h.rx(totem, mesh.Broadcast, -20, beacon)
+	h.take()
+
+	h.rx(totem, mesh.Broadcast, -20, mesh.SmartGroup{
+		UID: 90, Instruction: mesh.SmartGroupFinalize, Members: members,
+	})
+	if got := h.n.BondCount(); got > maxBonds {
+		t.Errorf("a group of %d members left %d bonds, over the limit of %d", len(members), got, maxBonds)
+	}
+}
+
+// TestPhoneFlagReachesThePeer: the power button's double tap toggles
+// whether a phone is attached, and a peer frame carries it in flags bit
+// 0. It was toggled and never sent.
+func TestPhoneFlagReachesThePeer(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.advance(bootDebounce)
+	h.take()
+
+	h.n.Tap(PowerButton, 2, h.now)
+	h.advance(multiTapWindow + 10*time.Second)
+	var seen, withPhone int
+	for _, s := range h.take() {
+		p, ok := s.msg.(mesh.Peer)
+		if !ok || p.Command != mesh.PeerStatus {
+			continue
+		}
+		seen++
+		if p.PhoneConnected {
+			withPhone++
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no status frames")
+	}
+	if withPhone == 0 {
+		t.Errorf("%d status frames and none says a phone is attached", seen)
+	}
+}
+
+// TestHoldFiresInOrder: a press fires the hold at 800 ms and the long
+// hold at ten seconds, in that order. One poll at the end of the press
+// reported them backwards.
+func TestHoldFiresInOrder(t *testing.T) {
+	r := &recogniser{in: SOSButton, holdFor: holdTime, longFor: longHold}
+	r.press(t0)
+	var got []Gesture
+	for {
+		at := r.next()
+		if at.IsZero() || at.After(t0.Add(12*time.Second)) {
+			break
+		}
+		got = append(got, r.poll(at)...)
+	}
+	if len(got) != 2 || got[0] != Hold || got[1] != LongHold {
+		t.Errorf("a twelve-second press gave %v, want [hold, long hold]", got)
+	}
+}
+
+// TestPairingWindowStartsWhenTheHoldMatures: the window opens when the
+// gesture fires, not when the finger went down, or a console hold longer
+// than the gesture would cut the window short.
+func TestPairingWindowStartsWhenTheHoldMatures(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	h.collect(h.n.HoldFor(Crystal, 3*time.Second, h.now))
+	// The hold matures at 1.2 s, so the window runs to 1.2 s + 6 s.
+	h.advance(crystalPairHold + pairingWindow - time.Second)
+	if !h.n.Pairing() {
+		t.Error("the pairing window ended early")
+	}
+	h.advance(2 * time.Second)
+	if h.n.Pairing() {
+		t.Error("the pairing window did not end")
 	}
 }

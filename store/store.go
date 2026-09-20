@@ -159,6 +159,12 @@ func (j *Journal) Save(p []byte) error {
 	for i := headerLen + len(p); i < len(rec); i++ {
 		rec[i] = 0xff
 	}
+	// A record that cannot fit an empty sector never will, and finding
+	// that out after the erase would cost the settings that were there.
+	if len(rec) > j.sec.Size() {
+		return fmt.Errorf("%w: %d bytes with its header, the sector holds %d",
+			ErrTooLarge, len(rec), j.sec.Size())
+	}
 	// Flash only clears bits, so a record may only go where nothing has
 	// been written. Check rather than trust the scan: the sector may hold
 	// a previous firmware's data, or noise, in which case appending would
