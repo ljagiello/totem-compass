@@ -197,6 +197,16 @@ func newPower(now time.Time) *Power {
 	return &Power{lastTick: now, blockers: map[WdtBlocker]bool{}}
 }
 
+// SetSleptMs puts back the lifetime light-sleep total a previous boot
+// saved, which the settings carry like the boot count. Without it the
+// figure a device reports is only this run's, next to a boot count that
+// is every run's.
+func (p *Power) SetSleptMs(ms int64) {
+	if ms > 0 {
+		p.sleptMs = ms
+	}
+}
+
 // LearnedMaxVolts is the highest cell voltage seen, which the settings
 // carry across reboots.
 func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }

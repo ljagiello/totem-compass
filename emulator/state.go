@@ -8,6 +8,7 @@ package emulator
 // anything looked at the settings, and a mute that never survived.
 
 import (
+	"math"
 	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
@@ -132,6 +133,9 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if name := store.SanitizeName(st.Name); name != "" {
 		n.cfg.Name = name
 	}
+	// The lifetime sleep total, like the boot count: saved every time and
+	// meaningless if it restarts at zero on each boot.
+	n.power.SetSleptMs(int64(min(st.SleepMs, math.MaxInt64)))
 	if !n.power.SetLearnedMaxVolts(st.LearnedMaxVolts) {
 		// Said out loud, like every other field off this sector that does
 		// not survive its check: a successful `store open` with a damaged

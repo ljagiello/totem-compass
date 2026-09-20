@@ -392,6 +392,12 @@ func (c *Client) writer() {
 			c.qmu.Lock()
 			q := c.queue
 			c.queue = nil
+			// The pending marks go with the queue they describe. The
+			// invariant elsewhere is that a key in pending means an
+			// unwritten ack for it is waiting, and dropping the queue
+			// without the marks makes that false — so an ack for one of
+			// those records would never be queued again.
+			clear(c.pending)
 			c.qmu.Unlock()
 			for _, r := range q {
 				if r.result != nil {

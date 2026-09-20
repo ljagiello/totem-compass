@@ -406,6 +406,17 @@ func (n *Node) send(dst mesh.MAC, m mesh.Message) {
 }
 
 func (n *Node) sendRaw(dst mesh.MAC, b []byte) {
+	// A device that has powered down has no radio. Receive already
+	// refuses to answer while it is off, and this is the other half: the
+	// console can still reach Pair and Unbond, and without this a device
+	// someone had switched off broadcast bond requests every 50-99 ms for
+	// six seconds while being deaf to the replies. The guard belongs here
+	// rather than at each entry point for the same reason allowedTX does
+	// — this is the one place frames leave the node.
+	if n.power.Off() {
+		n.log.Debug("not sending: the device is powered down", "dst", dst)
+		return
+	}
 	if !allowedTX(dst, b, n.cfg.Owned) {
 		n.log.Error("refusing to send outside the owned scope", "dst", dst, "frame", fmt.Sprintf("%x", b))
 		return
@@ -513,12 +524,17 @@ func (n *Node) read(now time.Time) {
 	// advertised to every peer and would re-slot every radio window.
 	if f := n.fix(); f != nil && usableClock(f.Time) {
 		n.clockOffset = f.Time.Sub(now)
+		// Before startAligned, not after: scheduleWindow asks clockSet
+		// which slot to use, so setting it afterwards put the first
+		// window on the no-clock period — an arbitrary phase, when
+		// aligning that window is the only reason startAligned is called.
+		// adoptClock and SetClock both order it this way.
+		n.clockSet = true
 		if !n.gnssClock {
 			n.gnssClock = true
 			n.log.Info("clock from GNSS", "wall", f.Time.UTC().Format(time.RFC3339Nano))
 			n.startAligned(now)
 		}
-		n.clockSet = true
 	}
 }
 
@@ -1435,17 +1451,18 @@ func (n *Node) FactoryReset(now time.Time) {
 	// board's `store forget` exists to prevent.
 	n.stopPairing(now)
 	n.ForgetPeers(now)
-	// A reading taken with the curve as it now stands, for the same
-	// reason Restore takes one: the percentage worked out with the
-	// forgotten stretch would otherwise stand until the next poll, and
-	// then jump.
+	// Cleared, then read with the curve the reset leaves behind: a
+	// reading taken before the clear is the percentage worked out with
+	// the stretch being forgotten, which would stand until the next poll
+	// and then jump — the thing the read is here to prevent.
+	n.power.ClearLearnedMaxVolts()
 	n.read(now)
 	n.applyPowerMode(now)
-	// Cleared last. Reading and updating both learn from the present
-	// voltage, so clearing first put the pack straight back — and the
-	// board snapshots the state on the next line, so the record meant to
-	// be empty carried a maximum, and a measured one at that, which a
-	// later restore could no longer correct.
+	// And cleared again, because reading and updating both learn from the
+	// present voltage and have just put the pack back. The board
+	// snapshots the state straight after this call, and that record has
+	// to be empty; the pack is learned again on the next poll, from a
+	// measurement rather than from a memory.
 	n.power.ClearLearnedMaxVolts()
 }
 

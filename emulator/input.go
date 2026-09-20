@@ -135,12 +135,13 @@ type recogniser struct {
 
 // press reports a finger down. It returns no gesture: a hold is decided
 // while the finger stays down, a tap when it lifts.
-func (r *recogniser) press(now time.Time) {
+func (r *recogniser) press(now time.Time) bool {
 	if now.Before(r.blockedUntil) || r.down || now.Sub(r.lastEdge) < edgeLockout {
-		return
+		return false
 	}
 	r.down, r.downAt, r.lastEdge = true, now, now
 	r.held, r.longHeld = false, false
+	return true
 }
 
 // release reports the finger lifted, and returns a tap gesture once the
@@ -281,8 +282,13 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 	}
 	for i := 0; i < count; i++ {
 		at := now.Add(time.Duration(i) * tapStep)
-		r.press(at)
-		r.release(at.Add(tapHold))
+		// Only released if this press was ours: a finger may already be
+		// on the button — a real one on the board, or a hold the console
+		// started — and releasing that would end someone else's press
+		// before it matured into a hold.
+		if r.press(at) {
+			r.release(at.Add(tapHold))
+		}
 	}
 }
 

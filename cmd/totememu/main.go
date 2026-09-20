@@ -236,7 +236,16 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) [
 		case err != nil:
 			log.Warn("bad command", "err", err)
 		default:
-			log.Info(string(c.Op), "cmd", c.String())
+			// The message is the command's own name, except for rx:
+			// totemctl reads a line whose msg is "rx" as a frame the
+			// radio heard and tries to decode it, so this echo came out
+			// as "invalid frame" — and `mesh send rx …` dropped its own
+			// acknowledgement, which is why injecting one looked silent.
+			msg := string(c.Op)
+			if c.Op == emulator.OpRX {
+				msg = "rx injected"
+			}
+			log.Info(msg, "cmd", c.String())
 		}
 		return out
 	}

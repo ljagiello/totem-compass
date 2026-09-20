@@ -603,7 +603,18 @@ func FuzzParseRawFrame(f *testing.F) {
 		if err != nil {
 			return
 		}
-		clean := strings.ToLower(protocol.CleanHex(strings.Join(args, "")))
+		// Spelled out rather than calling CleanHex, which is what
+		// parseRawFrame itself uses: an oracle built from the
+		// implementation agrees with it however wrong both are, and the
+		// separators are the thing under test.
+		clean := strings.ToLower(strings.NewReplacer(
+			":", "", "-", "", " ", "", "\t", "", "\n", "", "\r", "",
+			"\u00a0", "", "\u2006", "", "\u2007", "", "\u2008", "",
+			"\u2009", "", "\u200a", "", "\u202f", "", "\u205f", "",
+			"\u3000", "", "\u1680", "", "\u2000", "", "\u2001", "",
+			"\u2002", "", "\u2003", "", "\u2004", "", "\u2005", "",
+			"\v", "", "\f", "", "\u0085", "",
+		).Replace(strings.Join(args, "")))
 		if len(fr.Bytes) < 2 || hex.EncodeToString(fr.Bytes) != clean {
 			t.Fatalf("parseRawFrame(%q) = % x, want the bytes of %q", s, fr.Bytes, clean)
 		}
