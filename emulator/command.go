@@ -31,13 +31,17 @@ const (
 	OpClock    Op = "clock"
 	OpFlat     Op = "flat"
 	OpBattery  Op = "batt"
+	// OpFlash and OpStore reach the board's own flash, so only the
+	// firmware answers them. On the host the node leaves them unhandled.
+	OpFlash Op = "flash"
+	OpStore Op = "store"
 )
 
 // Help is the console's command summary.
 const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos off | heading <deg> | " +
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
-	"status | log debug|info|warn|error | format text|json | selftest"
+	"status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -54,6 +58,7 @@ type Command struct {
 	Motion   Motion     // sim
 	Percent  int8       // batt
 	ClockMs  int64      // clock, milliseconds since the Unix epoch
+	Sub      string     // sub-command, as in "store forget"
 }
 
 // defaultAccuracyM is the accuracy pos reports when none is given.
@@ -77,8 +82,20 @@ func ParseCommand(line string) (Command, error) {
 	}
 	var err error
 	switch c.Op {
-	case OpPair, OpStatus, OpSelfTest, OpHelp:
+	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash:
 		err = want(0)
+	case OpStore:
+		// store prints the saved settings; store forget wipes them, as a
+		// factory reset does; store open reads the sector on a board that
+		// did not read it while starting.
+		if len(args) == 1 {
+			if args[0] != "forget" && args[0] != "open" {
+				err = fmt.Errorf("store takes nothing, forget or open, got %q", args[0])
+			}
+			c.Sub = args[0]
+		} else {
+			err = want(0)
+		}
 	case OpUnbond:
 		if err = want(1); err == nil {
 			c.MAC, err = mesh.ParseMAC(args[0])
@@ -260,6 +277,11 @@ func (c Command) String() string {
 		return fmt.Sprintf("batt %d", c.Percent)
 	case OpClock:
 		return fmt.Sprintf("clock %d", c.ClockMs)
+	case OpStore:
+		if c.Sub != "" {
+			return "store " + c.Sub
+		}
+		return "store"
 	}
 	return string(c.Op)
 }

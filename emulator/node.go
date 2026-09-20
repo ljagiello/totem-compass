@@ -1048,6 +1048,35 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 
 // ---- state for the driver ------------------------------------------------------
 
+// AddBond puts back a bond the device already had, the way a Totem reads
+// config.peers at boot: the peer is bonded again without a pairing
+// handshake, and nothing goes on the air. A MAC outside the owned scope is
+// refused, so a saved peer list cannot widen what this node talks to, and
+// so is a list longer than the firmware's bond limit.
+func (n *Node) AddBond(mac mesh.MAC, name string, now time.Time) error {
+	if !slices.Contains(n.cfg.Owned, mac) {
+		return fmt.Errorf("%s is not one of this node's Totems", mac)
+	}
+	if _, ok := n.peers[mac]; ok {
+		return nil
+	}
+	if len(n.peers) >= maxBonds {
+		return fmt.Errorf("already bonded to %d peers", len(n.peers))
+	}
+	p := n.addPeer(mac)
+	p.status.Name = name
+	// The peer has not been heard since the reboot. Leaving lastHeard
+	// zero says so, and keeps the mesh from treating silence as a peer
+	// that has just gone quiet.
+	p.heard, p.stale, p.firstStale = false, true, now
+	n.log.Info("bond restored", "mac", mac, "name", name)
+	return nil
+}
+
+// BondCount is how many peers are bonded. A driver polls it to notice a
+// bond gained or lost without building the whole list every pass.
+func (n *Node) BondCount() int { return len(n.peers) }
+
 // Peers lists the bonded peers in bond order.
 func (n *Node) Peers() []PeerInfo {
 	var out []PeerInfo

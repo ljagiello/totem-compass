@@ -80,16 +80,29 @@ func main() {
 		}
 	}
 
+	// The settings sector is read before the node starts, so the name and
+	// the colour it was given last are the ones it comes up with.
+	saved := openSettings(log, storeAtBoot)
+	if saved.state.Name != "" && name == "" {
+		name = saved.state.Name
+	}
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
-		Logger: log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
-	}, time.Now())
+		ColorID: saved.state.ColorID,
+		Logger:  log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
+	}, boot)
+	saved.restore(node, boot)
+	saved.save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
-		"channel", mesh.Channel, "phy", "LR 250K")
+		"channel", mesh.Channel, "phy", "LR 250K", "boots", saved.state.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	cmds := make(chan string, 4)
 	go readLines(log, cmds)
+	// bonds is what the settings on flash say. A bond gained or lost is
+	// the only thing worth a write: an erase stalls the radio, and flash
+	// wears out.
+	bonds := node.BondCount()
 	stats := time.NewTicker(time.Minute)
 	// One timer for the life of the loop. The loop runs every 5 ms, so a
 	// fresh timer per pass would put 200 allocations a second through a
@@ -106,6 +119,10 @@ func main() {
 		}
 		now := time.Now()
 		radio.send(node.Poll(now))
+		if n := node.BondCount(); n != bonds {
+			bonds = n
+			saved.save(node)
+		}
 		// The receive ring is polled: the WiFi task must not call into Go.
 		wait := rxPoll
 		if next := node.Next(); !next.IsZero() {
@@ -121,7 +138,7 @@ func main() {
 		timer.Reset(wait)
 		select {
 		case line := <-cmds:
-			radio.send(command(log, node, line))
+			radio.send(command(log, node, saved, line))
 		case <-stats.C:
 			radio.report()
 		case <-timer.C:
@@ -180,7 +197,7 @@ func (r *radio) report() {
 }
 
 // command runs one console line.
-func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet {
+func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) []emulator.Packet {
 	if strings.TrimSpace(line) == "" {
 		return nil
 	}
@@ -239,6 +256,21 @@ func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet 
 		log.Info("self test: 802.11 frames heard on the mesh channel in 3 s", "lr_only", lr, "with_bgn", bgn, "err", err)
 	case emulator.OpHelp:
 		log.Info(emulator.Help)
+	case emulator.OpFlash:
+		flashSelfTest(log)
+	case emulator.OpStore:
+		switch c.Sub {
+		case "forget":
+			if err := saved.forget(); err != nil {
+				log.Warn("settings could not be forgotten", "err", err)
+			} else {
+				log.Info("settings forgotten: the bonds are gone at the next boot")
+			}
+		case "open":
+			saved.open(n, now)
+		default:
+			saved.report()
+		}
 	}
 	return nil
 }
