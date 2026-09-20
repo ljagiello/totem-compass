@@ -26,6 +26,7 @@ import (
 
 	"tinygo.org/x/espradio"
 
+	"github.com/ljagiello/totem-compass/cmd/totememu/settings"
 	"github.com/ljagiello/totem-compass/emulator"
 	"github.com/ljagiello/totem-compass/mesh"
 )
@@ -82,13 +83,13 @@ func main() {
 
 	// The settings sector is read before the node starts, so the name and
 	// the colour it was given last are the ones it comes up with.
-	saved := openSettings(log, storeAtBoot)
-	if saved.state.Name != "" && name == "" {
-		name = saved.state.Name
+	saved := settings.Open(log, bootSector())
+	if saved.State().Name != "" && name == "" {
+		name = saved.State().Name
 	}
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
-		ColorID: saved.state.ColorID,
+		ColorID: saved.State().ColorID,
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no
 		// credentials for a network, and nothing it does should depend on
@@ -96,10 +97,10 @@ func main() {
 		OTATransport: newLocalOTA(),
 		Logger:       log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
 	}, boot)
-	saved.restore(node, boot)
-	saved.save(node) // records this boot, and writes nothing if nothing changed
+	saved.Restore(node, boot)
+	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
-		"channel", mesh.Channel, "phy", "LR 250K", "boots", saved.state.BootCount)
+		"channel", mesh.Channel, "phy", "LR 250K", "boots", saved.State().BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	front := newPanel(log)
@@ -128,7 +129,7 @@ func main() {
 		radio.send(node.Poll(now))
 		if n := node.BondCount(); n != bonds {
 			bonds = n
-			saved.save(node)
+			saved.Save(node)
 		}
 		// The receive ring is polled: the WiFi task must not call into Go.
 		wait := rxPoll
@@ -149,12 +150,12 @@ func main() {
 			// A command is the usual way a setting changes — the colour,
 			// the brightness, the name — so look for something to save
 			// right after one. save writes nothing when nothing changed.
-			saved.save(node)
+			saved.Save(node)
 		case <-stats.C:
 			radio.report()
 			// And once a minute, for the settings a gesture changed: a
 			// tap of the power button goes through no command at all.
-			saved.save(node)
+			saved.Save(node)
 		case <-timer.C:
 		}
 	}
@@ -216,7 +217,7 @@ func (r *radio) report() {
 }
 
 // command runs one console line.
-func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) []emulator.Packet {
+func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line string) []emulator.Packet {
 	if strings.TrimSpace(line) == "" {
 		return nil
 	}
@@ -297,15 +298,15 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) [
 	case emulator.OpStore:
 		switch c.Sub {
 		case "forget":
-			if err := saved.forget(n, now); err != nil {
+			if err := saved.Forget(n, now); err != nil {
 				log.Warn("settings could not be forgotten", "err", err)
 			} else {
 				log.Info("settings forgotten: the bonds are gone at the next boot")
 			}
 		case "open":
-			saved.open(n, now)
+			saved.Reopen(n, now, flashSector{addr: storeSector})
 		default:
-			saved.report()
+			saved.Report()
 		}
 	}
 	return nil
