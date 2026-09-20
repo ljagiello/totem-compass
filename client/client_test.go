@@ -256,11 +256,18 @@ func TestWritesKeepTheirOrder(t *testing.T) {
 	for range 20 {
 		c, l := newClient(t, client.Options{})
 		release := l.holdWrites()
-		go func() { _ = c.SendNow(protocol.RequestPeerSync()) }() // in the link, blocked
-		time.Sleep(5 * time.Millisecond)
-		l.injectMsg(t, static) // its ack queues next
+		go func() { _ = c.SendNow(protocol.RequestPeerSync()) }()
+		// Waited for, not slept on: the point of the test is that this
+		// write is inside the link and blocked before anything else is
+		// queued, and a sleep only says so on a machine that is not
+		// busy. CI on macOS under -race is busy, and the first write
+		// came out as the ack.
+		l.waitHeld(t)
+		// Injecting is synchronous, so the ack is in the queue before
+		// the request below is asked for — which is the order under
+		// test, and it no longer depends on when a goroutine runs.
+		l.injectMsg(t, static)
 		go func() { _ = c.SendNow(protocol.RequestStaticData()) }()
-		time.Sleep(5 * time.Millisecond)
 		release()
 		l.expectWrite(t, protocol.RequestPeerSync())
 		l.expectWrite(t, protocol.AckStaticData())
