@@ -66,8 +66,10 @@ func manyOwned() []mesh.MAC {
 // the boot and was written straight back out, and nothing could ever
 // lower it — so a factory reset could not clear it either.
 func TestALearnedVoltageIsChecked(t *testing.T) {
-	h := newHarness(t, nil)
-	p := h.n.Power()
+	// A bare power model: a node's has already measured the pack its
+	// configuration describes, and the rule under test is about one that
+	// has only ever been restored.
+	p := newPower(t0)
 	if ok := p.SetLearnedMaxVolts(float32(math.Inf(1))); ok {
 		t.Error("an infinite maximum was accepted without complaint")
 	}
@@ -99,7 +101,7 @@ func TestALearnedVoltageIsChecked(t *testing.T) {
 	}
 	// But not one this run measured for itself: `store open` on a running
 	// device must not un-stretch a curve it learned an hour ago.
-	p.update(Battery{Volts: 4.3})
+	p.learn(Battery{Volts: 4.3})
 	p.SetLearnedMaxVolts(4.15)
 	if got := p.LearnedMaxVolts(); got != 4.3 {
 		t.Errorf("a stale saved value lowered a measured maximum to %v", got)

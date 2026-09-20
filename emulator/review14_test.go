@@ -95,15 +95,11 @@ func TestAResetLeavesNothingToSave(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.25, 100 })
 	h.collect(h.n.Poll(h.now))
 	h.n.FactoryReset(h.now)
-	if got := h.n.State(0).LearnedMaxVolts; got != 0 {
-		t.Errorf("the state saved right after a reset carries %v", got)
-	}
-	// And what it learns next can still be corrected by a saved value,
-	// because the reset left nothing measured behind it.
-	h.collect(h.n.Poll(h.now))
-	h.n.Power().SetLearnedMaxVolts(4.15)
+	// The device has measured the pack in front of it again, which is a
+	// reading rather than the memory it was told to drop — but nothing
+	// older than that survives.
 	if got := h.n.Power().LearnedMaxVolts(); got > 4.26 {
-		t.Errorf("after a reset the learned maximum is stuck at %v", got)
+		t.Errorf("a reset kept %v, which is more than the pack reads", got)
 	}
 }
 

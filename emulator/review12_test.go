@@ -172,17 +172,14 @@ func TestAFactoryResetForgetsThePack(t *testing.T) {
 	}
 	h.n.SetSensors(NewStatic(Sensors{Battery: Battery{Volts: 4.15, Percent: 100}}), h.now)
 	h.n.FactoryReset(h.now)
-	if got := h.n.Power().LearnedMaxVolts(); got != 0 {
-		t.Errorf("a factory reset left a maximum of %v behind", got)
-	}
-	// And the next reading learns the pack that is actually there, rather
-	// than the one it was told to forget.
-	h.collect(h.n.Poll(h.now))
+	// The reset drops the memory and the reading that follows measures
+	// the pack that is actually there — so what is left is the new pack,
+	// never the old one.
 	got := h.n.Power().LearnedMaxVolts()
 	if got == 0 {
 		t.Error("nothing was learned from the pack that is there")
 	}
 	if got > 4.16 {
-		t.Errorf("the device re-learned %v, which is the pack it forgot", got)
+		t.Errorf("a reset kept %v, which is the pack it was told to forget", got)
 	}
 }

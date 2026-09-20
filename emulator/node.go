@@ -516,6 +516,10 @@ func (n *Node) read(now time.Time) {
 	// inverse: a fuel gauge that reports only a percentage keeps a
 	// voltage of zero, because the curve cannot be run backwards without
 	// inventing a number.
+	// Learned before the percentage is worked out, so a pack that has
+	// just been seen higher than the curve's top is read against its own
+	// maximum rather than the previous one.
+	n.power.learn(n.sensors.Battery)
 	if b := &n.sensors.Battery; !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
@@ -799,6 +803,14 @@ func (n *Node) Pair(now time.Time) []Packet {
 // the log or silences a button.
 func (n *Node) startPairing(now time.Time) {
 	switch {
+	case n.power.Off():
+		// Refused here rather than dropped in sendRaw: a window opened on
+		// a device that is off still arms its timers and runs pair_nearby
+		// every 50-99 ms for six seconds, building a status frame each
+		// time for the radio to throw away. The bytes never leaving is
+		// not the same as the work not happening.
+		n.log.Warn("cannot pair: the device is powered down")
+		return
 	case n.pairing:
 		return
 	case len(n.peers) >= maxBonds:
@@ -887,6 +899,13 @@ func (n *Node) ForgetPeers(now time.Time) {
 // which 5.0.3 receivers ignore.
 func (n *Node) Unbond(now time.Time, mac mesh.MAC) []Packet {
 	if _, ok := n.peers[mac]; !ok {
+		return nil
+	}
+	if n.power.Off() {
+		// The notice would sit in the outbox until the device came back
+		// and then go out, announcing an unbond from a power cycle the
+		// peer never saw. A device that is off does nothing.
+		n.log.Warn("cannot delete a peer: the device is powered down", "mac", mac)
 		return nil
 	}
 	n.outbox[mac] = mustMarshal(n.status(now, mesh.PeerUnbond, false))
@@ -1455,15 +1474,15 @@ func (n *Node) FactoryReset(now time.Time) {
 	// reading taken before the clear is the percentage worked out with
 	// the stretch being forgotten, which would stand until the next poll
 	// and then jump — the thing the read is here to prevent.
+	//
+	// The reading that follows learns the pack in front of the device
+	// again, which is right: that is a measurement, not the memory being
+	// dropped. What must not survive is the *record* — a reset that wrote
+	// the old maximum back would have the next boot restore it — and
+	// that is the saving side's business, not this one's.
 	n.power.ClearLearnedMaxVolts()
 	n.read(now)
 	n.applyPowerMode(now)
-	// And cleared again, because reading and updating both learn from the
-	// present voltage and have just put the pack back. The board
-	// snapshots the state straight after this call, and that record has
-	// to be empty; the pack is learned again on the next poll, from a
-	// measurement rather than from a memory.
-	n.power.ClearLearnedMaxVolts()
 }
 
 // AddBond puts back a bond the device already had, the way a Totem reads

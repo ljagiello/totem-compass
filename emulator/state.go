@@ -135,7 +135,10 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	}
 	// The lifetime sleep total, like the boot count: saved every time and
 	// meaningless if it restarts at zero on each boot.
-	n.power.SetSleptMs(int64(min(st.SleepMs, math.MaxInt64)))
+	if !n.power.SetSleptMs(int64(min(st.SleepMs, math.MaxInt64))) {
+		n.log.Warn("saved sleep total is longer than any device has run, ignoring it",
+			"ms", st.SleepMs)
+	}
 	if !n.power.SetLearnedMaxVolts(st.LearnedMaxVolts) {
 		// Said out loud, like every other field off this sector that does
 		// not survive its check: a successful `store open` with a damaged

@@ -250,10 +250,19 @@ func (r *recogniser) block(now time.Time, d time.Duration) {
 // a hold is a press that has lasted, and a tap count is only known once
 // the window closes.
 func (n *Node) Press(in Input, now time.Time) {
-	if r := n.input(in); r != nil {
-		r.press(now)
-		n.log.Debug("input pressed", "input", in)
+	r := n.input(in)
+	if r == nil {
+		return
 	}
+	// What the recogniser did with it, not what was asked: an edge
+	// inside the lockout, during the post-boot wait or while touch is
+	// blocked for an update is refused, and a driver chasing a dead
+	// button should not find presses in the log that never happened.
+	if r.press(now) {
+		n.log.Debug("input pressed", "input", in)
+		return
+	}
+	n.log.Debug("input press ignored", "input", in)
 }
 
 // Release reports an input released.
@@ -286,9 +295,12 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 		// on the button — a real one on the board, or a hold the console
 		// started — and releasing that would end someone else's press
 		// before it matured into a hold.
-		if r.press(at) {
-			r.release(at.Add(tapHold))
+		if !r.press(at) {
+			n.log.Info("tap ignored: the input is already down or blocked",
+				"input", in, "of", count)
+			return
 		}
+		r.release(at.Add(tapHold))
 	}
 }
 
@@ -315,7 +327,14 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 			"input", in, "held", dur(d), "shortest", dur(edgeLockout))
 	}
 	end := now.Add(d)
-	r.press(now)
+	if !r.press(now) {
+		// A finger is already on it — a real one on the board, or a hold
+		// the console started — or touch is blocked. Releasing now would
+		// end that press before it matured, which is the thing Tap was
+		// fixed for; this is the same path.
+		n.log.Info("hold ignored: the input is already down or blocked", "input", in)
+		return n.flush()
+	}
 	// Walk the press forward, firing what each moment brings, rather than
 	// jumping to the end: one poll at the end reports the long hold
 	// before the hold, which is backwards.
