@@ -163,14 +163,24 @@ func TestBatteryCurve(t *testing.T) {
 			t.Errorf("battPctFor(%.2f) = %d, want %d", tt.volts, got, tt.want)
 		}
 	}
-	// And it never goes backwards as the voltage rises.
-	last := int8(-1)
-	for v := float32(3.0); v <= 4.3; v += 0.01 {
-		got := battPctFor(v, 0)
-		if got < last {
-			t.Fatalf("the curve dips at %.2f V: %d after %d", v, got, last)
+	// And it never goes backwards as the voltage rises — with the curve
+	// as written, and with the last point stretched out to a pack that
+	// charges above it. The stretched case is the one that dipped seven
+	// points at 4.12 V, and a sweep that only ran with no learned maximum
+	// never entered that path at all.
+	for _, top := range []float32{0, 4.2, 4.25, 4.4} {
+		last := int8(-1)
+		for v := float32(3.0); v <= 4.5; v += 0.005 {
+			got := battPctFor(v, top)
+			if got < last {
+				t.Fatalf("with a learned maximum of %.2f the curve dips at %.3f V: %d after %d",
+					top, v, got, last)
+			}
+			last = got
 		}
-		last = got
+		if last != 100 {
+			t.Errorf("with a learned maximum of %.2f the curve tops out at %d%%", top, last)
+		}
 	}
 }
 

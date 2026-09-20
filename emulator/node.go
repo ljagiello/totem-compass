@@ -272,6 +272,16 @@ func New(cfg Config, now time.Time) *Node {
 	// and Restore keeping "the default" would be keeping the corrupt one.
 	// An unlit crystal for good, from one bad byte.
 	cfg.ColorID = int8(paletteColor(cfg.Logger, "configuration", cfg.ColorID, ColorRed))
+	// The node's own copies. Owned is what allowedTX gates every
+	// transmission against, and Position is what fix() answers with: a
+	// caller that kept the slice or the pointer it passed in could change
+	// either afterwards, which is the same hole Config() and Sensors()
+	// close on the way out.
+	cfg.Owned = slices.Clone(cfg.Owned)
+	if cfg.Position != nil {
+		p := *cfg.Position
+		cfg.Position = &p
+	}
 	n := &Node{
 		cfg: cfg, log: cfg.Logger, rng: cfg.Rand, boot: now,
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
@@ -760,27 +770,21 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 // (Compass.start_pairing): for six seconds the node broadcasts bond
 // requests and bonds with an owned Totem doing the same right next to it.
 func (n *Node) Pair(now time.Time) []Packet {
-	n.startPairing(now, true)
+	n.startPairing(now)
 	return n.flush()
 }
 
-// startPairing opens the window. asked says a person did it — a button,
-// or the console — which is always answered, even when the answer is
-// that nothing can happen.
-func (n *Node) startPairing(now time.Time, asked bool) {
+// startPairing opens the window, and says why when it cannot. Every
+// caller is answered: the throttling belongs to the caller that repeats,
+// not here — a boolean saying which caller this is would have to be got
+// right by every caller added later, and getting it wrong either fills
+// the log or silences a button.
+func (n *Node) startPairing(now time.Time) {
 	switch {
 	case n.pairing:
 		return
 	case len(n.peers) >= maxBonds:
-		// Someone who pressed the button is always told why nothing
-		// happened. It is the automatic path that is quietened: onPeer
-		// calls this for every bond broadcast while a Totem next to us is
-		// pairing, and pair_nearby repeats every 50-99 ms for six seconds
-		// — eighty identical lines on a console that has frames to carry.
-		if asked || !n.saidBondLimit {
-			n.saidBondLimit = true
-			n.log.Warn("cannot have more than 8 bonds")
-		}
+		n.log.Warn("cannot have more than 8 bonds")
 		return
 	}
 	n.pairing = true // modes.bonding_start
@@ -851,6 +855,10 @@ func (n *Node) deletePeer(mac mesh.MAC) {
 // reset does. No unbond notice goes out: this is the device forgetting
 // them, not a decision about what they should hold.
 func (n *Node) ForgetPeers(now time.Time) {
+	// What the power model learned about this pack goes too: a reset that
+	// left it behind would keep stretching the battery curve for a
+	// battery the device is being told to forget it ever met.
+	n.power.ClearLearnedMaxVolts()
 	if len(n.peers) == 0 {
 		return
 	}
@@ -891,8 +899,21 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 			n.log.Info("owned Totem is pairing but too far away", "mac", rx.Src, "rssi", rx.RSSI, "need", n.cfg.BondingRSSI)
 			return
 		}
+		// Once per full bond list: this runs for every bond broadcast a
+		// Totem next to us sends, and pair_nearby repeats every 50-99 ms
+		// for six seconds — eighty identical lines on a console that has
+		// frames to carry. A person pressing the button is answered every
+		// time, because they went through Pair rather than through here.
+		if len(n.peers) >= maxBonds {
+			if !n.saidBondLimit {
+				n.saidBondLimit = true
+				n.log.Warn("cannot bond with a Totem pairing next to us: already at the limit",
+					"mac", rx.Src, "bonds", len(n.peers), "max", maxBonds)
+			}
+			return
+		}
 		n.log.Info("owned Totem is pairing next to us", "mac", rx.Src, "rssi", rx.RSSI)
-		n.startPairing(now, false)
+		n.startPairing(now)
 	}
 	bonded := false
 	switch m.Command {
@@ -1006,8 +1027,13 @@ func locateExpiry(wall time.Time) int32 {
 		// A board whose clock has not started, or a caller handing over a
 		// zero time: truncating that into the field gives an arbitrary
 		// value, and a large positive one is a frame every relay keeps
-		// alive for decades. Already expired is the honest answer.
-		return 0
+		// alive for decades.
+		//
+		// 1, not 0: relay() reads a zero expiry as "no expiry set" and
+		// skips the age test altogether, so zero would make the frame
+		// immortal — the very thing being avoided. One second after the
+		// epoch is as expired as the field can say.
+		return 1
 	}
 	return int32(sec) + mesh.LocateLifetimeSec
 }

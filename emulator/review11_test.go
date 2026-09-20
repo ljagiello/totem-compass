@@ -22,6 +22,7 @@ func TestPressingPairAlwaysAnswers(t *testing.T) {
 	var logged bytes.Buffer
 	h := newHarness(t, func(c *Config) {
 		c.Owned = manyOwned()
+		c.AutoPair = true
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
 	for i, mac := range h.n.Config().Owned[:maxBonds] {
@@ -31,17 +32,24 @@ func TestPressingPairAlwaysAnswers(t *testing.T) {
 	}
 	h.advance(bootDebounce)
 
-	// The automatic path says it once.
-	h.n.startPairing(h.now, false)
-	h.n.startPairing(h.now, false)
-	if n := strings.Count(logged.String(), "more than 8 bonds"); n != 1 {
+	// The automatic path — an owned Totem pairing next to us, which
+	// repeats every 50-99 ms — says it once.
+	for range 5 {
+		h.rx(h.n.Config().Owned[0], mesh.Broadcast, -20, bondFrame(false))
+	}
+	if n := strings.Count(logged.String(), "already at the limit"); n != 1 {
 		t.Errorf("the automatic path said it %d times, want once", n)
 	}
-	// A press says it again, however many times the radio already did.
+	// A press says it every time, however often the radio already did.
 	logged.Reset()
 	h.collect(h.n.Pair(h.now))
 	if !strings.Contains(logged.String(), "more than 8 bonds") {
 		t.Errorf("pressing pair on a full device said nothing: %s", logged.String())
+	}
+	logged.Reset()
+	h.collect(h.n.Pair(h.now))
+	if !strings.Contains(logged.String(), "more than 8 bonds") {
+		t.Errorf("pressing pair a second time said nothing: %s", logged.String())
 	}
 }
 
@@ -60,21 +68,35 @@ func manyOwned() []mesh.MAC {
 func TestALearnedVoltageIsChecked(t *testing.T) {
 	h := newHarness(t, nil)
 	p := h.n.Power()
-	p.SetLearnedMaxVolts(float32(math.Inf(1)))
+	if ok := p.SetLearnedMaxVolts(float32(math.Inf(1))); ok {
+		t.Error("an infinite maximum was accepted without complaint")
+	}
 	if got := p.LearnedMaxVolts(); math.IsInf(float64(got), 0) {
 		t.Errorf("the power model took a learned maximum of %v", got)
 	}
-	p.SetLearnedMaxVolts(99)
+	if ok := p.SetLearnedMaxVolts(99); ok {
+		t.Error("a voltage no cell reaches was accepted without complaint")
+	}
 	if got := p.LearnedMaxVolts(); got == 99 {
 		t.Error("the power model took a voltage no cell reaches")
 	}
 
-	// A real one is taken, and can then be put back lower.
-	p.SetLearnedMaxVolts(4.2)
+	// A real one is taken.
+	if ok := p.SetLearnedMaxVolts(4.2); !ok {
+		t.Fatal("a plausible maximum was refused")
+	}
 	if got := p.LearnedMaxVolts(); got != 4.2 {
 		t.Fatalf("a plausible maximum came back as %v", got)
 	}
-	p.SetLearnedMaxVolts(0)
+	// A saved value older than what this run measured is not news: `store
+	// open` on a running device must not un-stretch a curve it learned an
+	// hour ago.
+	p.SetLearnedMaxVolts(4.15)
+	if got := p.LearnedMaxVolts(); got != 4.2 {
+		t.Errorf("a stale saved value lowered the learned maximum to %v", got)
+	}
+	// A factory reset forgets the pack.
+	p.ClearLearnedMaxVolts()
 	if got := p.LearnedMaxVolts(); got != 0 {
 		t.Errorf("a reset left the learned maximum at %v", got)
 	}

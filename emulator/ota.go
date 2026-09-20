@@ -315,9 +315,12 @@ func (n *Node) Update(now time.Time) error {
 	// does, so the time it took is measured against the wall. It is only
 	// ever reported, never used to decide anything.
 	began := time.Now()
+	// The node's clock does not move while an update blocks the loop, so
+	// everything that shows something has to say when it would really be
+	// happening. One helper, so the next path that needs it cannot forget.
+	at := func() time.Time { return now.Add(time.Since(began)) }
 	fail := func(err error) error {
-		took := time.Since(began)
-		o.state, o.err, o.took = OTAFailed, err, took
+		o.state, o.err, o.took = OTAFailed, err, time.Since(began)
 		n.log.Warn("ota failed", "err", err)
 		// The clock the node will be on when it next polls, not the one
 		// Update was entered on: an update blocks the loop, so a download
@@ -325,7 +328,7 @@ func (n *Node) Update(now time.Time) error {
 		// ring's four seconds already spent, and the next tick replaced
 		// it with idle before a frame was ever drawn. The progress
 		// callback already does this.
-		n.leds.Play(AnimOTAFailed, now.Add(took))
+		n.leds.Play(AnimOTAFailed, at())
 		n.unblockTouch(blocked)
 		return err
 	}
@@ -435,7 +438,7 @@ func (n *Node) Update(now time.Time) error {
 	// The same clock the failure path uses: the strip has been ticked at
 	// now+elapsed all through the download, so handing it the entry time
 	// here would step its animation clock backwards.
-	n.leds.Play(AnimIdle, now.Add(time.Since(began)))
+	n.leds.Play(AnimIdle, at())
 	n.unblockTouch(blocked)
 	n.log.Info("ota complete", "installed", false,
 		"note", "the emulator runs the exchange but does not write a slot or reboot")

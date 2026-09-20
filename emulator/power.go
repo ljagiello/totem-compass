@@ -93,7 +93,13 @@ var battCurve = []struct {
 // volt of discharge looks like no discharge at all. Zero means nothing
 // has been learned yet, and the curve is used as written.
 func battPctFor(v float32, top float32) int8 {
-	full := battCurve[len(battCurve)-1].volts
+	last := len(battCurve) - 1
+	// The last point moves out to what this pack reaches; it does not
+	// gain a segment of its own. A segment added above the curve's top
+	// left the one below it unstretched, so the two met at different
+	// percentages and the gauge dipped seven points at 4.12 V — 99% then
+	// 92% climbing, and back up again on the way down.
+	full := battCurve[last].volts
 	if top > full && plausibleVolts(top) {
 		full = top
 	}
@@ -102,19 +108,17 @@ func battPctFor(v float32, top float32) int8 {
 		return 0
 	case v >= full:
 		return 100
-	case v >= battCurve[len(battCurve)-1].volts:
-		// Between the curve's top and what this pack reaches.
-		lo := battCurve[len(battCurve)-2]
-		return lo.pct + int8(float32(100-lo.pct)*(v-lo.volts)/(full-lo.volts))
 	}
-	for i := 1; i < len(battCurve); i++ {
-		hi := battCurve[i]
-		if v > hi.volts {
+	for i := 1; i <= last; i++ {
+		hi, hiVolts := battCurve[i], battCurve[i].volts
+		if i == last {
+			hiVolts = full
+		}
+		if v > hiVolts {
 			continue
 		}
 		lo := battCurve[i-1]
-		span := hi.volts - lo.volts
-		return lo.pct + int8(float32(hi.pct-lo.pct)*(v-lo.volts)/span)
+		return lo.pct + int8(float32(hi.pct-lo.pct)*(v-lo.volts)/(hiVolts-lo.volts))
 	}
 	return 100
 }
@@ -191,17 +195,30 @@ func newPower(now time.Time) *Power {
 // carry across reboots.
 func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
 
-// SetLearnedMaxVolts puts back what a previous boot learned. The value
-// comes off a flash sector, so it is checked like everything else that
-// does: an infinity or a voltage no cell reaches would pin the curve for
-// the life of the boot and be written straight back out. It replaces
-// rather than raises, so a factory reset can clear it.
-func (p *Power) SetLearnedMaxVolts(v float32) {
-	if v != 0 && !plausibleVolts(v) {
-		return
+// SetLearnedMaxVolts puts back what a previous boot learned, and reports
+// whether it was a voltage a cell could reach — it comes off a flash
+// sector as four raw bytes, and an infinity would pin the curve for the
+// life of the boot and be written straight back out.
+//
+// It only ever raises. A saved value older than what this run has already
+// measured is not news, and `store open` on a running device would
+// otherwise un-stretch a curve the device learned an hour ago.
+// ClearLearnedMaxVolts is how a reset gets rid of it.
+func (p *Power) SetLearnedMaxVolts(v float32) bool {
+	if v == 0 {
+		return true // nothing was saved, which is not a bad value
 	}
-	p.maxVolts = v
+	if !plausibleVolts(v) {
+		return false
+	}
+	if v > p.maxVolts {
+		p.maxVolts = v
+	}
+	return true
 }
+
+// ClearLearnedMaxVolts forgets the pack, as a factory reset does.
+func (p *Power) ClearLearnedMaxVolts() { p.maxVolts = 0 }
 
 // plausibleVolts reports whether a reading is one a single lithium cell
 // could give: above the curve's own floor and not past what a charger

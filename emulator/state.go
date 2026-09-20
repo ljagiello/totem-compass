@@ -132,7 +132,14 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if name := store.SanitizeName(st.Name); name != "" {
 		n.cfg.Name = name
 	}
-	n.power.SetLearnedMaxVolts(st.LearnedMaxVolts)
+	if !n.power.SetLearnedMaxVolts(st.LearnedMaxVolts) {
+		// Said out loud, like every other field off this sector that does
+		// not survive its check: a successful `store open` with a damaged
+		// record and no word about it is how the damage stays hidden
+		// until the next save writes over the evidence.
+		n.log.Warn("saved maximum voltage is not one a cell reaches, keeping what this run learned",
+			"volts", st.LearnedMaxVolts)
+	}
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted
@@ -142,6 +149,11 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
 	n.cfg.ColorID = int8(c)
 	n.leds.SetDefaultColor(c)
+	// A reading taken with what was just restored: the learned maximum
+	// changes what a voltage means, and until the next poll the battery
+	// percentage would still be the one worked out without it — which
+	// `status`, a status frame and the OTA gate would all use.
+	n.read(now)
 	return errs
 }
 
