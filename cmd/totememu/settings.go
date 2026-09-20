@@ -71,33 +71,25 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 		return s
 	}
 	s.held = b
-	s.key = settingsKey(s.state)
+	s.key = emulator.SettingsKey(s.state)
 	s.state.BootCount++
 	log.Info("settings restored", "name", s.state.Name, "peers", len(s.state.Peers),
 		"boots", s.state.BootCount, "seq", j.Seq(), "free", j.Free())
 	return s
 }
 
-// restore puts the saved bonds back into a node, so the device comes up
-// still bonded, the way a Totem does.
+// restore puts the saved bonds and settings back into a node, so the
+// device comes up as it went down.
 func (s *settings) restore(n *emulator.Node, now time.Time) {
-	for _, p := range s.state.Peers {
-		// A saved peer that is no longer in the owned list is refused, and
-		// that is worth saying: it means the board was reflashed for a
-		// different Totem and the old bond is being dropped.
-		if err := n.AddBond(mesh.MAC(p.MAC), p.Name, now); err != nil {
-			s.log.Warn("saved bond not restored", "mac", mesh.MAC(p.MAC), "err", err)
-		}
+	for _, err := range n.Restore(s.state, now) {
+		// A saved peer that is no longer in the owned list is refused,
+		// and that is worth saying: it means the board was reflashed for
+		// a different Totem and the old bond is being dropped.
+		s.log.Warn("saved bond not restored", "err", err)
 	}
 	if len(s.state.Peers) > 0 {
 		s.log.Info("bonds restored", "peers", len(s.state.Peers))
 	}
-	if b := s.state.Brightness; b > 0 {
-		n.LEDs().SetBrightness(float64(b) / 255)
-	}
-	// A muted alarm stays muted: someone silenced it, and a power cut is
-	// not them changing their mind.
-	n.SetSOSMuted(s.state.SOSMuted)
 }
 
 // save writes the node's bonds and settings, and does nothing when they
@@ -106,34 +98,8 @@ func (s *settings) save(n *emulator.Node) {
 	if s.j == nil {
 		return
 	}
-	cfg := n.Config()
-	st := store.State{
-		// The names come off the air and out of a build flag, where
-		// nothing checks them. One that cannot be encoded would stop
-		// every save from here on, so they are made storable first.
-		Name: store.SanitizeName(cfg.Name), ColorID: cfg.ColorID,
-		// The brightness a tap of the power button chose, and the sleep
-		// the device has taken, both belong to the device rather than to
-		// this boot.
-		Brightness:      uint8(n.LEDs().Brightness() * 255),
-		SOSMuted:        n.SOSMuted(),
-		BootCount:       s.state.BootCount,
-		SleepMs:         uint64(n.Power().SleptMs()),
-		LearnedMaxVolts: s.state.LearnedMaxVolts,
-	}
-	for _, p := range n.Peers() {
-		if len(st.Peers) == store.MaxPeers {
-			break
-		}
-		ps := store.PeerState{MAC: [6]byte(p.MAC), Name: store.SanitizeName(p.Status.Name)}
-		if p.Status.Lat != 0 || p.Status.Lon != 0 {
-			ps.Lat, ps.Lon = p.Status.Lat, p.Status.Lon
-		}
-		if !p.LastHeard.IsZero() {
-			ps.LastSeenUnix = p.LastHeard.Unix()
-		}
-		st.Peers = append(st.Peers, ps)
-	}
+	st := n.State(s.state.BootCount)
+	st.LearnedMaxVolts = s.state.LearnedMaxVolts
 	b, err := st.MarshalBinary()
 	if err != nil {
 		s.log.Warn("settings could not be encoded", "err", err)
@@ -144,7 +110,7 @@ func (s *settings) save(n *emulator.Node) {
 	// a write would put a record on the flash every time anything so much
 	// as looked at the settings, filling a sector — and an erase stalls
 	// the radio — for no news at all.
-	key := settingsKey(st)
+	key := emulator.SettingsKey(st)
 	if key == nil {
 		s.log.Warn("settings could not be encoded")
 		return
@@ -152,30 +118,19 @@ func (s *settings) save(n *emulator.Node) {
 	if bytes.Equal(key, s.key) {
 		return // nothing a person changed, so nothing to write
 	}
+	// A flash write is the firmware's 'vfs write' blocker: while it runs,
+	// nothing feeds the watchdog.
+	n.Power().Block(emulator.BlockVFSWrite)
 	start := time.Now()
-	if err := s.j.Save(b); err != nil {
+	err = s.j.Save(b)
+	n.Power().Unblock(emulator.BlockVFSWrite)
+	if err != nil {
 		s.log.Warn("settings could not be saved", "err", err)
 		return
 	}
 	s.held, s.key, s.state = b, key, st
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
-}
-
-// settingsKey is the part of a state a person chose: the same bytes with
-// the counters zeroed, so two states that differ only in how long the
-// device has been awake compare equal. It returns nil when the state
-// cannot be encoded, which the caller treats as a reason not to write.
-func settingsKey(st store.State) []byte {
-	// The boot count is not zeroed: it changes once per boot, and a boot
-	// that writes nothing is a boot that is never recorded — every boot
-	// would then read back the same number.
-	st.SleepMs = 0
-	b, err := st.MarshalBinary()
-	if err != nil {
-		return nil
-	}
-	return b
 }
 
 // forget wipes the sector, as a factory reset does.
