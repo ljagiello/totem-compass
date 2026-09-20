@@ -976,10 +976,19 @@ func (n *Node) meshTick(now time.Time) {
 		return
 	}
 	send := false
+	// asked collects the peers this tick is asking about, so the throttle
+	// below covers every reason for asking, not only staleness.
+	asked := map[mesh.MAC]bool{}
 	for _, mac := range n.order {
 		p := n.peers[mac]
 		n.updateStale(now, p)
 		if p.viaMesh && now.Sub(p.lastHeard) >= meshStaleHeard {
+			// A peer heard only through the mesh has gone quiet. Asking
+			// for it counts against the same throttle as any other ask:
+			// without that this path fired on every tick its group slot
+			// came round, which is every five seconds rather than the
+			// thirty MESH_SEND_FREQ_MS allows.
+			asked[mac] = true
 			send = true
 		}
 		if !p.stale || now.Before(p.meshNext) || p.meshCount > meshPeerLimit {
@@ -1005,8 +1014,8 @@ func (n *Node) meshTick(now time.Time) {
 	if !send {
 		return
 	}
-	for _, p := range n.peers {
-		if p.stale {
+	for mac, p := range n.peers {
+		if p.stale || asked[mac] {
 			p.meshNext = now.Add(meshSendFreq)
 			p.meshCount++
 		}

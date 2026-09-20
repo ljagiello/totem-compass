@@ -628,3 +628,37 @@ func TestNameLongerThanAFrame(t *testing.T) {
 		t.Error("no unbond frame")
 	}
 }
+
+// TestMeshAskIsThrottledOnEveryPath: a peer heard only through the mesh
+// that has gone quiet is a reason to ask the mesh where it is — but it
+// counts against the same MESH_SEND_FREQ_MS throttle as any other
+// reason. It used to bypass it and fire every time the group slot came
+// round, which is every five seconds rather than every thirty.
+func TestMeshAskIsThrottledOnEveryPath(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	if err := h.n.SetClock(t0, h.now); err != nil {
+		t.Fatal(err)
+	}
+	// A peer this node has only ever heard relayed, and not lately.
+	p := h.n.peers[totem]
+	p.viaMesh, p.heard, p.lastHeard = true, true, h.now
+	h.advance(meshStaleHeard + time.Second)
+	h.take()
+
+	h.advance(2 * time.Minute)
+	var asks int
+	for _, s := range h.take() {
+		if m, ok := s.msg.(mesh.Locate); ok && m.Origin == self && m.ReplyRequested {
+			asks++
+		}
+	}
+	if asks == 0 {
+		t.Fatal("the node never asked the mesh about a peer it had lost")
+	}
+	// Two minutes at one ask per thirty seconds is four, with a little
+	// room for where the window falls.
+	if asks > 6 {
+		t.Errorf("%d mesh requests in two minutes, want about one every %s", asks, meshSendFreq)
+	}
+}
