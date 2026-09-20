@@ -139,7 +139,7 @@ func (s *settings) forget(n *emulator.Node, now time.Time) error {
 	if s.j == nil {
 		return errors.New("no settings sector")
 	}
-	n.ForgetPeers(now)
+	n.FactoryReset(now)
 	empty := n.State(0)
 	b, err := empty.MarshalBinary()
 	if err != nil {

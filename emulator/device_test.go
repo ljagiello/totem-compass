@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -168,18 +169,25 @@ func TestBatteryCurve(t *testing.T) {
 	// charges above it. The stretched case is the one that dipped seven
 	// points at 4.12 V, and a sweep that only ran with no learned maximum
 	// never entered that path at all.
-	for _, top := range []float32{0, 4.2, 4.25, 4.4} {
+	// 4.5 and the infinity are past what a cell reaches, so they exercise
+	// the guard that refuses an implausible maximum off the flash and
+	// falls back to the curve as written.
+	for _, top := range []float32{0, 4.2, 4.25, 4.4, 4.5, float32(math.Inf(1))} {
 		last := int8(-1)
-		for v := float32(3.0); v <= 4.5; v += 0.005 {
+		// An exact grid rather than an accumulating float32: three hundred
+		// additions of 0.005 drift off the voltages the failure message
+		// would name.
+		for i := range 301 {
+			v := 3.0 + float32(i)*0.005
 			got := battPctFor(v, top)
 			if got < last {
-				t.Fatalf("with a learned maximum of %.2f the curve dips at %.3f V: %d after %d",
+				t.Fatalf("with a learned maximum of %v the curve dips at %.3f V: %d after %d",
 					top, v, got, last)
 			}
 			last = got
 		}
 		if last != 100 {
-			t.Errorf("with a learned maximum of %.2f the curve tops out at %d%%", top, last)
+			t.Errorf("with a learned maximum of %v the curve tops out at %d%%", top, last)
 		}
 	}
 }

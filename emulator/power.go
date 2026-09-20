@@ -185,6 +185,12 @@ type Power struct {
 	// kept across reboots, so a pack that charges above the curve's top
 	// is not read as 100% for ever after.
 	maxVolts float32
+	// measured says maxVolts came from a reading this run took, rather
+	// than from a saved record. A saved one may replace what was only
+	// restored — a pack swapped for one that peaks lower has to be able
+	// to bring the curve back down — but never what this run has seen
+	// with its own eyes.
+	measured bool
 }
 
 func newPower(now time.Time) *Power {
@@ -200,10 +206,11 @@ func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
 // sector as four raw bytes, and an infinity would pin the curve for the
 // life of the boot and be written straight back out.
 //
-// It only ever raises. A saved value older than what this run has already
-// measured is not news, and `store open` on a running device would
-// otherwise un-stretch a curve the device learned an hour ago.
-// ClearLearnedMaxVolts is how a reset gets rid of it.
+// It will not lower a maximum this run measured for itself: `store open`
+// on a running device would otherwise un-stretch a curve the device
+// learned an hour ago. It will lower one that was only restored, because
+// a pack swapped for one that peaks lower has to have a way down that is
+// not a factory reset.
 func (p *Power) SetLearnedMaxVolts(v float32) bool {
 	if v == 0 {
 		return true // nothing was saved, which is not a bad value
@@ -211,14 +218,14 @@ func (p *Power) SetLearnedMaxVolts(v float32) bool {
 	if !plausibleVolts(v) {
 		return false
 	}
-	if v > p.maxVolts {
+	if v > p.maxVolts || !p.measured {
 		p.maxVolts = v
 	}
 	return true
 }
 
 // ClearLearnedMaxVolts forgets the pack, as a factory reset does.
-func (p *Power) ClearLearnedMaxVolts() { p.maxVolts = 0 }
+func (p *Power) ClearLearnedMaxVolts() { p.maxVolts, p.measured = 0, false }
 
 // plausibleVolts reports whether a reading is one a single lithium cell
 // could give: above the curve's own floor and not past what a charger
@@ -258,7 +265,7 @@ func (p *Power) HoldSleep(on bool) { p.holdSleep = on }
 func (p *Power) update(b Battery) (PowerMode, bool) {
 	was := p.mode
 	if b.Volts > p.maxVolts && plausibleVolts(b.Volts) {
-		p.maxVolts = b.Volts
+		p.maxVolts, p.measured = b.Volts, true
 	}
 	switch {
 	case p.off:

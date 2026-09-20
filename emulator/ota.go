@@ -320,7 +320,11 @@ func (n *Node) Update(now time.Time) error {
 	// happening. One helper, so the next path that needs it cannot forget.
 	at := func() time.Time { return now.Add(time.Since(began)) }
 	fail := func(err error) error {
-		o.state, o.err, o.took = OTAFailed, err, time.Since(began)
+		// Sampled once: the duration reported by `ota` and the instant the
+		// error ring was started describe the same event, so they should
+		// not be two different readings of the clock.
+		took := time.Since(began)
+		o.state, o.err, o.took = OTAFailed, err, took
 		n.log.Warn("ota failed", "err", err)
 		// The clock the node will be on when it next polls, not the one
 		// Update was entered on: an update blocks the loop, so a download
@@ -328,7 +332,7 @@ func (n *Node) Update(now time.Time) error {
 		// ring's four seconds already spent, and the next tick replaced
 		// it with idle before a frame was ever drawn. The progress
 		// callback already does this.
-		n.leds.Play(AnimOTAFailed, at())
+		n.leds.Play(AnimOTAFailed, now.Add(took))
 		n.unblockTouch(blocked)
 		return err
 	}
@@ -417,9 +421,9 @@ func (n *Node) Update(now time.Time) error {
 		// package comes down. The touch block is renewed with it, so a
 		// download slower than the block does not leave the inputs live
 		// halfway through.
-		at := now.Add(time.Since(began))
-		n.leds.Tick(at)
-		n.blockTouch(at, otaTouchBlock)
+		when := at()
+		n.leds.Tick(when)
+		n.blockTouch(when, otaTouchBlock)
 	})
 	if err != nil {
 		return fail(fmt.Errorf("ota: downloading %s: %w", pkg, err))

@@ -278,10 +278,7 @@ func New(cfg Config, now time.Time) *Node {
 	// either afterwards, which is the same hole Config() and Sensors()
 	// close on the way out.
 	cfg.Owned = slices.Clone(cfg.Owned)
-	if cfg.Position != nil {
-		p := *cfg.Position
-		cfg.Position = &p
-	}
+	cfg.Position = clonePosition(cfg.Position)
 	n := &Node{
 		cfg: cfg, log: cfg.Logger, rng: cfg.Rand, boot: now,
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
@@ -855,10 +852,6 @@ func (n *Node) deletePeer(mac mesh.MAC) {
 // reset does. No unbond notice goes out: this is the device forgetting
 // them, not a decision about what they should hold.
 func (n *Node) ForgetPeers(now time.Time) {
-	// What the power model learned about this pack goes too: a reset that
-	// left it behind would keep stretching the battery curve for a
-	// battery the device is being told to forget it ever met.
-	n.power.ClearLearnedMaxVolts()
 	if len(n.peers) == 0 {
 		return
 	}
@@ -937,6 +930,10 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 			// The same limit every other path applies. Past it the bond
 			// would be lost at the next boot anyway, because the saved
 			// list is read back through it.
+			if n.saidBondLimit {
+				return
+			}
+			n.saidBondLimit = true
 			n.log.Warn("bond not restored: already at the bond limit",
 				"mac", rx.Src, "bonds", len(n.peers), "max", maxBonds)
 			return
@@ -1112,7 +1109,12 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 // relay is Parser._relay_frame: the same frame with our position as the
 // last hop and one more hop.
 func (n *Node) relay(now time.Time, frame []byte, m mesh.Locate) bool {
-	if int(m.Hops)+1 >= int(m.MaxHops) || (m.Expiry != 0 && n.wall(now).Unix() > int64(m.Expiry)) {
+	// An expiry at or below zero is expired, not absent. Reading zero as
+	// "none set" put the rule in every producer of the field instead of
+	// here: a frame off the air stamped zero — a peer whose clock never
+	// started, another firmware, a garbled field — was relayed until the
+	// hop count ran out, and every new path that stamps one had to know.
+	if int(m.Hops)+1 >= int(m.MaxHops) || m.Expiry <= 0 || n.wall(now).Unix() > int64(m.Expiry) {
 		return false
 	}
 	pos := n.fix()
@@ -1262,6 +1264,18 @@ func (n *Node) updateStale(now time.Time, p *peer) {
 	}
 }
 
+// clonePosition takes a copy of a fix, so neither side can write through
+// the other. Every place a position crosses this package's edge — in
+// through New, out through Config and Sensors, and across a simulation
+// stopping — needs the same thing, and had its own copy of it.
+func clonePosition(p *Position) *Position {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	return &c
+}
+
 // livePosition reports whether a position off the air is one a device
 // could be at. A peer frame is bytes from a radio: nothing in the format
 // stops a NaN, an infinity or a latitude of 900, and a poisoned
@@ -1403,6 +1417,22 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 
 // ---- state for the driver ------------------------------------------------------
 
+// FactoryReset is the device forgetting everything it worked out about
+// where it is and what it is attached to: the bonds, and what the power
+// model learned about this pack. Kept apart from ForgetPeers, whose name
+// promises only the bonds — a caller that wants to drop bonds should not
+// have to know it also throws away the battery calibration.
+func (n *Node) FactoryReset(now time.Time) {
+	n.ForgetPeers(now)
+	n.power.ClearLearnedMaxVolts()
+	// A reading taken with the curve as it now stands, for the same
+	// reason Restore takes one: the percentage worked out with the
+	// forgotten stretch would otherwise stand until the next poll, and
+	// then jump.
+	n.read(now)
+	n.power.update(n.sensors.Battery)
+}
+
 // AddBond puts back a bond the device already had, the way a Totem reads
 // config.peers at boot: the peer is bonded again without a pairing
 // handshake, and nothing goes on the air. A MAC outside the owned scope is
@@ -1543,10 +1573,8 @@ func (n *Node) StopSim(now time.Time) {
 		return
 	}
 	held := n.sensors
-	if f := held.Fix; f != nil {
-		frozen := *f
-		frozen.SpeedKPH, frozen.Time = 0, time.Time{}
-		held.Fix = &frozen
+	if held.Fix = clonePosition(held.Fix); held.Fix != nil {
+		held.Fix.SpeedKPH, held.Fix.Time = 0, time.Time{}
 	}
 	n.SetSensors(NewStatic(held), now)
 	n.log.Info("simulation stopped")
@@ -1618,10 +1646,7 @@ func (n *Node) Sensors() Sensors {
 	// would let a caller write a position through a method that looks
 	// like a read — past usablePosition, which is the whole point of it.
 	s := n.sensors
-	if n.sensors.Fix != nil {
-		f := *n.sensors.Fix
-		s.Fix = &f
-	}
+	s.Fix = clonePosition(n.sensors.Fix)
 	return s
 }
 
@@ -1641,9 +1666,6 @@ func (n *Node) Config() Config {
 	// own.
 	c := n.cfg
 	c.Owned = slices.Clone(n.cfg.Owned)
-	if n.cfg.Position != nil {
-		p := *n.cfg.Position
-		c.Position = &p
-	}
+	c.Position = clonePosition(n.cfg.Position)
 	return c
 }
