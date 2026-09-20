@@ -609,6 +609,16 @@ func (p *printer) meshEvent(e MeshEvent) {
 
 func (p *printer) meshFrame(f MeshFrame, raw bool) {
 	if p.json {
+		// A frame whose decoded fields JSON cannot hold still goes out.
+		// Lat, lon and the battery are floats off the air, and a frame
+		// carrying a NaN or an infinity in any of them makes
+		// json.Marshal fail — so the stream dropped in silence exactly
+		// the frames someone watching it would most want to see. The
+		// raw bytes are always printable, and they are the record that
+		// matters; the decode is what could not be written down.
+		if _, err := json.Marshal(f.Frame); err != nil {
+			f.Frame, f.Error = nil, fmt.Sprintf("decoded frame cannot be written as JSON: %v", err)
+		}
 		p.emit(f)
 		return
 	}

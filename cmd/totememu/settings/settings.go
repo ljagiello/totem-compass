@@ -177,11 +177,10 @@ func (s *Store) Save(n *emulator.Node) {
 	// a write would put a record on the flash every time anything so much
 	// as looked at the settings, filling a sector — and an erase stalls
 	// the radio — for no news at all.
+	// No second check on this: SettingsKey encodes the same state that
+	// marshaled a few lines up, changing only the two free-running
+	// counters, so it cannot fail where that succeeded.
 	key := emulator.SettingsKey(st)
-	if key == nil {
-		s.log.Warn("settings could not be encoded")
-		return
-	}
 	if bytes.Equal(key, s.key) {
 		return // nothing a person changed, so nothing to write
 	}
@@ -223,7 +222,15 @@ func (s *Store) Forget(n *emulator.Node, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if err := s.j.Save(b); err != nil {
+	// The same blocker a save takes, and for a stronger reason: a reset
+	// writes into a sector that is not empty, so this is the erase — the
+	// longest the flash driver ever holds the cache off and the
+	// interrupts down, and the one stretch where nothing feeds the
+	// watchdog.
+	n.Power().Block(emulator.BlockVFSWrite)
+	err = s.j.Save(b)
+	n.Power().Unblock(emulator.BlockVFSWrite)
+	if err != nil {
 		return err
 	}
 	// found with them: the sector holds a record from here on, whatever
@@ -248,6 +255,11 @@ func (s *Store) Reopen(n *emulator.Node, now time.Time, sec store.Sector) {
 	// bond and setting the device had.
 	s.j, s.key, s.state, s.found = fresh.j, fresh.key, fresh.state, fresh.found
 	if s.j == nil {
+		// Still nothing to read. Say so in the same shape as every other
+		// outcome of this command: one Warn line from the open and then
+		// silence is the opposite of what someone typing `store open` is
+		// asking for.
+		s.Report()
 		return
 	}
 	s.Restore(n, now)

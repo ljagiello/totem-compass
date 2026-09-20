@@ -173,12 +173,23 @@ func (s *State) UnmarshalBinary(b []byte) error {
 // and no bond, colour or setting is ever written again.
 func SanitizeName(s string) string {
 	if !utf8.ValidString(s) {
-		// Keep what is text and drop the rest, rune by rune.
-		out := make([]rune, 0, len(s))
-		for _, r := range s {
-			if r != utf8.RuneError {
-				out = append(out, r)
+		// Keep what is text and drop the rest, byte by byte rather than
+		// rune by rune. Ranging a string decodes an invalid byte as
+		// U+FFFD, which is indistinguishable from a U+FFFD the name
+		// really contains — so "Bob\xff\uFFFD" lost both and came out
+		// "Bob", while the same name without the stray byte kept its
+		// own. The same visible name then saved as two different
+		// strings, which is a flash write for a name nobody changed.
+		//
+		// DecodeRuneInString reports the width, and a width of one with
+		// RuneError is the invalid byte: that is the one to drop.
+		out := make([]byte, 0, len(s))
+		for i := 0; i < len(s); {
+			r, size := utf8.DecodeRuneInString(s[i:])
+			if r != utf8.RuneError || size > 1 {
+				out = append(out, s[i:i+size]...)
 			}
+			i += size
 		}
 		s = string(out)
 	}

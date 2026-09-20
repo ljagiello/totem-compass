@@ -455,7 +455,12 @@ func (j *Journal) headAfter(off int) int {
 	if len(buf) < headerLen || [4]byte(buf[0:4]) != magic {
 		return off
 	}
-	return off + max(writeHead(buf, headerLen), headerLen)
+	// Clamped, as the scan clamps its own: writeHead rounds up to the
+	// write granularity, which can land past the end of a sector whose
+	// size is not a multiple of it — and then Used() exceeds the sector
+	// and Free() reports a negative number, which is the console line
+	// the scan's own clamp exists to prevent.
+	return min(off+writeHead(buf, headerLen), j.sec.Size())
 }
 
 // erased reports whether n bytes at off are still 0xff, the value flash

@@ -521,6 +521,10 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	n.log.Debug("rx", "src", rx.Src, "dst", rx.Dst, "rssi", rx.RSSI, "len", len(rx.Data), "frame", fmt.Sprintf("%x", rx.Data))
 	m, err := mesh.Parse(rx.Data)
 	if err != nil {
+		// flush, not nil, by the rule the powered-down exit above
+		// follows: every way out of Receive drains what is owed, or a
+		// garbled frame from a peer swallows a packet until the next
+		// poll.
 		n.log.Debug("unparsed frame", "src", rx.Src, "err", err)
 		return nil
 	}
@@ -627,7 +631,7 @@ func (n *Node) read(now time.Time) {
 	if !n.power.Off() {
 		n.power.learn(n.sensors.Battery)
 	}
-	if b := &n.sensors.Battery; !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
+	if !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
 	// n.fix(), not the raw reading: a receiver whose position this node
@@ -905,7 +909,7 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		// (rtc_method 1); a clock borrowed from a peer is not passed on.
 		TimeOfDayMs: -1, Unix: -1,
 		Major: c.Version[0], Minor: c.Version[1], Patch: c.Version[2],
-		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute),
+		AltitudeM: -500, UptimeMin: uint16(min(now.Sub(n.boot)/time.Minute, math.MaxUint16)),
 		BattVolts:       sense.Battery.Volts,
 		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID,
 		BattPct: sense.Battery.Percent,
@@ -1557,9 +1561,20 @@ func (n *Node) peerDistance(p *peer) float64 {
 }
 
 func (n *Node) furthestPeer() float64 {
+	// One reading of this device's own position for all of them:
+	// peerDistance asks for it per peer, and each ask re-runs the
+	// position checks. This is called once per radio window on a loop
+	// that also has 5 ms receive polling to do, and sendOutbox hoisted
+	// its own per-peer work out for the same reason.
+	f := n.fix()
+	if f == nil {
+		return 0
+	}
 	far := 0.0
 	for _, p := range n.peers {
-		far = max(far, n.peerDistance(p))
+		if p.hasCoords {
+			far = max(far, distance(f.Lat, f.Lon, p.lat, p.lon))
+		}
 	}
 	return far
 }
@@ -1906,7 +1921,11 @@ func (n *Node) SetPosition(p *Position, now time.Time) error {
 	if err := n.set(now, func(c Controls) { c.SetFix(p) }); err != nil {
 		return err
 	}
-	n.cfg.Position = n.sensors.Fix
+	// A copy: the sources allocate a fresh Fix on every read, so keeping
+	// the pointer left Config() answering with a snapshot the device had
+	// left behind — a walking simulation moves and Config() goes on
+	// reporting where it set off from.
+	n.cfg.Position = clonePosition(n.sensors.Fix)
 	return nil
 }
 
@@ -1928,6 +1947,13 @@ func (n *Node) SetSOS(on bool) {
 // SetHeading changes the reported compass azimuth. While a simulation runs
 // it steers the walk, which is where the azimuth comes from.
 func (n *Node) SetHeading(deg int16, now time.Time) error {
+	// Refused, as SetPosition refuses a place no device could be and
+	// SetBattery a percentage that is not one. The console range-checks
+	// its own argument; this is the same rule for every other caller,
+	// and without it an azimuth of 900 went into every status frame.
+	if deg < 0 || deg > 359 {
+		return fmt.Errorf("heading of %d° is not a bearing", deg)
+	}
 	if err := n.set(now, func(c Controls) { c.SetAzimuth(deg) }); err != nil {
 		return err
 	}

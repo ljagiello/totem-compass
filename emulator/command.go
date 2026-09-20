@@ -495,6 +495,14 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 	case OpClock:
 		return nil, true, n.SetClock(time.UnixMilli(c.ClockMs), now)
 	case OpRX:
+		// A command with no frame in it is a caller's mistake, not a
+		// frame: String() already answers "rx" for one, and every other
+		// op that carries a pointer is safe to build by hand. On the
+		// board the alternative is a nil dereference, which is a boot
+		// loop rather than a refused command.
+		if c.RX == nil {
+			return nil, true, errors.New("rx: no frame to inject")
+		}
 		// The frame goes in where the radio's would, so the scope rules,
 		// the duplicate check and the relay decision all still apply: an
 		// injected frame is treated exactly as an overheard one.
