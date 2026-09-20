@@ -3,6 +3,7 @@ package emulator
 // The battery curve against the firmware's own arithmetic.
 
 import (
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -115,6 +116,50 @@ func TestVoltsForRoundTrips(t *testing.T) {
 		back := battPctFor(v, 0)
 		if diff := int(back) - int(p); diff < -1 || diff > 1 {
 			t.Errorf("voltsFor(%d) = %.4f V, which reads back as %d%%", p, v, back)
+		}
+	}
+}
+
+// TestTheRescaleBandIsMonotonic re-checks what the curve rewrite
+// invalidated. The sweep in TestBatteryCurve uses learned maxima of 4.2
+// and above, and the rescale fires only below the table's top — so every
+// top it tests takes the no-rescale path, and the band the rewrite
+// introduced had no monotonicity check at all.
+func TestTheRescaleBandIsMonotonic(t *testing.T) {
+	for top := float32(3.20); top <= 4.12; top += 0.01 {
+		last := int8(-1)
+		for i := range 341 {
+			v := 3.0 + float32(i)*0.005
+			got := battPctFor(v, top)
+			if got < 0 || got > 100 {
+				t.Fatalf("top %.2f at %.3f V gives %d%%", top, v, got)
+			}
+			if got < last {
+				t.Fatalf("top %.2f dips at %.3f V: %d after %d", top, v, got, last)
+			}
+			last = got
+		}
+		if last != 100 {
+			t.Errorf("top %.2f tops out at %d%%", top, last)
+		}
+	}
+}
+
+// TestBattPctForSurvivesAReadingThatIsNotOne: the conversion to
+// millivolts is a float-to-int, which Go leaves implementation-defined
+// when the value will not fit — the same hazard the learned maximum is
+// guarded against a few lines up. read() fences NaN out before this is
+// reached, so this is the guard holding rather than the caller.
+func TestBattPctForSurvivesAReadingThatIsNotOne(t *testing.T) {
+	for _, v := range []float32{
+		float32(math.NaN()), float32(math.Inf(1)), float32(math.Inf(-1)),
+		-1, 1e30, -1e30,
+	} {
+		for _, top := range []float32{0, 3.9, 4.48} {
+			got := battPctFor(v, top)
+			if got < 0 || got > 100 {
+				t.Errorf("battPctFor(%v, %v) = %d, which is not a percentage", v, top, got)
+			}
 		}
 	}
 }

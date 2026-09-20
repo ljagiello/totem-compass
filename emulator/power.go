@@ -15,6 +15,7 @@ package emulator
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 )
 
@@ -147,7 +148,22 @@ func battPctFor(v float32, top float32) int8 {
 	if v == 0 {
 		return 0
 	}
-	curMv := int32(float64(v)*1000 + 0.5)
+	// Rounded in float64 and bounded before the conversion, for the same
+	// reason the learned maximum is below: Go leaves a float to int
+	// conversion implementation-defined when the value will not fit, and
+	// a reading is not always a reading. NaN is not one at all.
+	//
+	// The top of the table is the ceiling because past it every answer is
+	// 100 regardless — the clamp below when a maximum is known, and the
+	// cap in the table walk when it is not — while the arithmetic that
+	// gets there does not survive the trip: an infinity reached the walk
+	// as the largest int32 and came out at 102, because
+	// (curMv-p.mv)*(hiRaw-p.raw) had overflowed.
+	mv := math.Round(float64(v) * 1000)
+	if math.IsNaN(mv) {
+		return 0
+	}
+	curMv := int32(min(max(mv, 0), battTopMv))
 	// plausibleVolts before the conversion, not only because a maximum
 	// off the flash can be anything, but because Go leaves a float to
 	// int conversion implementation-defined when the value will not fit.
