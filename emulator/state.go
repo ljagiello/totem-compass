@@ -43,16 +43,19 @@ func (n *Node) State(boots uint32) store.State {
 		if p.hasCoords {
 			ps.Lat, ps.Lon = p.lat, p.lon
 			// When the position was reported, not when the peer was last
-			// heard from: Restore reads this back into coordsAt, which is
-			// what decides whether a peer is stale. The last time anything
-			// arrived from a peer would make a position from an hour ago
-			// look as fresh as the frame that carried nothing new.
+			// heard from: this is what decides whether a peer is stale,
+			// and the last time anything arrived from a peer would make a
+			// position from an hour ago look as fresh as the frame that
+			// carried nothing new.
 			//
-			// The zero time is the year 1, and its Unix value is a large
-			// negative number that would come back as a timestamp and
-			// saturate every duration measured from it.
-			if !p.coordsAt.IsZero() {
-				ps.LastSeenUnix = p.coordsAt.Unix()
+			// A Unix second, so it has to be a wall time. coordsAt is in
+			// the device's own base, which on a board with no RTC starts
+			// near the epoch at every boot, so it is a second anyone can
+			// read only once the node has a clock to convert it with. The
+			// zero time is the year 1, whose Unix value is a large
+			// negative number, and is no use to anyone either.
+			if n.clockSet && !p.coordsAt.IsZero() {
+				ps.LastSeenUnix = n.wall(p.coordsAt).Unix()
 			}
 		}
 		st.Peers = append(st.Peers, ps)
@@ -76,8 +79,16 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 		peer := n.peers[mesh.MAC(p.MAC)]
 		if p.Lat != 0 || p.Lon != 0 {
 			peer.hasCoords, peer.lat, peer.lon = true, p.Lat, p.Lon
-			if p.LastSeenUnix != 0 {
-				peer.coordsAt = time.Unix(p.LastSeenUnix, 0)
+			// The saved second is a wall time and coordsAt is in the
+			// device's base, so it can only be put back once this node has
+			// a clock of its own — which at boot, before any frame or fix
+			// has arrived, it has not. Then the position comes back
+			// without an age and starts aging from here, which is what it
+			// was saved for: something for the compass to point at until
+			// the peer is heard from again.
+			peer.coordsAt = now
+			if p.LastSeenUnix != 0 && n.clockSet {
+				peer.coordsAt = now.Add(time.Unix(p.LastSeenUnix, 0).Sub(n.wall(now)))
 			}
 		}
 		if p.ColorID != 0 {

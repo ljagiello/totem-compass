@@ -147,23 +147,53 @@ func TestUnbondNoticeReachesTheAir(t *testing.T) {
 	}
 }
 
-// TestPeerTimestampSurvivesAZeroTime: State writes each peer's last
-// position time as a Unix second. The zero time is the year 1, whose Unix
-// value is a large negative number, and a restore would read it back as a
-// timestamp and saturate every duration measured from it.
-func TestPeerTimestampSurvivesAZeroTime(t *testing.T) {
+// TestPeerTimeIsAWallSecond: State writes each peer's position time as a
+// Unix second, but coordsAt is in the device's own base — on a board with
+// no RTC that base starts near the epoch at every boot. Saving it raw put
+// a number like 126 in a field everything else reads as a wall time. It
+// is saved only when there is a clock to convert it with, and the zero
+// time, whose Unix value is a large negative number, is not saved at all.
+func TestPeerTimeIsAWallSecond(t *testing.T) {
+	// No clock: nothing is claimed.
 	h := newHarness(t, nil)
 	h.bond()
 	p := h.n.peers[totem]
-	p.hasCoords, p.lat, p.lon = true, 37.775, -122.42
-	p.coordsAt = time.Time{}
-
-	st := h.n.State(1)
-	if len(st.Peers) == 0 {
-		t.Fatal("the peer was not saved")
+	p.hasCoords, p.lat, p.lon, p.coordsAt = true, 37.775, -122.42, h.now
+	if got := h.n.State(1).Peers[0].LastSeenUnix; got != 0 {
+		t.Errorf("a node with no clock saved a last-seen time of %d", got)
 	}
-	if got := st.Peers[0].LastSeenUnix; got < 0 {
-		t.Errorf("saved a last-seen time of %d, which is before the epoch", got)
+
+	// The zero time is not a time either.
+	if err := h.n.SetClock(t0, h.now); err != nil {
+		t.Fatal(err)
+	}
+	p.coordsAt = time.Time{}
+	if got := h.n.State(1).Peers[0].LastSeenUnix; got != 0 {
+		t.Errorf("the zero time was saved as %d", got)
+	}
+
+	// With a clock, it is the wall second the position was reported.
+	p.coordsAt = h.now
+	got := h.n.State(1).Peers[0].LastSeenUnix
+	if want := t0.Unix(); got < want-5 || got > want+5 {
+		t.Errorf("saved %d (%s), want about %d (%s)",
+			got, time.Unix(got, 0).UTC(), want, t0.UTC())
+	}
+
+	// And it comes back where it went in. A node restoring without a
+	// clock cannot place it, so the position ages from the restore rather
+	// than from a second it cannot read.
+	st := h.n.State(1)
+	fresh := newHarness(t, nil)
+	if errs := fresh.n.Restore(st, fresh.now); len(errs) != 0 {
+		t.Fatalf("restore: %v", errs)
+	}
+	rp := fresh.n.peers[totem]
+	if !rp.hasCoords {
+		t.Fatal("the position did not come back")
+	}
+	if age := fresh.now.Sub(rp.coordsAt); age < 0 || age > time.Second {
+		t.Errorf("a restored position without a clock is %v old, want about 0", age)
 	}
 }
 

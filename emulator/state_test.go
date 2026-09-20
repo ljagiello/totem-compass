@@ -16,6 +16,11 @@ import (
 func TestStateRoundTripsThroughANode(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
 	h.bond()
+	// A clock first: the peer's position is saved as a Unix second, which
+	// a device with no clock of its own cannot work out.
+	if err := h.n.SetClock(t0, h.now); err != nil {
+		t.Fatal(err)
+	}
 	h.rx(totem, self, -40, statusFrame(t0))
 	h.advance(bootDebounce)
 	h.n.SetColor(ColorIndigo, h.now)
