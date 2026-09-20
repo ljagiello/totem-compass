@@ -112,7 +112,6 @@ func TestApplyRefusesAnEmptyRXCommand(t *testing.T) {
 func TestSetBatteryAndHeadingReportTheirRefusals(t *testing.T) {
 	h := newHarness(t, nil)
 	h.advance(bootAnim + time.Second)
-	was := h.n.Sensors()
 	if err := h.n.SetBattery(120, false, h.now); err == nil {
 		t.Error("SetBattery(120) was accepted")
 	}
@@ -126,7 +125,6 @@ func TestSetBatteryAndHeadingReportTheirRefusals(t *testing.T) {
 	// gets past a setter does not reach the air, and that is
 	// TestAHeadingThatIsNotABearing, which drives one in through a door
 	// with no check on it at all.
-	_ = was
 	if err := h.n.SetPosition(&Position{Lat: 91, Lon: 0}, h.now); err == nil {
 		t.Error("SetPosition(91) was accepted")
 	}
@@ -151,11 +149,7 @@ func TestASentinelIsNotABearing(t *testing.T) {
 
 	for _, bad := range []int16{-1, -30, 360, 900, -32768} {
 		h.n.SetSensors(NewStatic(Sensors{Azimuth: bad, Battery: pack}), h.now)
-		got := h.n.Sensors().Azimuth
-		if got < 0 || got > 359 {
-			t.Errorf("a reading of %d came back as %d, which is not a bearing", bad, got)
-		}
-		if got != 187 {
+		if got := h.n.Sensors().Azimuth; got != 187 {
 			t.Errorf("a reading of %d became %d; the last bearing the compass saw was 187", bad, got)
 		}
 		// And it is not on the air either.
@@ -179,13 +173,54 @@ func TestAnOrientationTheFrameHasAMeaningFor(t *testing.T) {
 	h := newHarness(t, func(c *Config) {
 		c.Sensors = NewStatic(Sensors{Battery: Battery{Volts: 4.1, Percent: 90}})
 	})
-	if got := h.n.Sensors().Orientation; got == mesh.OrientationUnknown {
-		t.Error("a source that said nothing about orientation was left saying unknown")
+	// Vertical, not merely "not unknown": three values mean anything in
+	// this field and the frame carries whatever it is handed, so a test
+	// that accepts everything else would pass on a 9.
+	if got := h.n.Sensors().Orientation; got != mesh.OrientationVertical {
+		t.Errorf("a source that said nothing about orientation reads as %v", got)
 	}
-	if got := h.n.Config().Orientation; got == mesh.OrientationUnknown {
-		t.Error("Config reports an orientation of unknown")
+	if got := h.n.Config().Orientation; got != mesh.OrientationVertical {
+		t.Errorf("Config reports an orientation of %v", got)
 	}
-	if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got == mesh.OrientationUnknown {
-		t.Error("a status frame carried an orientation of unknown")
+	if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got != mesh.OrientationVertical {
+		t.Errorf("a status frame carried an orientation of %v", got)
+	}
+
+	// And a value the frame has no meaning for does not reach it.
+	for _, bad := range []mesh.Orientation{9, 127, -1} {
+		h.n.SetSensors(NewStatic(Sensors{
+			Orientation: bad, Battery: Battery{Volts: 4.1, Percent: 90},
+		}), h.now)
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got == bad {
+			t.Errorf("an orientation of %v reached the air", bad)
+		}
+	}
+}
+
+// TestABoardThatHasNeverHadABearing: the fallback for a reading that is
+// not a bearing has to start somewhere, and a zero nobody chose is due
+// north — the answer the last two rounds here were about not giving. It
+// starts from the configured heading, which New has already made into a
+// bearing, so a board built with an impossible one reports the default
+// rather than something derived from the impossible value.
+func TestABoardThatHasNeverHadABearing(t *testing.T) {
+	for _, bad := range []int16{-1, 360, 900, -32768} {
+		h := newHarness(t, func(c *Config) { c.Heading = bad })
+		if got := h.n.Config().Heading; got == bad {
+			t.Errorf("a configured heading of %d was kept", bad)
+		}
+		if got := h.n.Sensors().Azimuth; got < 0 || got > 359 {
+			t.Errorf("a configured heading of %d reads as %d", bad, got)
+		}
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got < 0 || got > 359 {
+			t.Errorf("a configured heading of %d reached the air as %d", bad, got)
+		}
+	}
+	// A heading that is a bearing is kept as given, north included.
+	for _, good := range []int16{0, 1, 187, 359} {
+		h := newHarness(t, func(c *Config) { c.Heading = good })
+		if got := h.n.Config().Heading; got != good {
+			t.Errorf("a configured heading of %d came back as %d", good, got)
+		}
 	}
 }

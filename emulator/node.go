@@ -243,7 +243,10 @@ type Node struct {
 	// compass. read() runs on every pass of a loop that polls every
 	// 5 ms, and a driver stuck out of range would otherwise say the same
 	// thing two hundred times a second for as long as the board is on.
-	saidVolts, saidPct, saidAzimuth bool
+	saidVolts, saidPct bool
+	// saidAzimuth is the substituted bearing this has already reported,
+	// plus one so that zero means nothing has been said.
+	saidAzimuth int16
 	// azimuth is the last compass reading that was a bearing, which is
 	// what a reading that is not one falls back to.
 	azimuth int16
@@ -308,9 +311,7 @@ func New(cfg Config, now time.Time) *Node {
 		cfg.Version = [3]uint8{5, 0, 3}
 		cfg.ReleaseID = 339
 	}
-	if cfg.Orientation == mesh.OrientationUnknown {
-		cfg.Orientation = mesh.OrientationVertical
-	}
+
 	if cfg.GNSSSource == 0 {
 		cfg.GNSSSource = mesh.GNSSDevice
 	}
@@ -321,6 +322,15 @@ func New(cfg Config, now time.Time) *Node {
 		cfg.Logger.Warn("configured position is not one a device could be at, starting with none",
 			"lat", p.Lat, "lon", p.Lon)
 		cfg.Position = nil
+	}
+	// A heading that is a bearing, checked here as the position above it
+	// is. 0 is the default a Config without one carries and what a
+	// device with no compass reports, so it is what an impossible
+	// heading falls back to — chosen rather than arrived at, which is
+	// the difference between a default and a wrong answer.
+	if h := cfg.Heading; h < 0 || h > 359 {
+		cfg.Logger.Warn("heading is not a bearing, ignoring it", "heading", h)
+		cfg.Heading = 0
 	}
 	// The board reads this off a flash sector and hands it straight here,
 	// so an id outside the thirteen arrives before Restore ever runs —
@@ -341,6 +351,10 @@ func New(cfg Config, now time.Time) *Node {
 		meshGrp:     meshGroup(cfg.MAC),
 	}
 	n.named = named
+	// The bearing a reading that is not one falls back to, before any
+	// reading has been taken: what this node was built with, which the
+	// check above has made into a bearing.
+	n.azimuth = cfg.Heading
 	n.source = cfg.Sensors
 	if n.source == nil {
 		n.source = &staticSensors{s: Sensors{
@@ -594,7 +608,12 @@ func (n *Node) read(now time.Time) {
 	// so a driver that leaves the field alone reported "unknown" to
 	// every peer — and Config(), which answers from the reading now,
 	// handed it out as well.
-	if n.sensors.Orientation == mesh.OrientationUnknown {
+	// Three values mean anything in this field, and the frame carries
+	// whatever it is given: a driver's 9 goes out as 9 and comes back
+	// off the air as 9. Unknown is what a source that says nothing
+	// leaves, and vertical is what a Totem is doing when it is being
+	// carried.
+	if o := n.sensors.Orientation; o != mesh.OrientationVertical && o != mesh.OrientationHorizontal {
 		n.sensors.Orientation = mesh.OrientationVertical
 	}
 	// A bearing that is one, wherever the reading came from: a config, a
@@ -613,14 +632,18 @@ func (n *Node) read(now time.Time) {
 	// refuses outright as not a bearing. Keeping the last accepted
 	// reading says only what the compass last really saw.
 	if a := n.sensors.Azimuth; a < 0 || a > 359 {
-		if !n.saidAzimuth {
-			n.saidAzimuth = true
+		// Said again whenever what it stands in for changes, rather than
+		// once for the life of the board: the substitute moves as the
+		// compass recovers and jams again, and a single line from an
+		// hour ago stops describing what is on the air.
+		if n.saidAzimuth != n.azimuth+1 {
+			n.saidAzimuth = n.azimuth + 1
 			n.log.Warn("heading is not a bearing, keeping the last one that was",
 				"heading", a, "using", n.azimuth)
 		}
 		n.sensors.Azimuth = n.azimuth
 	} else {
-		n.azimuth = a
+		n.azimuth, n.saidAzimuth = a, 0
 	}
 	// A reading the frame can carry, asked of every reading rather than
 	// of the config alone: a source set later — SetSensors takes a real

@@ -71,11 +71,12 @@ func TestBothWritersHoldTheBlocker(t *testing.T) {
 			s := Open(testLog(t), sec)
 			n := node(t, "lcfs_spare", true)
 
-			// Filled to the end, so the write under test is the one that
-			// has to erase first — the longest the driver holds the
-			// cache off and the interrupts down, and the case the
-			// blocker exists for. On an empty sector a save just
-			// appends and no erase happens at all.
+			// Written over, so the write under test has to erase first:
+			// the journal appends only into bytes that are still
+			// erased, and anything else in the tail sends it to Erase —
+			// the longest the driver holds the cache off and the
+			// interrupts down, and the case the blocker exists for. On
+			// a clean sector a save just appends and never erases.
 			for i := range len(sec.b) {
 				sec.b[i] = byte(i)
 			}
