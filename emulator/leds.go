@@ -292,7 +292,14 @@ func (l *LEDs) DefaultColor() Color { return l.defaultColor }
 
 // SetDial points the compass at a bearing in degrees, in a peer's colour.
 // A negative bearing points at nothing.
-func (l *LEDs) SetDial(deg int16, c Color) { l.dial, l.dialColor = deg, c }
+func (l *LEDs) SetDial(deg int16, c Color) {
+	if deg != l.dial || c != l.dialColor {
+		// The picture changed, so a frame is due even if the strip had
+		// gone quiet.
+		l.next = l.start
+	}
+	l.dial, l.dialColor = deg, c
+}
 
 // SetProgress sets the OTA download's share, 0 to 1.
 func (l *LEDs) SetProgress(f float64) { l.progress = min(max(f, 0), 1) }
@@ -326,6 +333,12 @@ func (l *LEDs) Tick(now time.Time) bool {
 	l.frame = int(now.Sub(l.start) / ledFrame)
 	l.next = l.start.Add(time.Duration(l.frame+1) * ledFrame)
 	l.draw(now)
+	if l.anim == AnimIdle && l.dial < 0 {
+		// Nothing is moving: the crystal holds its colour and the ring is
+		// dark. Asking for another frame would keep the device awake for
+		// a picture that does not change.
+		l.next = time.Time{}
+	}
 	return true
 }
 

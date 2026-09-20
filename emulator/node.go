@@ -380,6 +380,11 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	if !slices.Contains(n.cfg.Owned, rx.Src) {
 		return nil
 	}
+	if n.power.Off() {
+		// A device that has powered down does not answer. Its radio is
+		// off, so a peer hears nothing at all from it.
+		return nil
+	}
 	n.read(now)
 	n.log.Debug("rx", "src", rx.Src, "dst", rx.Dst, "rssi", rx.RSSI, "len", len(rx.Data), "frame", fmt.Sprintf("%x", rx.Data))
 	m, err := mesh.Parse(rx.Data)

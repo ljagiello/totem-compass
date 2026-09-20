@@ -514,3 +514,44 @@ func TestVoltsAndPercentAgree(t *testing.T) {
 		}
 	}
 }
+
+// TestPoweredDownDeviceIsDeaf: a Totem that has powered down has its
+// radio off. It does not answer a frame, and it does not take a bond,
+// which is what someone standing next to it sees.
+func TestPoweredDownDeviceIsDeaf(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.take()
+	h.n.PowerOff(h.now)
+
+	h.rx(totem, self, -20, statusFrame(t0))
+	h.advance(10 * time.Second)
+	if s := h.take(); len(s) != 0 {
+		t.Errorf("a powered-down device answered with %d frames", len(s))
+	}
+	// And it comes back when it is switched on again.
+	h.n.PowerOn(h.now)
+	h.rx(totem, self, -20, statusFrame(t0))
+	h.advance(10 * time.Second)
+	if len(h.take()) == 0 {
+		t.Error("it stayed deaf after being powered back on")
+	}
+}
+
+// TestIdleStripStopsAskingForFrames: with nothing to show, the LED model
+// must not keep the device awake for a picture that does not change.
+func TestIdleStripStopsAskingForFrames(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootAnim + time.Second) // past the power-up animation
+	if got := h.n.LEDs().Animation(); got != AnimIdle {
+		t.Fatalf("animation = %s, want idle", got)
+	}
+	if next := h.n.LEDs().Next(); !next.IsZero() {
+		t.Errorf("an idle strip still wants a frame at %s", next)
+	}
+	// Something to point at brings the frames back.
+	h.n.LEDs().SetDial(90, ColorTeal)
+	if next := h.n.LEDs().Next(); next.IsZero() {
+		t.Error("the strip did not wake up for the compass dial")
+	}
+}
