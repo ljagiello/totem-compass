@@ -235,6 +235,12 @@ and a clock sync that has not finished. The watchdog model is
 `wdt_manager`'s: the feed loop runs only while no blocker is held, and a
 flash write holds `vfs write`.
 
+The sleep is accounted, not taken: the board stays awake. A Totem light-sleeps between
+radio windows and still keeps its link, and the board could do the same, but the counter is
+what a peer can see the effect of — the mode in a status frame, and a device that has
+powered down going quiet. Powering down is the emulator's deep sleep: the radio windows
+stop, frames are no longer answered, and only a held power button brings it back.
+
 ### WiFi OTA
 
 The update client runs the firmware's exchange against
