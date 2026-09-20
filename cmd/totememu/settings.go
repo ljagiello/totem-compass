@@ -25,18 +25,22 @@ type settings struct {
 	// held is what was written last, so a save that would change nothing
 	// costs no flash write. An erase runs with the radio stalled.
 	held []byte
+	// key is held with the counters zeroed: what a person could have
+	// changed. The boot count and the total sleep grow on their own, and
+	// comparing them would make every save a write.
+	key []byte
 	// state is what the device is running with.
 	state store.State
 }
 
+// storeAtBoot says whether the settings are read while the device starts.
+// Turning it off leaves the board bootable while the flash driver is
+// being worked on: the store open command then reads them by hand.
+const storeAtBoot = true
+
 // openSettings reads the settings sector. A board whose flash holds
 // nothing, an older format or noise starts with defaults: the device has
 // to boot either way.
-// storeAtBoot says whether the settings are read while the device starts.
-// Turning it off leaves the board bootable when the flash driver is being
-// worked on: the store open command then reads them by hand.
-const storeAtBoot = true
-
 func openSettings(log *slog.Logger, atBoot bool) *settings {
 	s := &settings{log: log}
 	if !atBoot {
@@ -67,6 +71,7 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 		return s
 	}
 	s.held = b
+	s.key = settingsKey(s.state)
 	s.state.BootCount++
 	log.Info("settings restored", "name", s.state.Name, "peers", len(s.state.Peers),
 		"boots", s.state.BootCount, "seq", j.Seq(), "free", j.Free())
@@ -131,17 +136,39 @@ func (s *settings) save(n *emulator.Node) {
 		s.log.Warn("settings could not be encoded", "err", err)
 		return
 	}
-	if bytes.Equal(b, s.held) {
-		return // nothing changed, so nothing to write
+	// Compare only what a person could have changed. The counters ride
+	// along with a real change; letting them drive one would put a record
+	// on the flash every time anything looked at the settings, filling a
+	// sector — and an erase stalls the radio — for no news at all.
+	key := settingsKey(st)
+	if key == nil {
+		s.log.Warn("settings could not be encoded")
+		return
+	}
+	if bytes.Equal(key, s.key) {
+		return // nothing a person changed, so nothing to write
 	}
 	start := time.Now()
 	if err := s.j.Save(b); err != nil {
 		s.log.Warn("settings could not be saved", "err", err)
 		return
 	}
-	s.held, s.state = b, st
+	s.held, s.key, s.state = b, key, st
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
+}
+
+// settingsKey is the part of a state a person chose: the same bytes with
+// the counters zeroed, so two states that differ only in how long the
+// device has been awake compare equal. It returns nil when the state
+// cannot be encoded, which the caller treats as a reason not to write.
+func settingsKey(st store.State) []byte {
+	st.BootCount, st.SleepMs = 0, 0
+	b, err := st.MarshalBinary()
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // forget wipes the sector, as a factory reset does.
@@ -152,7 +179,7 @@ func (s *settings) forget() error {
 	if err := s.j.Save(nil); err != nil {
 		return err
 	}
-	s.held, s.state = nil, store.State{}
+	s.held, s.key, s.state = nil, nil, store.State{}
 	return nil
 }
 
@@ -164,7 +191,7 @@ func (s *settings) open(n *emulator.Node, now time.Time) {
 		return
 	}
 	fresh := openSettings(s.log, true)
-	s.j, s.held, s.state = fresh.j, fresh.held, fresh.state
+	s.j, s.held, s.key, s.state = fresh.j, fresh.held, fresh.key, fresh.state
 	if s.j == nil {
 		return
 	}
