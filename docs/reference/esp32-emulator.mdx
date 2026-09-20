@@ -269,9 +269,18 @@ settings restored name=emu_totem_abb0 peers=1 boots=3 seq=4 free=3816
 bond restored mac=8c94df7b0478 name="LCFs totem"
 ```
 
+A save happens when something a person changed is different from what is on the flash: a
+bond gained or lost, the name, the crystal colour, the brightness, the SOS mute. The
+counters the device keeps — the boot count, the total light sleep — ride along with those
+rather than causing a write of their own, because a counter that grows on its own would put
+a record on the flash every time anything so much as looked at the settings.
+
 Everything read back is untrusted — a write cut short by a reset, a previous firmware, or
 noise — so a record is believed only if its header and checksum agree, and a sector that
 makes no sense boots with defaults rather than failing. `FuzzScan` covers exactly that.
+
+Flashing the board erases the sector with the rest of the chip, so a reflash starts from
+defaults; a power cut does not.
 
 The driver underneath is the fiddly part, because on the ESP32 the code itself runs from
 flash through the MMU cache. Touching flash means turning that cache off, and while it is off
