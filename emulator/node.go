@@ -244,11 +244,17 @@ type Node struct {
 	// 5 ms, and a driver stuck out of range would otherwise say the same
 	// thing two hundred times a second for as long as the board is on.
 	saidVolts, saidPct bool
-	// saidAzimuth is the substituted bearing this has already reported,
-	// plus one so that zero means nothing has been said.
+	// saidAzimuth is the substituted bearing that has already been
+	// reported, plus one so that zero means nothing has been said. Not
+	// a bool like the two above it: what it stands in for can change,
+	// and a line from an hour ago would stop describing what is on the
+	// air.
 	saidAzimuth int16
-	// azimuth is the last compass reading that was a bearing, which is
-	// what a reading that is not one falls back to.
+	// azimuth is what a reading that is not a bearing falls back to: the
+	// last reading that was one, or — until there has been one — the
+	// heading this node was built with, which is 0 unless someone chose
+	// otherwise. There is no way to say "no bearing yet" on the air:
+	// the field is a direction and a Totem always reports one.
 	azimuth int16
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
@@ -328,9 +334,10 @@ func New(cfg Config, now time.Time) *Node {
 	// device with no compass reports, so it is what an impossible
 	// heading falls back to — chosen rather than arrived at, which is
 	// the difference between a default and a wrong answer.
-	if h := cfg.Heading; h < 0 || h > 359 {
-		cfg.Logger.Warn("heading is not a bearing, ignoring it", "heading", h)
+	if h := cfg.Heading; !usableBearing(h) {
 		cfg.Heading = 0
+		cfg.Logger.Warn("heading is not a bearing, starting north instead",
+			"heading", h, "using", cfg.Heading)
 	}
 	// The board reads this off a flash sector and hands it straight here,
 	// so an id outside the thirteen arrives before Restore ever runs —
@@ -631,11 +638,16 @@ func (n *Node) read(now time.Time) {
 	// turns it into 359, one degree west of north, which SetHeading
 	// refuses outright as not a bearing. Keeping the last accepted
 	// reading says only what the compass last really saw.
-	if a := n.sensors.Azimuth; a < 0 || a > 359 {
+	if a := n.sensors.Azimuth; !usableBearing(a) {
 		// Said again whenever what it stands in for changes, rather than
 		// once for the life of the board: the substitute moves as the
 		// compass recovers and jams again, and a single line from an
 		// hour ago stops describing what is on the air.
+		// Once per substituted bearing, not once per bad reading and
+		// not once for the life of the board. A compass that flaps
+		// between a bearing and a sentinel would otherwise say this at
+		// the poll rate, which is what the latch is for; one that
+		// settles somewhere new has something new to say.
 		if n.saidAzimuth != n.azimuth+1 {
 			n.saidAzimuth = n.azimuth + 1
 			n.log.Warn("heading is not a bearing, keeping the last one that was",
@@ -643,7 +655,7 @@ func (n *Node) read(now time.Time) {
 		}
 		n.sensors.Azimuth = n.azimuth
 	} else {
-		n.azimuth, n.saidAzimuth = a, 0
+		n.azimuth = a
 	}
 	// A reading the frame can carry, asked of every reading rather than
 	// of the config alone: a source set later — SetSensors takes a real
@@ -675,7 +687,7 @@ func (n *Node) read(now time.Time) {
 	}
 	// And a percentage that is one. The frame carries it as a signed
 	// byte, so a driver's 120 goes out as 120 and a -50 as -50.
-	if b.Percent < 0 || b.Percent > 100 {
+	if !usablePercent(b.Percent) {
 		if !n.saidPct {
 			n.saidPct = true
 			n.log.Warn("battery percentage is not a percentage, ignoring it", "percent", b.Percent)
@@ -1620,6 +1632,18 @@ func livePosition(lat, lon float32) bool {
 // One helper rather than the same two-part test written out at each
 // ingress: it was written out four times, and the fourth was added
 // because the third had been missed.
+// usableBearing is a compass heading the peer frame can carry and a
+// peer can act on: a whole turn, starting at north.
+//
+// Named, like usablePosition and usableClock, because the same test was
+// written out in five places — New, read, SetHeading and two console
+// commands — and two of them once disagreed about -1, which this
+// package writes elsewhere to mean "no value".
+func usableBearing(deg int16) bool { return deg >= 0 && deg <= 359 }
+
+// usablePercent is a battery level that is one.
+func usablePercent(pct int8) bool { return pct >= 0 && pct <= 100 }
+
 func usablePosition(lat, lon float32) bool {
 	return (lat != 0 || lon != 0) && livePosition(lat, lon)
 }
@@ -1920,6 +1944,18 @@ func (n *Node) sim() *Sim {
 // StartSim runs a simulated Totem: it walks a track from wherever the node
 // is now, keeping its battery and orientation.
 func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
+	// A course that is a bearing. The simulation folds whatever it is
+	// given modulo 360, so -1 becomes 359 in its readings — one degree
+	// west of north, which SetHeading refuses outright as not a bearing
+	// and which this package writes elsewhere to mean "no value". The
+	// console range-checks its own argument; this is every other
+	// caller, and it is the door that turned a sentinel into a
+	// direction after the last round closed the others.
+	if !usableBearing(bearing) {
+		n.log.Warn("course is not a bearing, walking north instead",
+			"bearing", bearing, "using", 0)
+		bearing = 0
+	}
 	if s := n.sim(); s != nil {
 		s.SetMotion(m, bearing)
 		n.read(now)
@@ -1961,7 +1997,6 @@ func (n *Node) SetFlat(flat bool, now time.Time) error {
 	if err := n.set(now, func(c Controls) { c.SetFlat(flat) }); err != nil {
 		return err
 	}
-	n.cfg.Orientation = n.sensors.Orientation
 	return nil
 }
 
@@ -1971,13 +2006,12 @@ func (n *Node) SetBattery(percent int8, charging bool, now time.Time) error {
 	// SetPosition states two functions down: a caller that asked for
 	// something impossible should be told, not left believing the
 	// device is at 120% while every frame it sends says 0.
-	if percent < 0 || percent > 100 {
+	if !usablePercent(percent) {
 		return fmt.Errorf("battery of %d%% is not a percentage", percent)
 	}
 	if err := n.set(now, func(c Controls) { c.SetBattery(percent, charging, now) }); err != nil {
 		return err
 	}
-	n.cfg.BattPct, n.cfg.BattVolts = n.sensors.Battery.Percent, n.sensors.Battery.Volts
 	return nil
 }
 
@@ -2019,13 +2053,12 @@ func (n *Node) SetHeading(deg int16, now time.Time) error {
 	// SetBattery a percentage that is not one. The console range-checks
 	// its own argument; this is the same rule for every other caller,
 	// and without it an azimuth of 900 went into every status frame.
-	if deg < 0 || deg > 359 {
+	if !usableBearing(deg) {
 		return fmt.Errorf("heading of %d° is not a bearing", deg)
 	}
 	if err := n.set(now, func(c Controls) { c.SetAzimuth(deg) }); err != nil {
 		return err
 	}
-	n.cfg.Heading = n.sensors.Azimuth
 	return nil
 }
 

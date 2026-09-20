@@ -191,8 +191,8 @@ func TestAnOrientationTheFrameHasAMeaningFor(t *testing.T) {
 		h.n.SetSensors(NewStatic(Sensors{
 			Orientation: bad, Battery: Battery{Volts: 4.1, Percent: 90},
 		}), h.now)
-		if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got == bad {
-			t.Errorf("an orientation of %v reached the air", bad)
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got != mesh.OrientationVertical {
+			t.Errorf("an orientation of %v reached the air as %v", bad, got)
 		}
 	}
 }
@@ -206,14 +206,25 @@ func TestAnOrientationTheFrameHasAMeaningFor(t *testing.T) {
 func TestABoardThatHasNeverHadABearing(t *testing.T) {
 	for _, bad := range []int16{-1, 360, 900, -32768} {
 		h := newHarness(t, func(c *Config) { c.Heading = bad })
-		if got := h.n.Config().Heading; got == bad {
-			t.Errorf("a configured heading of %d was kept", bad)
+		if got := h.n.Config().Heading; got != 0 {
+			t.Errorf("a configured heading of %d came back as %d, want the default", bad, got)
 		}
-		if got := h.n.Sensors().Azimuth; got < 0 || got > 359 {
+		if got := h.n.Sensors().Azimuth; got != 0 {
 			t.Errorf("a configured heading of %d reads as %d", bad, got)
 		}
-		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got < 0 || got > 359 {
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got != 0 {
 			t.Errorf("a configured heading of %d reached the air as %d", bad, got)
+		}
+
+		// And the case the seeded fallback is for: a driver that reports
+		// no bearing at all, on a node whose configured one was refused.
+		// What goes out is the default, not something derived from the
+		// value that was turned away.
+		h.n.SetSensors(NewStatic(Sensors{
+			Azimuth: -1, Battery: Battery{Volts: 4.1, Percent: 90},
+		}), h.now)
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got != 0 {
+			t.Errorf("a driver reporting no bearing put %d on the air", got)
 		}
 	}
 	// A heading that is a bearing is kept as given, north included.
@@ -222,5 +233,31 @@ func TestABoardThatHasNeverHadABearing(t *testing.T) {
 		if got := h.n.Config().Heading; got != good {
 			t.Errorf("a configured heading of %d came back as %d", good, got)
 		}
+	}
+}
+
+// TestAWalkThatStartsNowhere: StartSim is exported and took any course
+// it was handed, and the simulation folds a course modulo 360 — so -1
+// walked at 359, one degree west of north, which SetHeading refuses and
+// which this package writes elsewhere to mean "no value". It was the
+// door left open after the others were closed.
+func TestAWalkThatStartsNowhere(t *testing.T) {
+	at := func() *Position { return &Position{Lat: 52.2, Lon: 21.0, AccuracyM: 3} }
+	for _, bad := range []int16{-1, 360, 900, -32768} {
+		h := newHarness(t, func(c *Config) { c.Position = at() })
+		h.n.StartSim(Walk, bad, h.now)
+		h.advance(2 * time.Second)
+		// North, within the wander a walk puts on its own course.
+		if got := h.n.Sensors().Azimuth; !usableBearing(got) || (got > 45 && got < 315) {
+			t.Errorf("a walk started on a course of %d reports %d, and north was the default", bad, got)
+		}
+	}
+	// And a course that is a bearing is walked as given. A walk wanders
+	// around its course, so this is a band rather than a number.
+	h := newHarness(t, func(c *Config) { c.Position = at() })
+	h.n.StartSim(Walk, 90, h.now)
+	h.advance(2 * time.Second)
+	if got := h.n.Sensors().Azimuth; got < 45 || got > 135 {
+		t.Errorf("a walk started east reports %d", got)
 	}
 }

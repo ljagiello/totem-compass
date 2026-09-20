@@ -51,8 +51,11 @@ func (p *printer) emit(v any) {
 	if t == nil {
 		// A nil interface, which reflect has no type for: asking it for
 		// a name panics, and this is the mode a stream is watched in.
-		// The text mode degrades quietly on the same value, so crashing
-		// only here is the asymmetry the fallback below exists to end.
+		// Reported on stderr the same way the marshal failure below is:
+		// a line saying nothing arrived is worth the same word as one
+		// saying it could not be written, and the last commit said this
+		// had been done when it had not.
+		p.log.Warn("cannot encode as JSON", "type", "", "err", "nil value")
 		p.println(`{"type":"","error":"nothing to encode"}`)
 		return
 	}
