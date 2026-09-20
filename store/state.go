@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -172,27 +173,16 @@ func (s *State) UnmarshalBinary(b []byte) error {
 // otherwise stop every save on the device for good — one malformed frame
 // and no bond, colour or setting is ever written again.
 func SanitizeName(s string) string {
-	if !utf8.ValidString(s) {
-		// Keep what is text and drop the rest, byte by byte rather than
-		// rune by rune. Ranging a string decodes an invalid byte as
-		// U+FFFD, which is indistinguishable from a U+FFFD the name
-		// really contains — so "Bob\xff\uFFFD" lost both and came out
-		// "Bob", while the same name without the stray byte kept its
-		// own. The same visible name then saved as two different
-		// strings, which is a flash write for a name nobody changed.
-		//
-		// DecodeRuneInString reports the width, and a width of one with
-		// RuneError is the invalid byte: that is the one to drop.
-		out := make([]byte, 0, len(s))
-		for i := 0; i < len(s); {
-			r, size := utf8.DecodeRuneInString(s[i:])
-			if r != utf8.RuneError || size > 1 {
-				out = append(out, s[i:i+size]...)
-			}
-			i += size
-		}
-		s = string(out)
-	}
+	// Drop what is not text and keep what is. ToValidUTF8 replaces each
+	// run of invalid bytes with the second argument, which here is
+	// nothing at all — and it does that by looking at the bytes, so a
+	// U+FFFD the name really contains survives. Ranging the string
+	// instead decodes an invalid byte as U+FFFD too, which cannot be
+	// told from a real one: "Bob\xff\uFFFD" lost both and came out
+	// "Bob", while "Bob\uFFFD" kept its own, so the same visible name
+	// saved two different ways and a flash write happened for a name
+	// nobody had changed.
+	s = strings.ToValidUTF8(s, "")
 	for len(s) > maxName {
 		// Cut whole runes, so what is left is still text.
 		_, size := utf8.DecodeLastRuneInString(s)

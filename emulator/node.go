@@ -242,7 +242,7 @@ type Node struct {
 	// read() runs on every pass of a loop that polls every 5 ms, and a
 	// driver stuck out of range would otherwise say the same thing two
 	// hundred times a second for as long as the board is on.
-	saidVolts, saidPct bool
+	saidVolts, saidPct, saidAzimuth bool
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
 	// given the default one made from its MAC. A saved name does not
@@ -495,6 +495,10 @@ func allowedTX(dst mesh.MAC, b []byte, owned []mesh.MAC) bool {
 
 // Receive handles one frame and returns the frames to send right away.
 func (n *Node) Receive(now time.Time, rx Received) []Packet {
+	// The two exits that come before the reading return nil rather than
+	// flushing: nothing has run yet that could have queued anything, and
+	// a device that is off has had its outbox cleared by PowerOff. Every
+	// exit after read() drains, because read() can queue.
 	if !slices.Contains(n.cfg.Owned, rx.Src) {
 		return nil
 	}
@@ -522,11 +526,14 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	m, err := mesh.Parse(rx.Data)
 	if err != nil {
 		// flush, not nil, by the rule the powered-down exit above
-		// follows: every way out of Receive drains what is owed, or a
-		// garbled frame from a peer swallows a packet until the next
-		// poll.
+		// follows: every way out of Receive after read() drains what is
+		// owed. No test covers it, because nothing queues between the
+		// reading and here today, so the outbox is empty either way —
+		// this is the shape being kept rather than a fault being fixed,
+		// and the last round shipped a comment claiming it had been
+		// applied when it had not.
 		n.log.Debug("unparsed frame", "src", rx.Src, "err", err)
-		return nil
+		return n.flush()
 	}
 	switch m := m.(type) {
 	case mesh.Peer:
@@ -597,6 +604,17 @@ func (n *Node) read(now time.Time) {
 	// diagnostic channel the board has with two hundred copies a second
 	// of the same line — the reason warnedClock, saidBondLimit and
 	// saidRestoreLimit are all latches.
+	// A bearing that is one, wherever the reading came from: a config, a
+	// driver or a simulation. SetHeading refuses its own argument, but
+	// that is one door of several, and an azimuth of 900 reaches every
+	// status frame through any of the others.
+	if a := n.sensors.Azimuth; a < 0 || a > 359 {
+		if !n.saidAzimuth {
+			n.saidAzimuth = true
+			n.log.Warn("heading is not a bearing, ignoring it", "heading", a)
+		}
+		n.sensors.Azimuth = 0
+	}
 	b := &n.sensors.Battery
 	if b.Volts != 0 && (!(b.Volts > 0) || b.Volts > maxSendableVolts) {
 		if !n.saidVolts {
@@ -909,7 +927,12 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		// (rtc_method 1); a clock borrowed from a peer is not passed on.
 		TimeOfDayMs: -1, Unix: -1,
 		Major: c.Version[0], Minor: c.Version[1], Patch: c.Version[2],
-		AltitudeM: -500, UptimeMin: uint16(min(now.Sub(n.boot)/time.Minute, math.MaxUint16)),
+		AltitudeM: -500,
+		// Both ends: a clock that runs backwards — a replayed session, a
+		// job stamped earlier than the node was built — makes this
+		// negative, and uint16 of a negative is a device claiming 45
+		// days of uptime rather than none.
+		UptimeMin:       uint16(min(max(now.Sub(n.boot)/time.Minute, 0), math.MaxUint16)),
 		BattVolts:       sense.Battery.Volts,
 		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID,
 		BattPct: sense.Battery.Percent,
@@ -1921,11 +1944,7 @@ func (n *Node) SetPosition(p *Position, now time.Time) error {
 	if err := n.set(now, func(c Controls) { c.SetFix(p) }); err != nil {
 		return err
 	}
-	// A copy: the sources allocate a fresh Fix on every read, so keeping
-	// the pointer left Config() answering with a snapshot the device had
-	// left behind — a walking simulation moves and Config() goes on
-	// reporting where it set off from.
-	n.cfg.Position = clonePosition(n.sensors.Fix)
+
 	return nil
 }
 
@@ -1987,6 +2006,12 @@ func (n *Node) Config() Config {
 	// own.
 	c := n.cfg
 	c.Owned = slices.Clone(n.cfg.Owned)
-	c.Position = clonePosition(n.cfg.Position)
+	// The position from the reading, not from the field: cfg.Position is
+	// what the node was built or last told, and the sources hand out a
+	// fresh Fix on every read, so the field is a snapshot from whenever
+	// it was last written. A walking simulation moved and this went on
+	// answering with where it set off from. Cloned, as before, so a
+	// caller cannot write into the node's own reading.
+	c.Position = clonePosition(n.sensors.Fix)
 	return c
 }

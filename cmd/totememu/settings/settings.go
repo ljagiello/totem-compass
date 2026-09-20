@@ -177,19 +177,24 @@ func (s *Store) Save(n *emulator.Node) {
 	// a write would put a record on the flash every time anything so much
 	// as looked at the settings, filling a sector — and an erase stalls
 	// the radio — for no news at all.
-	// No second check on this: SettingsKey encodes the same state that
-	// marshaled a few lines up, changing only the two free-running
-	// counters, so it cannot fail where that succeeded.
 	key := emulator.SettingsKey(st)
+	if key == nil {
+		// SettingsKey encodes the same state that marshaled a few lines
+		// up, changing the two free-running counters and rebuilding the
+		// peer list, so today it cannot fail where that succeeded. The
+		// branch stays because of what its absence costs: with a nil key
+		// and a Store that has never saved, the comparison below is
+		// nil == nil, and the save returns having written nothing and
+		// said nothing. A fault nobody can see is worse than a branch
+		// nobody reaches.
+		s.log.Warn("settings could not be encoded for comparison")
+		return
+	}
 	if bytes.Equal(key, s.key) {
 		return // nothing a person changed, so nothing to write
 	}
-	// A flash write is the firmware's 'vfs write' blocker: while it runs,
-	// nothing feeds the watchdog.
-	n.Power().Block(emulator.BlockVFSWrite)
 	start := time.Now()
-	err = s.j.Save(b)
-	n.Power().Unblock(emulator.BlockVFSWrite)
+	err = s.write(n, b)
 	if err != nil {
 		s.log.Warn("settings could not be saved", "err", err)
 		return
@@ -200,6 +205,21 @@ func (s *Store) Save(n *emulator.Node) {
 	s.key, s.state, s.found = key, st, true
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
+}
+
+// write puts a record on the flash with the watchdog blocker held.
+//
+// A flash write is the firmware's 'vfs write' blocker: while it runs,
+// nothing feeds the watchdog, and a write into a sector that is not
+// empty is an erase — the longest the driver ever holds the cache off
+// and the interrupts down. Both writers go through here so that neither
+// can be the one that forgets, and so the blocker is taken and given
+// back in one place: Unblock is a map delete rather than a count, so
+// two of these nested would have the inner one release the outer's.
+func (s *Store) write(n *emulator.Node, b []byte) error {
+	n.Power().Block(emulator.BlockVFSWrite)
+	defer n.Power().Unblock(emulator.BlockVFSWrite)
+	return s.j.Save(b)
 }
 
 // Forget wipes the sector and the node's bonds, as a factory reset does.
@@ -222,15 +242,7 @@ func (s *Store) Forget(n *emulator.Node, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	// The same blocker a save takes, and for a stronger reason: a reset
-	// writes into a sector that is not empty, so this is the erase — the
-	// longest the flash driver ever holds the cache off and the
-	// interrupts down, and the one stretch where nothing feeds the
-	// watchdog.
-	n.Power().Block(emulator.BlockVFSWrite)
-	err = s.j.Save(b)
-	n.Power().Unblock(emulator.BlockVFSWrite)
-	if err != nil {
+	if err := s.write(n, b); err != nil {
 		return err
 	}
 	// found with them: the sector holds a record from here on, whatever
@@ -244,9 +256,12 @@ func (s *Store) Forget(n *emulator.Node, now time.Time) error {
 // being brought up.
 func (s *Store) Reopen(n *emulator.Node, now time.Time, sec store.Sector) {
 	if s.j != nil {
-		s.Report()
-		return
+		return // already open; the deferred report says what is in it
 	}
+	// Whatever comes of this, say what the settings are now: the command
+	// exists to answer that, and the three ways out of it each used to
+	// answer differently or not at all.
+	defer s.Report()
 	fresh := Open(s.log, sec)
 	// found as well as the rest. Leaving it behind made this path restore
 	// nothing — Restore reads no record where there was one — and then
@@ -255,16 +270,10 @@ func (s *Store) Reopen(n *emulator.Node, now time.Time, sec store.Sector) {
 	// bond and setting the device had.
 	s.j, s.key, s.state, s.found = fresh.j, fresh.key, fresh.state, fresh.found
 	if s.j == nil {
-		// Still nothing to read. Say so in the same shape as every other
-		// outcome of this command: one Warn line from the open and then
-		// silence is the opposite of what someone typing `store open` is
-		// asking for.
-		s.Report()
-		return
+		return // Open has already said why
 	}
 	s.Restore(n, now)
 	s.Save(n)
-	s.Report()
 }
 
 // Report prints what is saved.
