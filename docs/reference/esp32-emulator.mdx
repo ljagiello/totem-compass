@@ -90,7 +90,7 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `pair` | open a 6 s pairing window, as a long hold does |
 | `status` | this device and each peer: name, RSSI, last heard, position, battery |
 | `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix (latitude ±90, longitude ±180, accuracy 0-127 m, default 5), or none (the default) |
-| `heading <deg>` | compass azimuth to report, 0-359 |
+| `heading <deg>` | compass azimuth to report, 0-359; while a simulation runs it steers the track too, the way a Totem points where it is going |
 | `sim still\|walk\|drive [bearing]`, `sim off` | run or stop the simulated hardware |
 | `flat on\|off` | report the Totem lying down or upright |
 | `batt <0-100> [charging]` | battery level |
@@ -135,7 +135,11 @@ windows and advertises the time to peers the way a Totem with a GNSS lock does
 clock before 2020 rather than push that at a peer whose own clock is not set.
 
 `SensorSource` is the seam: `Sim` on a board with no sensors, and a board's own GNSS,
-magnetometer, motion sensor and power chip where they exist.
+magnetometer, motion sensor and power chip where they exist. `Controls` is the other half
+of it, the settings `pos`, `heading`, `flat`, `batt` and `clock` drive. Both the simulation
+and the fixed reading take them, so the same console command works whichever is installed;
+a source that reports real hardware and takes no settings says so instead of accepting the
+command and changing nothing.
 
 ## Radio setup
 

@@ -2,6 +2,7 @@ package emulator
 
 import (
 	"math"
+	"math/rand/v2"
 	"testing"
 	"time"
 
@@ -77,7 +78,7 @@ func TestSimStillAndFlat(t *testing.T) {
 	if got := s.Read(t0.Add(2 * time.Hour)); got.Orientation != mesh.OrientationHorizontal {
 		t.Errorf("orientation = %v, want horizontal", got.Orientation)
 	}
-	s.SetFix(0, 0, false)
+	s.SetFix(nil)
 	if got := s.Read(t0.Add(3 * time.Hour)); got.Fix != nil {
 		t.Errorf("fix = %+v, want none", *got.Fix)
 	}
@@ -190,8 +191,12 @@ func TestSetFlatAndBattery(t *testing.T) {
 		if sim {
 			h.n.StartSim(Still, 0, h.now)
 		}
-		h.n.SetFlat(true, h.now)
-		h.n.SetBattery(17, true, h.now)
+		if err := h.n.SetFlat(true, h.now); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.n.SetBattery(17, true, h.now); err != nil {
+			t.Fatal(err)
+		}
 		got := h.n.Sensors()
 		if got.Orientation != mesh.OrientationHorizontal {
 			t.Errorf("sim=%v orientation = %v", sim, got.Orientation)
@@ -214,7 +219,9 @@ func TestFlatShortensTheWindow(t *testing.T) {
 	if got := h.n.period(); got != 4*time.Second {
 		t.Errorf("upright period = %v, want 4s", got)
 	}
-	h.n.SetFlat(true, h.now)
+	if err := h.n.SetFlat(true, h.now); err != nil {
+		t.Fatal(err)
+	}
 	if got := h.n.period(); got != time.Second {
 		t.Errorf("flat period = %v, want 1s", got)
 	}
@@ -247,5 +254,105 @@ func TestParseSimCommands(t *testing.T) {
 		if c, err := ParseCommand(line); err == nil {
 			t.Errorf("ParseCommand(%q) = %+v, want an error", line, c)
 		}
+	}
+}
+
+// TestHostClockKeepsRunning: the clock totemctl hands a board with no GNSS
+// has to run on by itself. Stamping it into the fixed reading pinned it:
+// read took the same instant back every poll, so the emulated wall clock
+// stood still, and the windows, the mesh tick and the advertised time
+// with it.
+func TestHostClockKeepsRunning(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3, AltitudeM: -500, HeadingOfMotion: -1}
+	})
+	if err := h.n.SetClock(t0, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(10 * time.Minute)
+	want := t0.Add(10 * time.Minute)
+	if got := h.n.wall(h.now); got.Sub(want).Abs() > time.Second {
+		t.Errorf("wall clock = %s ten minutes on, want %s", got.UTC(), want.UTC())
+	}
+	if got := h.n.Sensors().Fix.Time; got.Sub(want).Abs() > time.Second {
+		t.Errorf("fix time = %s, want %s", got.UTC(), want.UTC())
+	}
+	// The status frames carry the running clock, not the one it started at.
+	h.bond()
+	h.advance(10 * time.Second)
+	var seen int
+	for _, s := range h.take() {
+		p, ok := s.msg.(mesh.Peer)
+		if !ok || p.Command != mesh.PeerStatus {
+			continue
+		}
+		seen++
+		if got := time.Unix(int64(p.Unix), 0); got.Sub(s.at).Abs() > 2*time.Second {
+			t.Errorf("advertised %s in a frame sent at %s", got.UTC(), s.at.UTC())
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no status frames")
+	}
+}
+
+// TestSimAzimuthStaysPositive: a walk wanders, and its course drifts below
+// zero sooner or later. math.Mod keeps the sign, so the compass reported
+// negative degrees in the status frames.
+func TestSimAzimuthStaysPositive(t *testing.T) {
+	s := NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Motion: Walk, Clock: t0, Rand: rand.New(rand.NewPCG(7, 9))}, t0)
+	s.bearing = -725.5 // a walk that has turned left twice round
+	if got := s.Read(t0.Add(time.Second)); got.Azimuth < 0 || got.Azimuth > 359 {
+		t.Errorf("azimuth = %d, want 0-359", got.Azimuth)
+	}
+	for _, deg := range []float64{-0.5, -360, -359.9, 719.5, 0} {
+		if n := norm360(deg); n < 0 || n >= 360 {
+			t.Errorf("norm360(%v) = %v, want 0 to just under 360", deg, n)
+		}
+	}
+}
+
+// TestSetHeadingSteersTheSim: heading reached the fixed reading only, so
+// while a simulation ran it reported success and changed nothing.
+func TestSetHeadingSteersTheSim(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3, AltitudeM: -500, HeadingOfMotion: -1}
+	})
+	// A drive holds its course, so the track shows the steering; a walk
+	// wanders and would wander off it.
+	h.n.StartSim(Drive, 0, h.now)
+	if err := h.n.SetHeading(90, h.now); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.n.Sensors().Azimuth; got != 90 {
+		t.Errorf("azimuth = %d, want 90", got)
+	}
+	if got := h.n.Config().Heading; got != 90 {
+		t.Errorf("Config().Heading = %d, want 90", got)
+	}
+	// It steers the walk as well: a Totem someone carries points where it
+	// is going.
+	start := *h.n.Sensors().Fix
+	h.advance(2 * time.Minute)
+	if end := h.n.Sensors().Fix; end.Lon <= start.Lon {
+		t.Errorf("driving east from longitude %f ended at %f", start.Lon, end.Lon)
+	}
+}
+
+// TestSetBatteryRestartsTheDrain: the level set by hand is the level
+// reported, not the level the simulation would have drained to by now.
+func TestSetBatteryRestartsTheDrain(t *testing.T) {
+	h := newHarness(t, nil)
+	h.n.StartSim(Still, 0, h.now)
+	h.advance(6 * time.Hour)
+	if err := h.n.SetBattery(80, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.n.Sensors().Battery.Percent; got != 80 {
+		t.Errorf("battery = %d%% right after setting 80%%", got)
+	}
+	h.advance(time.Hour)
+	if got := h.n.Sensors().Battery.Percent; got < 68 || got > 76 {
+		t.Errorf("battery = %d%% an hour later, want about 73%% (80%% over a 12 h life)", got)
 	}
 }

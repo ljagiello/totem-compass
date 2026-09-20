@@ -124,12 +124,12 @@ func FuzzNode(f *testing.F) {
 				h.n.SetSOS(step&1 != 0)
 			case 6:
 				if step&1 == 0 {
-					h.n.SetPosition(nil)
+					_ = h.n.SetPosition(nil, h.now)
 				} else {
-					h.n.SetPosition(&Position{Lat: float32(step) / 3, Lon: -float32(step) / 2, AccuracyM: int8(step & 0x7f)})
+					_ = h.n.SetPosition(&Position{Lat: float32(step) / 3, Lon: -float32(step) / 2, AccuracyM: int8(step & 0x7f)}, h.now)
 				}
 			case 7:
-				h.n.SetHeading(int16(step) % 360)
+				_ = h.n.SetHeading(int16(step)%360, h.now)
 			case 8, 9:
 				// A console line, as an operator or totemctl mesh sends it.
 				if c, err := ParseCommand(string(frame)); err == nil {

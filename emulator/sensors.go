@@ -55,6 +55,29 @@ type SensorSource interface {
 	Read(now time.Time) Sensors
 }
 
+// Controls is the half of a sensor source an operator drives by hand: the
+// pos, heading, batt, flat and clock commands reach the hardware through
+// it. A source that implements it takes those settings whatever else it is
+// doing, so the node needs no per-source branch and a command cannot
+// quietly do nothing. A real board's drivers may leave it unimplemented,
+// and the node then says the reading comes from the hardware.
+type Controls interface {
+	// SetFix places the receiver on a solution; nil takes it away, as
+	// stepping indoors does.
+	SetFix(f *Fix)
+	// SetAzimuth points the compass. A simulation steers onto it.
+	SetAzimuth(deg int16)
+	SetFlat(flat bool)
+	SetBattery(percent int8, charging bool, now time.Time)
+	// SetClock hands the receiver the wall time, as a GNSS lock does.
+	SetClock(wall, now time.Time)
+}
+
+// norm360 folds an angle into [0, 360). math.Mod alone keeps the sign, and
+// a walk that has wandered below zero would otherwise report a negative
+// azimuth in its status frames.
+func norm360(deg float64) float64 { return math.Mod(math.Mod(deg, 360)+360, 360) }
+
 // Motion is how a simulated Totem moves.
 type Motion uint8
 
@@ -84,8 +107,8 @@ type SimConfig struct {
 	Bearing int16
 	// NoFix leaves the simulated receiver without a solution, as indoors.
 	NoFix bool
-	// Volts and Percent start the battery; it drains over Life.
-	Volts   float32
+	// Percent starts the battery; it drains to empty over Life. The
+	// voltage follows the charge level, as voltsFor maps it.
 	Percent int8
 	Life    time.Duration
 	// Charging holds the battery level and marks it charging.
@@ -123,6 +146,13 @@ type Sim struct {
 	prevLat, prevLon float64
 	headingOdoM      float64
 	heading          int16
+
+	// The battery drains from battFrom, the level it was last set to, over
+	// Life from battAt. Draining from the simulation's start instead would
+	// make a battery set mid-run jump back to where it would have got to by
+	// now on its own.
+	battFrom int8
+	battAt   time.Time
 }
 
 // NewSim starts a simulated Totem at now.
@@ -133,7 +163,6 @@ func NewSim(cfg SimConfig, now time.Time) *Sim {
 	if cfg.Percent == 0 {
 		cfg.Percent = 95
 	}
-	cfg.Volts = voltsFor(cfg.Percent)
 	if cfg.Life == 0 {
 		cfg.Life = 12 * time.Hour
 	}
@@ -141,6 +170,7 @@ func NewSim(cfg SimConfig, now time.Time) *Sim {
 		cfg: cfg, rng: cfg.Rand, start: now, last: now,
 		lat: float64(cfg.Lat), lon: float64(cfg.Lon), bearing: float64(cfg.Bearing), heading: -1,
 		prevLat: float64(cfg.Lat), prevLon: float64(cfg.Lon),
+		battFrom: cfg.Percent, battAt: now,
 	}
 }
 
@@ -153,13 +183,18 @@ func (s *Sim) SetMotion(m Motion, bearing int16) {
 	s.bearing = float64(bearing)
 }
 
+// SetAzimuth steers the simulated Totem onto a course: the compass and the
+// track follow the same bearing, as they do on a device someone carries.
+func (s *Sim) SetAzimuth(deg int16) { s.SetMotion(s.cfg.Motion, deg) }
+
 // SetFlat reports the Totem lying down or upright.
 func (s *Sim) SetFlat(flat bool) { s.cfg.Flat = flat }
 
-// SetBattery sets the charge level and whether it is charging.
-func (s *Sim) SetBattery(percent int8, charging bool) {
+// SetBattery sets the charge level and whether it is charging. The drain
+// starts again from now, so the level asked for is the level reported.
+func (s *Sim) SetBattery(percent int8, charging bool, now time.Time) {
 	s.cfg.Percent, s.cfg.Charging = percent, charging
-	s.cfg.Volts = voltsFor(percent)
+	s.battFrom, s.battAt = percent, now
 }
 
 // SetClock gives the simulated receiver the wall time, as a GNSS lock
@@ -168,10 +203,16 @@ func (s *Sim) SetClock(wall, now time.Time) {
 	s.cfg.Clock = wall.Add(-now.Sub(s.start))
 }
 
-// SetFix moves the simulated Totem, or takes its fix away.
-func (s *Sim) SetFix(lat, lon float32, has bool) {
-	s.lat, s.lon, s.cfg.NoFix = float64(lat), float64(lon), !has
-	s.cfg.Lat, s.cfg.Lon = lat, lon
+// SetFix moves the simulated Totem, or takes its fix away. The receiver
+// keeps deriving the rest of the solution as it walks.
+func (s *Sim) SetFix(f *Fix) {
+	if f == nil {
+		s.cfg.NoFix = true
+		return
+	}
+	s.lat, s.lon, s.cfg.NoFix = float64(f.Lat), float64(f.Lon), false
+	s.cfg.Lat, s.cfg.Lon = f.Lat, f.Lon
+	s.prevLat, s.prevLon = s.lat, s.lon
 }
 
 // speedKPH is the motion's ground speed.
@@ -207,7 +248,7 @@ func (s *Sim) Read(now time.Time) Sensors {
 	}
 	out := Sensors{
 		Orientation: orientation,
-		Azimuth:     int16(math.Mod(s.bearing+360, 360)),
+		Azimuth:     int16(norm360(s.bearing)),
 		Battery:     s.battery(now),
 	}
 	if s.cfg.NoFix {
@@ -241,16 +282,16 @@ func (s *Sim) move(distanceM, bearing float64) {
 	s.odometerM += distanceM
 	// get_heading_mot: the course of the last 10 m traveled.
 	if s.odometerM-s.headingOdoM >= 10 {
-		s.heading = int16(math.Mod(bearingBetween(s.prevLat, s.prevLon, s.lat, s.lon)+360, 360))
+		s.heading = int16(norm360(bearingBetween(s.prevLat, s.prevLon, s.lat, s.lon)))
 		s.prevLat, s.prevLon, s.headingOdoM = s.lat, s.lon, s.odometerM
 	}
 }
 
-// battery drains from the starting level over Life, or holds while charging.
+// battery drains from the level last set over Life, or holds while charging.
 func (s *Sim) battery(now time.Time) Battery {
-	pct := float64(s.cfg.Percent)
+	pct := float64(s.battFrom)
 	if !s.cfg.Charging && s.cfg.Life > 0 {
-		pct -= float64(s.cfg.Percent) * now.Sub(s.start).Seconds() / s.cfg.Life.Seconds()
+		pct -= float64(s.battFrom) * now.Sub(s.battAt).Seconds() / s.cfg.Life.Seconds()
 	}
 	p := int8(min(max(pct, 0), 100))
 	return Battery{Volts: voltsFor(p), Percent: p, Charging: s.cfg.Charging, Low: p <= 10}
@@ -287,12 +328,60 @@ func bearingBetween(lat1, lon1, lat2, lon2 float64) float64 {
 
 // NewStatic returns a source that always reports s, as a board with no
 // sensors does.
-func NewStatic(s Sensors) SensorSource { return &staticSensors{s} }
+func NewStatic(s Sensors) SensorSource { return &staticSensors{s: s} }
 
-// staticSensors reports one fixed reading, as the pos and heading commands
-// set it.
+// staticSensors reports one fixed reading, as the pos, heading, batt and
+// flat commands set it.
 type staticSensors struct {
 	s Sensors
+	// clock is the wall time at at, kept as a base rather than a stamped
+	// reading: a fixed timestamp handed to the node every poll would pin
+	// the emulated clock to the instant it was set.
+	clock time.Time
+	at    time.Time
 }
 
-func (f *staticSensors) Read(time.Time) Sensors { return f.s }
+// Read reports the fixed sensors, with the clock advanced to now.
+func (f *staticSensors) Read(now time.Time) Sensors {
+	out := f.s
+	if out.Fix != nil {
+		// Copy, so the caller holds no pointer into the source.
+		fix := *out.Fix
+		if !f.clock.IsZero() {
+			fix.Time = f.clock.Add(now.Sub(f.at))
+		}
+		out.Fix = &fix
+	}
+	return out
+}
+
+// SetFix places the fixed reading, or takes its solution away.
+func (f *staticSensors) SetFix(fix *Fix) {
+	if fix == nil {
+		f.s.Fix = nil
+		return
+	}
+	// Copy, so a caller that keeps the fix cannot change the readings.
+	held := *fix
+	f.s.Fix = &held
+}
+
+// SetAzimuth points the fixed compass.
+func (f *staticSensors) SetAzimuth(deg int16) { f.s.Azimuth = deg }
+
+// SetFlat reports the Totem lying down or upright.
+func (f *staticSensors) SetFlat(flat bool) {
+	f.s.Orientation = mesh.OrientationVertical
+	if flat {
+		f.s.Orientation = mesh.OrientationHorizontal
+	}
+}
+
+// SetBattery sets the charge level and whether it is charging. A board
+// with no power chip holds it there.
+func (f *staticSensors) SetBattery(percent int8, charging bool, _ time.Time) {
+	f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10}
+}
+
+// SetClock hands the fixed receiver the wall time, which then runs on.
+func (f *staticSensors) SetClock(wall, now time.Time) { f.clock, f.at = wall, now }

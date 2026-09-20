@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"reflect"
 	"slices"
 	"strconv"
@@ -31,6 +32,10 @@ const (
 	emulatorBaud = 115200
 	consoleReply = 3 * time.Second // time the emulator has to answer "format json"
 	consoleQuiet = time.Second     // status and send stop after this much silence
+	// maxHeardMs is the largest peer age worth printing: past it a
+	// Duration in milliseconds overflows, and a board that has been up
+	// for 292 million years is not the likelier explanation.
+	maxHeardMs = float64(math.MaxInt64 / int64(time.Millisecond))
 )
 
 // esp32BridgeVIDs are the USB vendor ids of the serial bridges on ESP32
@@ -129,8 +134,11 @@ func newMeshStatusCmd(g *globals) *cobra.Command {
 			var peers []consoleLine
 			for {
 				l, err := e.await(cmd.Context(), g.wait(consoleQuiet), func(l consoleLine) bool { return l.Msg == "peer" })
-				if err != nil {
+				if errors.Is(err, errTimeout) {
 					break // no more peer lines
+				}
+				if err != nil {
+					return fmt.Errorf("status: %w", err)
 				}
 				peers = append(peers, l)
 			}
@@ -151,6 +159,9 @@ answers the Totem's bond request by itself; bonding needs a signal of
 -25 dBm or stronger on both sides, so the two must nearly touch.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if dur <= 0 {
+				return fmt.Errorf("--for %s: give it time to hold the Touch Crystal in", dur)
+			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), dur)
 			defer cancel()
 			e, err := openEmulator(cmd.Context(), g, false)
@@ -246,8 +257,11 @@ func newMeshSendCmd(g *globals) *cobra.Command {
 				l, err := e.await(cmd.Context(), quiet, func(l consoleLine) bool {
 					return !hiddenEvents[l.Msg] && l.Msg != "rx" && l.Msg != "tx" && l.Msg != "radio"
 				})
+				if errors.Is(err, errTimeout) {
+					return nil // the command has stopped logging
+				}
 				if err != nil {
-					return nil
+					return err // the port died, which is not a finished command
 				}
 				g.out.meshEvent(l.event())
 				switch {
@@ -670,7 +684,11 @@ func (p *printer) meshStatus(self consoleLine, peers []consoleLine) {
 	for _, l := range peers {
 		a := l.attrs
 		heard := "never"
-		if ms, ok := a["heard_ms"].(float64); ok {
+		// A peer restored from the bond list has not been heard yet and
+		// reports -1. Anything past maxHeardMs is not a real age either,
+		// and multiplying it into a Duration would overflow into a
+		// negative one.
+		if ms, ok := a["heard_ms"].(float64); ok && ms >= 0 && ms <= maxHeardMs {
 			heard = (time.Duration(ms) * time.Millisecond).Round(100*time.Millisecond).String() + " ago"
 		}
 		via := ""

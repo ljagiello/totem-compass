@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ljagiello/totem-compass/mesh"
 )
@@ -582,5 +584,47 @@ func TestLogKeysAvoidBuiltins(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// TestLocateOnTheMeridian: a Totem standing on the prime meridian sends a
+// true zero for longitude. Requiring both coordinates to be non-zero
+// dropped its position, and the distance to it with it.
+func TestLocateOnTheMeridian(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 51.4779, Lon: 0.0015, AccuracyM: 3} })
+	h.bond()
+	if err := h.n.SetClock(t0, h.now); err != nil { // the mesh needs a clock
+		t.Fatal(err)
+	}
+	h.advance(61 * time.Second)
+	h.take()
+	h.rx(totem, mesh.Broadcast, -70, mesh.Locate{
+		Origin: totem, Lat: 51.4779, Lon: 0, UID: 77, MinRSSI: -127, MaxHops: 99,
+		Expiry: int32(h.n.wall(h.now).Unix()) + 120, RelayMinDistM: 10,
+	})
+	p, ok := h.n.peers[totem]
+	if !ok {
+		t.Fatal("the peer is gone")
+	}
+	if !p.hasCoords || p.lat != 51.4779 || p.lon != 0 {
+		t.Errorf("coords after a locate from the meridian: has=%v lat=%v lon=%v", p.hasCoords, p.lat, p.lon)
+	}
+}
+
+// TestNameLongerThanAFrame: every status frame carries the name, so a name
+// the frame cannot hold has to be cut when the node starts. It used to
+// reach MarshalBinary and panic on the first unbond.
+func TestNameLongerThanAFrame(t *testing.T) {
+	long := strings.Repeat("é", mesh.MaxPeerName) // 2 bytes a rune, so twice over
+	h := newHarness(t, func(c *Config) { c.Name = long })
+	name := h.n.Config().Name
+	if len(name) > mesh.MaxPeerName || !utf8.ValidString(name) {
+		t.Fatalf("name = %q (%d bytes), want at most %d bytes of valid UTF-8", name, len(name), mesh.MaxPeerName)
+	}
+	h.bond()
+	h.collect(h.n.Unbond(h.now, totem)) // panicked here
+	h.advance(time.Second)
+	if len(h.take()) == 0 {
+		t.Error("no unbond frame")
 	}
 }

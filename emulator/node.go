@@ -14,14 +14,17 @@
 package emulator
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"math/rand/v2"
 	"slices"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ljagiello/totem-compass/mesh"
 )
@@ -187,6 +190,18 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
+	if len(cfg.Name) > mesh.MaxPeerName {
+		// Every status frame carries the name, so a name the frame cannot
+		// hold would fail at the point of sending one. Cut it here instead,
+		// on a rune boundary so what is left is still text.
+		short := cfg.Name[:mesh.MaxPeerName]
+		for len(short) > 0 && !utf8.ValidString(short) {
+			short = short[:len(short)-1]
+		}
+		cfg.Logger.Warn("name is longer than a peer frame holds, truncated",
+			"name", cfg.Name, "bytes", len(cfg.Name), "max", mesh.MaxPeerName, "using", short)
+		cfg.Name = short
+	}
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), binary.BigEndian.Uint64(append([]byte{0, 0}, cfg.MAC[:]...))))
 	}
@@ -213,7 +228,7 @@ func New(cfg Config, now time.Time) *Node {
 	}
 	n.source = cfg.Sensors
 	if n.source == nil {
-		n.source = &staticSensors{Sensors{
+		n.source = &staticSensors{s: Sensors{
 			Fix: cfg.Position, Orientation: cfg.Orientation, Azimuth: cfg.Heading,
 			Battery: Battery{Volts: cfg.BattVolts, Percent: cfg.BattPct},
 		}}
@@ -796,7 +811,10 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 		(n.lastReply.IsZero() || now.Sub(n.lastReply) >= meshReplyHold)
 	p.viaMesh, p.stale = true, false
 	p.heard, p.lastHeard = true, now
-	if m.Lat != 0 && m.Lon != 0 {
+	if m.Lat != 0 || m.Lon != 0 {
+		// Either half being set is a position: a Totem on the meridian or
+		// the equator sends one coordinate as a true zero. The status and
+		// reply paths already read it this way.
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	n.log.Info("locate", "origin", m.Origin, "via", rx.Src, "request", m.ReplyRequested, "hops", m.Hops, "uid", m.UID)
@@ -889,8 +907,10 @@ func (n *Node) meshTick(now time.Time) {
 		if delay.Milliseconds()%6 == 0 {
 			delay -= time.Second
 		}
-		mine, theirs := binary.BigEndian.Uint64(append([]byte{0, 0}, n.cfg.MAC[:]...)), binary.BigEndian.Uint64(append([]byte{0, 0}, p.mac[:]...))
-		if p.meshGrp != n.meshGrp || now.Sub(p.firstStale) >= delay || theirs <= mine {
+		// The lower MAC asks first. Comparing the bytes orders them the
+		// same way as the firmware's integer compare, and allocates
+		// nothing on a tick that runs every second.
+		if p.meshGrp != n.meshGrp || now.Sub(p.firstStale) >= delay || bytes.Compare(p.mac[:], n.cfg.MAC[:]) <= 0 {
 			send = true
 		} else {
 			p.meshNext = now.Add(delay)
@@ -1047,10 +1067,8 @@ func (n *Node) SetClock(wall, now time.Time) error {
 	if !wall.After(minClock) {
 		return fmt.Errorf("clock %s is before %s", wall.UTC().Format(time.RFC3339), minClock.Format("2006"))
 	}
-	if s := n.sim(); s != nil {
-		s.SetClock(wall, now)
-	} else if f := n.static(); f != nil && f.s.Fix != nil {
-		f.s.Fix.Time = wall
+	if c := n.controls(); c != nil {
+		c.SetClock(wall, now)
 	}
 	n.clockOffset = wall.Sub(now)
 	n.clockSet, n.gnssClock = true, true
@@ -1068,11 +1086,30 @@ func (n *Node) SetSensors(src SensorSource, now time.Time) {
 	n.read(now)
 }
 
-// static is the fixed sensor reading the pos, heading and battery commands
-// change. It returns nil once a real source is installed.
-func (n *Node) static() *staticSensors {
-	f, _ := n.source.(*staticSensors)
-	return f
+// controls is the hand-driven half of the sensor source, which the pos,
+// heading, batt, flat and clock commands go through. It is nil once a
+// source that only reports real hardware is installed.
+func (n *Node) controls() Controls {
+	c, _ := n.source.(Controls)
+	return c
+}
+
+// errNoControls says a setting cannot reach the sensors because they are a
+// board's own. Reporting it beats accepting the command and changing
+// nothing.
+var errNoControls = errors.New("the sensors report the board's own hardware and take no settings")
+
+// set applies one hand-driven setting and takes a fresh reading, so the
+// next status frame carries it. Every setter goes through here: one place
+// decides what a source can take, and none of them can forget a case.
+func (n *Node) set(now time.Time, f func(c Controls)) error {
+	c := n.controls()
+	if c == nil {
+		return errNoControls
+	}
+	f(c)
+	n.read(now)
+	return nil
 }
 
 // sim is the running simulation, or nil when the readings come from
@@ -1122,58 +1159,44 @@ func (n *Node) StopSim(now time.Time) {
 
 // SetFlat reports the Totem lying down or upright, which changes how often
 // peers expect its status.
-func (n *Node) SetFlat(flat bool, now time.Time) {
-	o := mesh.OrientationVertical
-	if flat {
-		o = mesh.OrientationHorizontal
+func (n *Node) SetFlat(flat bool, now time.Time) error {
+	if err := n.set(now, func(c Controls) { c.SetFlat(flat) }); err != nil {
+		return err
 	}
-	if s := n.sim(); s != nil {
-		s.SetFlat(flat)
-	} else if f := n.static(); f != nil {
-		f.s.Orientation = o
-	}
-	n.cfg.Orientation = o
-	n.read(now)
+	n.cfg.Orientation = n.sensors.Orientation
+	return nil
 }
 
 // SetBattery sets the charge level and whether the Totem is charging.
-func (n *Node) SetBattery(percent int8, charging bool, now time.Time) {
-	if s := n.sim(); s != nil {
-		s.SetBattery(percent, charging)
-	} else if f := n.static(); f != nil {
-		f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10}
+func (n *Node) SetBattery(percent int8, charging bool, now time.Time) error {
+	if err := n.set(now, func(c Controls) { c.SetBattery(percent, charging, now) }); err != nil {
+		return err
 	}
-	n.cfg.BattPct, n.cfg.BattVolts = percent, voltsFor(percent)
-	n.read(now)
+	n.cfg.BattPct, n.cfg.BattVolts = n.sensors.Battery.Percent, n.sensors.Battery.Volts
+	return nil
 }
 
 // SetPosition changes the reported fix; nil means none.
-func (n *Node) SetPosition(p *Position) {
-	if s := n.sim(); s != nil {
-		if p != nil {
-			s.SetFix(p.Lat, p.Lon, true)
-		} else {
-			s.SetFix(0, 0, false)
-		}
-		return
+func (n *Node) SetPosition(p *Position, now time.Time) error {
+	if err := n.set(now, func(c Controls) { c.SetFix(p) }); err != nil {
+		return err
 	}
-	if f := n.static(); f != nil {
-		f.s.Fix = p
-		n.sensors.Fix = p
-		n.cfg.Position = p
-	}
+	n.cfg.Position = n.sensors.Fix
+	return nil
 }
 
-// SetSOS switches SOS on or off.
+// SetSOS switches SOS on or off. It is the node's own flag, not a reading,
+// so it holds whatever the sensors are.
 func (n *Node) SetSOS(on bool) { n.cfg.SOS = on }
 
-// SetHeading changes the reported compass azimuth.
-func (n *Node) SetHeading(deg int16) {
-	if f := n.static(); f != nil {
-		f.s.Azimuth = deg
-		n.sensors.Azimuth = deg
-		n.cfg.Heading = deg
+// SetHeading changes the reported compass azimuth. While a simulation runs
+// it steers the walk, which is where the azimuth comes from.
+func (n *Node) SetHeading(deg int16, now time.Time) error {
+	if err := n.set(now, func(c Controls) { c.SetAzimuth(deg) }); err != nil {
+		return err
 	}
+	n.cfg.Heading = n.sensors.Azimuth
+	return nil
 }
 
 // Sensors is the last sensor reading.

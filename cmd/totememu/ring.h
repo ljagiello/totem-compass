@@ -52,8 +52,15 @@ static int totem_rx_pop(totem_rx_slot *out) {
 	if (tail == totem_rx_head) {
 		return 0;
 	}
+	// Acquire: the frame was written before the head store that made it
+	// visible, so read the slot after reading head.
 	__sync_synchronize();
 	*out = totem_rx[tail % TOTEM_RX_SLOTS];
+	// Release: the slot is free only once it has been copied out. Without
+	// this the WiFi task could see the new tail first and write the next
+	// frame over a slot still being read, which on a full ring tears the
+	// frame the main loop is about to parse.
+	__sync_synchronize();
 	totem_rx_tail = tail + 1;
 	return 1;
 }

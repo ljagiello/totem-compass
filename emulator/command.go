@@ -277,15 +277,15 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 	case OpUnbond:
 		return n.Unbond(now, c.MAC), true, nil
 	case OpPos:
-		n.SetPosition(c.Position)
+		err = n.SetPosition(c.Position, now)
 	case OpHeading:
-		n.SetHeading(c.Heading)
+		err = n.SetHeading(c.Heading, now)
 	case OpSOS:
 		n.SetSOS(c.On)
 	case OpFlat:
-		n.SetFlat(c.On, now)
+		err = n.SetFlat(c.On, now)
 	case OpBattery:
-		n.SetBattery(c.Percent, c.On, now)
+		err = n.SetBattery(c.Percent, c.On, now)
 	case OpSim:
 		if c.On {
 			n.StartSim(c.Motion, c.Heading, now)
@@ -296,6 +296,9 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 		return nil, true, n.SetClock(time.UnixMilli(c.ClockMs), now)
 	default:
 		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, err
 	}
 	return n.flush(), true, nil
 }

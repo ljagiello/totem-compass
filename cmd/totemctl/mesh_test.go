@@ -454,3 +454,30 @@ func FuzzConsoleLine(f *testing.F) {
 		p.meshStatus(l, []consoleLine{l})
 	})
 }
+
+// TestMeshStatusNeverHeard: a peer restored from the bond list reports
+// heard_ms -1, and a board that has just booted can report an age no
+// duration holds. Both read as "never", rather than as an overflowed
+// negative age.
+func TestMeshStatusNeverHeard(t *testing.T) {
+	for _, ms := range []string{"-1", "1700000000000000000"} {
+		var out strings.Builder
+		p := &printer{out: &out}
+		self := mustLine(t, `{"up":1,"level":"INFO","msg":"self","mac":"209ba970abb0","name":"emu_totem_abb0","pairing":false,"sos":false,"heading":0,"color":0}`)
+		peer := mustLine(t, `{"up":1,"level":"INFO","msg":"peer","mac":"8c94df7b0478","name":"LCFs totem","rssi":-13,"heard_ms":`+ms+
+			`,"mesh":false,"lat":37.586754,"lon":-122.007301,"distance_m":-1,"batt":52}`)
+		p.meshStatus(self, []consoleLine{peer})
+		if got := out.String(); !strings.Contains(got, "heard never") {
+			t.Errorf("heard_ms %s printed:\n%s", ms, got)
+		}
+	}
+}
+
+func mustLine(t *testing.T, s string) consoleLine {
+	t.Helper()
+	l, err := parseConsoleLine([]byte(s))
+	if err != nil {
+		t.Fatalf("parseConsoleLine(%q): %v", s, err)
+	}
+	return l
+}

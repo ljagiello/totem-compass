@@ -91,6 +91,10 @@ func main() {
 	cmds := make(chan string, 4)
 	go readLines(log, cmds)
 	stats := time.NewTicker(time.Minute)
+	// One timer for the life of the loop. The loop runs every 5 ms, so a
+	// fresh timer per pass would put 200 allocations a second through a
+	// heap of a few hundred kilobytes.
+	timer := time.NewTimer(rxPoll)
 	for {
 		for {
 			r, ok := popRX()
@@ -107,7 +111,14 @@ func main() {
 		if next := node.Next(); !next.IsZero() {
 			wait = min(max(next.Sub(now), 0), rxPoll)
 		}
-		timer := time.NewTimer(wait)
+		if !timer.Stop() {
+			// It fired while another branch was taken; drop that tick.
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(wait)
 		select {
 		case line := <-cmds:
 			radio.send(command(log, node, line))
@@ -115,7 +126,6 @@ func main() {
 			radio.report()
 		case <-timer.C:
 		}
-		timer.Stop()
 	}
 }
 
@@ -207,8 +217,15 @@ func command(log *slog.Logger, n *emulator.Node, line string) []emulator.Packet 
 		}
 		log.Info("self", self...)
 		for _, p := range n.Peers() {
+			// A peer restored from the bond list has not been heard since
+			// the board booted. -1 says so; the age since the zero time is
+			// 56 years of milliseconds, which reads as nonsense.
+			heard := int64(-1)
+			if !p.LastHeard.IsZero() {
+				heard = time.Since(p.LastHeard).Milliseconds()
+			}
 			log.Info("peer", "mac", p.MAC, "name", p.Status.Name, "rssi", p.RSSI,
-				"heard_ms", time.Since(p.LastHeard).Milliseconds(), "mesh", p.ViaMesh,
+				"heard_ms", heard, "mesh", p.ViaMesh,
 				"lat", p.Status.Lat, "lon", p.Status.Lon, "distance_m", int(p.DistanceM), "batt", p.Status.BattPct)
 		}
 	case emulator.OpFormat:
