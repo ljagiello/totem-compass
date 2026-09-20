@@ -461,6 +461,18 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 // has no clock of its own would set its RTC to 1970 too.
 var minClock = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
+// maxClock is the last instant a peer frame can carry. The Unix field is
+// an int32, as it is in the firmware, so a clock past this wraps: fuzzing
+// set one in 2055 and the node advertised 1919, a timestamp a peer with
+// no clock of its own would have taken. A clock that cannot be said is
+// not a clock this node accepts.
+var maxClock = time.Unix(math.MaxInt32, 0).UTC()
+
+// usableClock reports whether a wall time is one this node may hold and
+// put on the air: after the floor every path applies, and inside what the
+// frame can carry.
+func usableClock(w time.Time) bool { return w.After(minClock) && !w.After(maxClock) }
+
 func (n *Node) read(now time.Time) {
 	n.sensors, n.sensorsAt = n.source.Read(now), now
 	// Whether the board has a battery monitor is a fact about the board,
@@ -473,7 +485,7 @@ func (n *Node) read(now time.Time) {
 	// n.fix(), not the raw reading: a receiver whose position this node
 	// refuses has not earned its clock either, and that clock would be
 	// advertised to every peer and would re-slot every radio window.
-	if f := n.fix(); f != nil && f.Time.After(minClock) {
+	if f := n.fix(); f != nil && usableClock(f.Time) {
 		n.clockOffset = f.Time.Sub(now)
 		if !n.gnssClock {
 			n.gnssClock = true
@@ -523,7 +535,7 @@ func (n *Node) adoptClock(now time.Time, src mesh.MAC, p mesh.Peer) {
 		return
 	}
 	wall := time.UnixMilli(int64(p.Unix)*1000 + int64(p.TimeOfDayMs%1000))
-	if !wall.After(minClock) {
+	if !usableClock(wall) {
 		// The same floor the GNSS path and the console apply. A peer that
 		// says 1970 — a garbled frame, or a device whose own clock never
 		// started — would otherwise pin this one there for good: nothing
@@ -706,7 +718,12 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		p.HeadingOfMotion = f.HeadingOfMotion
 		p.OdometerM = int16(min(f.OdometerM, math.MaxInt16))
 	}
-	if n.gnssClock {
+	// usableClock again rather than gnssClock alone: the clock is a base
+	// plus however long the device has been running, so one set near the
+	// ceiling crosses it while the device is up. Past it the int32 wraps
+	// and the frame would carry a time from the 1900s, which a peer with
+	// no clock of its own would take as real.
+	if n.gnssClock && usableClock(n.wall(now)) {
 		w := n.wall(now).UTC()
 		p.Unix = int32(w.Unix())
 		p.TimeOfDayMs = int32(w.Hour()*3600000 + w.Minute()*60000 + w.Second()*1000 + w.Nanosecond()/1e6)
@@ -1356,8 +1373,9 @@ func (n *Node) Pairing() bool { return n.pairing }
 // SetClock gives the node the wall time, as a GNSS lock does. It is how a
 // board without a clock of its own gets one, from totemctl mesh clock.
 func (n *Node) SetClock(wall, now time.Time) error {
-	if !wall.After(minClock) {
-		return fmt.Errorf("clock %s is before %s", wall.UTC().Format(time.RFC3339), minClock.Format("2006"))
+	if !usableClock(wall) {
+		return fmt.Errorf("clock %s is outside %s to %s, which is what a peer frame can carry",
+			wall.UTC().Format(time.RFC3339), minClock.Format("2006"), maxClock.Format("2006"))
 	}
 	if c := n.controls(); c != nil {
 		c.SetClock(wall, now)

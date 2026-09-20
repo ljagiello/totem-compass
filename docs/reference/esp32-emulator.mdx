@@ -105,7 +105,7 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `sim still\|walk\|drive [bearing]`, `sim off` | run or stop the simulated hardware |
 | `flat on\|off` | report the Totem lying down or upright |
 | `batt <0-100> [charging]` | battery level |
-| `clock <unix ms>` | set the wall clock (`totemctl mesh clock` sends this computer's) |
+| `clock <unix ms>` | set the wall clock (`totemctl mesh clock` sends this computer's). Between 2020 and 2038: a peer frame carries the time as an int32 of seconds, as the firmware does, and a clock outside that cannot be put on the air |
 | `sos on\|off` | the SOS flag |
 | `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
 | `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |

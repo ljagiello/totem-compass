@@ -167,3 +167,40 @@ func TestTheClockWarningReachesTheConsole(t *testing.T) {
 		t.Errorf("the warning does not say which peer: %s", line)
 	}
 }
+
+// TestAClockThePeerFrameCannotCarry: the Unix field in a peer frame is an
+// int32, as it is in the firmware. Fuzzing set a clock in 2055 and the
+// node advertised 1919 — the cast wrapped — which is exactly the value a
+// peer with no clock of its own would have taken as real.
+func TestAClockThePeerFrameCannotCarry(t *testing.T) {
+	h := newHarness(t, nil)
+	h.bond()
+
+	// Past what the frame can hold: refused, like one from before 2020.
+	tooLate := maxClock.Add(time.Hour)
+	if err := h.n.SetClock(tooLate, h.now); err == nil {
+		t.Errorf("accepted a clock of %s, which a peer frame cannot carry", tooLate)
+	}
+	if h.n.gnssClock {
+		t.Error("a clock the frame cannot carry was taken anyway")
+	}
+
+	// One just inside the ceiling is fine, and what goes out is never a
+	// second from the wrong side of the epoch — not even once the device
+	// has been up long enough to cross it.
+	ok := maxClock.Add(-time.Hour)
+	if err := h.n.SetClock(ok, h.now); err != nil {
+		t.Fatalf("a clock an hour inside the ceiling was refused: %v", err)
+	}
+	h.take()
+	h.advance(2 * time.Hour)
+	for _, s := range h.take() {
+		m, isPeer := s.msg.(mesh.Peer)
+		if !isPeer || (m.Unix == -1 && m.TimeOfDayMs == -1) {
+			continue
+		}
+		if got := time.Unix(int64(m.Unix), 0); got.Before(minClock) {
+			t.Errorf("advertised %s, which is before %s", got, minClock)
+		}
+	}
+}
