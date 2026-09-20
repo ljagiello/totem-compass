@@ -159,14 +159,14 @@ func TestBatteryCurve(t *testing.T) {
 		{4.20, 100}, {4.12, 100}, {4.00, 86}, {3.80, 50}, {3.30, 0}, {3.00, 0},
 	}
 	for _, tt := range tests {
-		if got := battPctFor(tt.volts); got != tt.want {
+		if got := battPctFor(tt.volts, 0); got != tt.want {
 			t.Errorf("battPctFor(%.2f) = %d, want %d", tt.volts, got, tt.want)
 		}
 	}
 	// And it never goes backwards as the voltage rises.
 	last := int8(-1)
 	for v := float32(3.0); v <= 4.3; v += 0.01 {
-		got := battPctFor(v)
+		got := battPctFor(v, 0)
 		if got < last {
 			t.Fatalf("the curve dips at %.2f V: %d after %d", v, got, last)
 		}
@@ -561,7 +561,7 @@ func TestCutoffStopsTheRadio(t *testing.T) {
 func TestVoltsAndPercentAgree(t *testing.T) {
 	for p := int8(0); p <= 100; p += 5 {
 		v := voltsFor(p)
-		if back := battPctFor(v); back < p-2 || back > p+2 {
+		if back := battPctFor(v, 0); back < p-2 || back > p+2 {
 			t.Errorf("%d%% is %.3f V, which reads back as %d%%", p, v, back)
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/protocol"
 )
 
 // Op is a console command.
@@ -243,7 +244,7 @@ func parseTouch(args []string) (Input, Gesture, int64, error) {
 // untrusted in the same way an on-air one is: it goes to the same parser,
 // and the node drops what it does not like.
 func parseRX(args []string) (*Received, error) {
-	if len(args) != 4 {
+	if len(args) < 4 {
 		return nil, errors.New("want <src mac> self|all <rssi dBm> <hex frame>")
 	}
 	src, err := mesh.ParseMAC(args[0])
@@ -264,7 +265,17 @@ func parseRX(args []string) (*Received, error) {
 	if err != nil || rssi > 0 || rssi < -127 {
 		return nil, fmt.Errorf("rssi %q: want 0 to -127 dBm", args[2])
 	}
-	data, err := hex.DecodeString(args[3])
+	// Everything after the RSSI is the frame, joined: a paste that has a
+	// space in it — the non-breaking one a document leaves behind, or the
+	// grouping someone typed — arrives here already split into fields,
+	// and refusing it for having the wrong number of arguments is the
+	// answer least likely to be understood. totemctl raw joins the same
+	// way.
+	//
+	// The same cleaner the CLI and ParseMAC use: a frame is pasted out of
+	// a log or a chat window as often as it is typed, so it arrives with
+	// colons, dashes or a non-breaking space in it.
+	data, err := hex.DecodeString(protocol.CleanHex(strings.Join(args[3:], "")))
 	if err != nil {
 		return nil, fmt.Errorf("frame: %w", err)
 	}

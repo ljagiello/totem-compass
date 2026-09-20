@@ -86,13 +86,26 @@ var battCurve = []struct {
 	{4.12, 100},
 }
 
-// battPctFor maps a cell voltage to a percentage along that curve.
-func battPctFor(v float32) int8 {
+// battPctFor maps a cell voltage to a percentage along that curve. top
+// is the highest this pack has been seen at, which stretches the last
+// segment when a pack charges above the curve's own top — otherwise
+// everything from 4.12 V upwards reads 100% and the first tenth of a
+// volt of discharge looks like no discharge at all. Zero means nothing
+// has been learned yet, and the curve is used as written.
+func battPctFor(v float32, top float32) int8 {
+	full := battCurve[len(battCurve)-1].volts
+	if top > full && plausibleVolts(top) {
+		full = top
+	}
 	switch {
 	case v <= battCurve[0].volts:
 		return 0
-	case v >= battCurve[len(battCurve)-1].volts:
+	case v >= full:
 		return 100
+	case v >= battCurve[len(battCurve)-1].volts:
+		// Between the curve's top and what this pack reaches.
+		lo := battCurve[len(battCurve)-2]
+		return lo.pct + int8(float32(100-lo.pct)*(v-lo.volts)/(full-lo.volts))
 	}
 	for i := 1; i < len(battCurve); i++ {
 		hi := battCurve[i]
@@ -178,12 +191,28 @@ func newPower(now time.Time) *Power {
 // carry across reboots.
 func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
 
-// SetLearnedMaxVolts puts back what a previous boot learned.
+// SetLearnedMaxVolts puts back what a previous boot learned. The value
+// comes off a flash sector, so it is checked like everything else that
+// does: an infinity or a voltage no cell reaches would pin the curve for
+// the life of the boot and be written straight back out. It replaces
+// rather than raises, so a factory reset can clear it.
 func (p *Power) SetLearnedMaxVolts(v float32) {
-	if v > p.maxVolts {
-		p.maxVolts = v
+	if v != 0 && !plausibleVolts(v) {
+		return
 	}
+	p.maxVolts = v
 }
+
+// plausibleVolts reports whether a reading is one a single lithium cell
+// could give: above the curve's own floor and not past what a charger
+// will take it to.
+func plausibleVolts(v float32) bool {
+	return v >= battCurve[0].volts && v <= maxPlausibleVolts
+}
+
+// maxPlausibleVolts is the highest a single cell is charged to, with room
+// for a pack that reads a little high. Past it the reading is wrong.
+const maxPlausibleVolts = 4.4
 
 // Mode is the power mode a status frame carries.
 func (p *Power) Mode() PowerMode { return p.mode }
@@ -211,7 +240,7 @@ func (p *Power) HoldSleep(on bool) { p.holdSleep = on }
 // alone, and a parameter it could not use read as though it were not.
 func (p *Power) update(b Battery) (PowerMode, bool) {
 	was := p.mode
-	if b.Volts > p.maxVolts {
+	if b.Volts > p.maxVolts && plausibleVolts(b.Volts) {
 		p.maxVolts = b.Volts
 	}
 	switch {

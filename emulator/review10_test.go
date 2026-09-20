@@ -3,7 +3,9 @@ package emulator
 // Regressions for the tenth review round.
 
 import (
+	"errors"
 	"math"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,10 +30,19 @@ func TestALocateExpiryNeverWraps(t *testing.T) {
 	}
 	h.take()
 	h.advance(30 * time.Second)
+	seen := 0
 	for _, s := range h.take() {
-		if m, ok := s.msg.(mesh.Locate); ok && m.Expiry <= 0 {
+		m, ok := s.msg.(mesh.Locate)
+		if !ok {
+			continue
+		}
+		seen++
+		if m.Expiry <= 0 {
 			t.Errorf("sent a locate expiring at %d", m.Expiry)
 		}
+	}
+	if seen == 0 {
+		t.Error("no locate went out, so the on-air half of this test proved nothing")
 	}
 }
 
@@ -41,18 +52,29 @@ func TestALocateExpiryNeverWraps(t *testing.T) {
 // seconds left it already expired, and the next tick replaced it with
 // idle before a frame was drawn.
 func TestTheErrorRingIsPlayedAtTheRightTime(t *testing.T) {
+	// Long enough to be measurable, short enough that the suite does not
+	// wait for it: the property is where the animation was armed, not how
+	// long the test takes.
+	const slow = 200 * time.Millisecond
 	h := newHarness(t, func(c *Config) {
-		c.OTATransport = slowFailingTransport{delay: 6 * time.Second}
+		c.OTATransport = slowFailingTransport{delay: slow}
 	})
 	h.advance(bootAnim + time.Second)
+	began := h.now
 	if err := h.n.Update(h.now); err == nil {
 		t.Fatal("the update did not fail")
 	}
-	// The node's clock has not moved — Update blocked — so the ring has
-	// to have been armed for where the node will be when it next polls.
-	h.collect(h.n.Poll(h.now.Add(6 * time.Second)))
 	if got := h.n.LEDs().Animation(); got != AnimOTAFailed {
-		t.Errorf("the ring shows %s after a slow failure, want the error ring", got)
+		t.Fatalf("the ring shows %s after a failure, want the error ring", got)
+	}
+	// The node's clock has not moved — Update blocked the loop — so the
+	// ring has to have been armed for where the node will be when it next
+	// polls, not for where it was when Update was entered.
+	if l := h.n.LEDs(); !l.start.After(began) {
+		t.Errorf("the error ring was armed at %v, the instant the update began", l.start)
+	}
+	if l := h.n.LEDs(); !l.until.After(began.Add(otaFailAnim)) {
+		t.Errorf("the error ring expires at %v, within its own length of the start", l.until)
 	}
 }
 
@@ -69,11 +91,7 @@ func (s slowFailingTransport) Download(string, func(int64, int64)) (int64, strin
 	return 0, "", errSlowTransport
 }
 
-var errSlowTransport = errTest("the server gave up")
-
-type errTest string
-
-func (e errTest) Error() string { return string(e) }
+var errSlowTransport = errors.New("the server gave up")
 
 // TestASavedPositionTimeIsChecked: the second a peer's position was seen
 // is four bytes off the same flash sector as everything else, and store
@@ -176,19 +194,10 @@ func TestConfigCannotWidenTheOwnedScope(t *testing.T) {
 		t.Fatal("no owned Totems to test with")
 	}
 	cfg.Owned[0] = stranger
-	if slicesContains(h.n.Config().Owned, stranger) {
+	if slices.Contains(h.n.Config().Owned, stranger) {
 		t.Error("a caller widened the owned scope through Config()")
 	}
 	if err := h.n.AddBond(stranger, "nope", h.now); err == nil {
 		t.Error("the node bonded with a Totem outside its owned scope")
 	}
-}
-
-func slicesContains(s []mesh.MAC, m mesh.MAC) bool {
-	for _, v := range s {
-		if v == m {
-			return true
-		}
-	}
-	return false
 }

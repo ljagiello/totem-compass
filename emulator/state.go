@@ -102,7 +102,14 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 			// a time a device could have seen would come back as a
 			// coordsAt centuries away, and a peer whose position is
 			// always fresh is one the mesh never asks about again.
-			if saved := time.Unix(p.LastSeenUnix, 0); p.LastSeenUnix != 0 && n.clockSet && usableClock(saved) {
+			// Not later than the clock this node is on, whatever the
+			// sector says: a position from the future is one updateStale
+			// measures a negative age for, so the peer is never stale and
+			// the mesh is never asked where it went. That happens without
+			// any corruption at all — a board that saved with a GNSS
+			// clock and came back up on a peer's slower one.
+			if saved := time.Unix(p.LastSeenUnix, 0); p.LastSeenUnix != 0 && n.clockSet &&
+				usableClock(saved) && !saved.After(n.wall(now)) {
 				peer.coordsAt = now.Add(saved.Sub(n.wall(now)))
 			}
 		}

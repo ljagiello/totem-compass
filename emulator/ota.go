@@ -432,7 +432,10 @@ func (n *Node) Update(now time.Time) error {
 	// emulator stops here: it has one image, and losing it would take the
 	// board off the mesh.
 	o.state, o.took = OTADone, time.Since(began)
-	n.leds.Play(AnimIdle, now)
+	// The same clock the failure path uses: the strip has been ticked at
+	// now+elapsed all through the download, so handing it the entry time
+	// here would step its animation clock backwards.
+	n.leds.Play(AnimIdle, now.Add(time.Since(began)))
 	n.unblockTouch(blocked)
 	n.log.Info("ota complete", "installed", false,
 		"note", "the emulator runs the exchange but does not write a slot or reboot")

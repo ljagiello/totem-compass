@@ -209,8 +209,8 @@ type Node struct {
 	// stops blinking about it.
 	sosMuted bool
 	// saidBondLimit records that the full bond list has been reported, so
-	// a Totem pairing next to a full device does not fill the log.
-	// Cleared whenever the list changes.
+	// a Totem pairing next to a full device does not fill the log. Only a
+	// deletion clears it, because only a deletion can make room.
 	saidBondLimit bool
 	// warnedClock is the peers already reported for broadcasting a clock
 	// from before 2020, so each is said once rather than every few
@@ -487,11 +487,14 @@ func (n *Node) read(now time.Time) {
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
 	// A real power chip reports a cell voltage; the percentage is what
-	// get_batt_pct makes of it. A source that gives one and not the other
-	// gets the other here, so every reader — the status frame, the power
-	// mode, the OTA gate — sees the same battery.
+	// get_batt_pct makes of it. A source that gives the voltage and no
+	// percentage gets one here, so every reader — the status frame, the
+	// power mode, the OTA gate — sees the same battery. There is no
+	// inverse: a fuel gauge that reports only a percentage keeps a
+	// voltage of zero, because the curve cannot be run backwards without
+	// inventing a number.
 	if b := &n.sensors.Battery; !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
-		b.Percent = battPctFor(b.Volts)
+		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
 	// n.fix(), not the raw reading: a receiver whose position this node
 	// refuses has not earned its clock either, and that clock would be
@@ -757,20 +760,24 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 // (Compass.start_pairing): for six seconds the node broadcasts bond
 // requests and bonds with an owned Totem doing the same right next to it.
 func (n *Node) Pair(now time.Time) []Packet {
-	n.startPairing(now)
+	n.startPairing(now, true)
 	return n.flush()
 }
 
-func (n *Node) startPairing(now time.Time) {
+// startPairing opens the window. asked says a person did it — a button,
+// or the console — which is always answered, even when the answer is
+// that nothing can happen.
+func (n *Node) startPairing(now time.Time, asked bool) {
 	switch {
 	case n.pairing:
 		return
 	case len(n.peers) >= maxBonds:
-		// Once until the bond list changes: onPeer calls this for every
-		// bond broadcast while a peer is pairing, and pair_nearby repeats
-		// every 50-99 ms for six seconds — eighty identical lines on a
-		// console that has frames to carry.
-		if !n.saidBondLimit {
+		// Someone who pressed the button is always told why nothing
+		// happened. It is the automatic path that is quietened: onPeer
+		// calls this for every bond broadcast while a Totem next to us is
+		// pairing, and pair_nearby repeats every 50-99 ms for six seconds
+		// — eighty identical lines on a console that has frames to carry.
+		if asked || !n.saidBondLimit {
 			n.saidBondLimit = true
 			n.log.Warn("cannot have more than 8 bonds")
 		}
@@ -885,7 +892,7 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 			return
 		}
 		n.log.Info("owned Totem is pairing next to us", "mac", rx.Src, "rssi", rx.RSSI)
-		n.startPairing(now)
+		n.startPairing(now, false)
 	}
 	bonded := false
 	switch m.Command {
@@ -992,8 +999,15 @@ func (n *Node) onBond(now time.Time, rx Received, m mesh.Peer) (bonded, done boo
 // expiry at the ceiling says "as long as this format can mean".
 func locateExpiry(wall time.Time) int32 {
 	sec := wall.Unix()
-	if sec > math.MaxInt32-mesh.LocateLifetimeSec {
+	switch {
+	case sec > math.MaxInt32-mesh.LocateLifetimeSec:
 		return math.MaxInt32
+	case sec < 0:
+		// A board whose clock has not started, or a caller handing over a
+		// zero time: truncating that into the field gives an arbitrary
+		// value, and a large positive one is a frame every relay keeps
+		// alive for decades. Already expired is the honest answer.
+		return 0
 	}
 	return int32(sec) + mesh.LocateLifetimeSec
 }
@@ -1573,15 +1587,32 @@ func (n *Node) SetHeading(deg int16, now time.Time) error {
 }
 
 // Sensors is the last sensor reading.
-func (n *Node) Sensors() Sensors { return n.sensors }
+func (n *Node) Sensors() Sensors {
+	// The Fix is a pointer into the node's own reading, so handing it out
+	// would let a caller write a position through a method that looks
+	// like a read — past usablePosition, which is the whole point of it.
+	s := n.sensors
+	if n.sensors.Fix != nil {
+		f := *n.sensors.Fix
+		s.Fix = &f
+	}
+	return s
+}
 
 // Config returns the node's current settings.
 func (n *Node) Config() Config {
-	// A copy that shares nothing the node relies on. The Owned slice is
+	// A copy whose Owned list and Position are the caller's own. Owned is
 	// the one invariant this package promises to keep — allowedTX reads
-	// the same backing array — so handing it out would let a caller add
-	// a Totem its owner never listed, through a method that looks like a
+	// the same backing array — so handing it out would let a caller add a
+	// Totem its owner never listed, through a method that looks like a
 	// read. The position is the same story for fix().
+	//
+	// The rest is shared on purpose and by necessity: Rand, Sensors,
+	// OTATransport and Logger are the node's actual collaborators, and a
+	// copy of any of them would be a different thing. Drawing from Rand
+	// in particular shifts the pairing jitter and the locate UIDs this
+	// node will use, so a caller that wants randomness should bring its
+	// own.
 	c := n.cfg
 	c.Owned = slices.Clone(n.cfg.Owned)
 	if n.cfg.Position != nil {
