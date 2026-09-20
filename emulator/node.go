@@ -111,11 +111,20 @@ type Packet struct {
 // PeerInfo is what the node knows about a bonded peer.
 type PeerInfo struct {
 	MAC       mesh.MAC
-	Status    mesh.Peer // last status frame
+	Status    mesh.Peer // last status frame, as it arrived
 	RSSI      int8
 	LastHeard time.Time
 	ViaMesh   bool
 	DistanceM float64 // -1 without both positions
+	// Lat and Lon are where this node believes the peer is, which is
+	// only set when HasPosition says so. Status carries the frame as it
+	// arrived, and a frame may say NaN, an infinity or Null Island —
+	// values the node itself refuses, and which every printer of Status
+	// would otherwise show as the peer's position. One of them writes
+	// JSON, which cannot hold a NaN at all and degrades the whole line
+	// to an error string.
+	Lat, Lon    float32
+	HasPosition bool
 }
 
 type peer struct {
@@ -606,6 +615,28 @@ func (n *Node) read(now time.Time) {
 	n.applyPowerMode(now)
 }
 
+// sendableVolts is a cell voltage the peer frame can carry. The field is
+// a MicroPython half float, and that encoder has no range check: a value
+// past what a half can hold runs off the end of the five-bit exponent
+// and into the sign bit, so a battery reading of 131072 goes out as -0
+// and one of a million as -0.000233. The encoder is a port and is left
+// alone — matching the firmware byte for byte is the whole point of it,
+// and its quirks are pinned by tests — so the guard belongs here, where
+// this device decides what to say about itself.
+//
+// Zero for anything else, which is what the field carries on a board
+// with no power chip, rather than a number no cell ever reads.
+func sendableVolts(v float32) float32 {
+	if v > 0 && v <= halfMaxVolts {
+		return v
+	}
+	return 0
+}
+
+// halfMaxVolts is the largest finite value a half float holds, which is
+// the real limit on this field however implausible a battery it implies.
+const halfMaxVolts = 65504
+
 // fix is this device's own GNSS solution, or nil when it has none.
 //
 // A position that no device could be at is no position: nil is what a
@@ -827,7 +858,8 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		// (rtc_method 1); a clock borrowed from a peer is not passed on.
 		TimeOfDayMs: -1, Unix: -1,
 		Major: c.Version[0], Minor: c.Version[1], Patch: c.Version[2],
-		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute), BattVolts: sense.Battery.Volts,
+		AltitudeM: -500, UptimeMin: uint16(now.Sub(n.boot) / time.Minute),
+		BattVolts:       sendableVolts(sense.Battery.Volts),
 		HeadingOfMotion: -1, Name: c.Name, GNSSSource: c.GNSSSource, ReleaseID: c.ReleaseID,
 		BattPct: sense.Battery.Percent,
 		// Flags bit 0: whether a phone is attached over BLE, which the
@@ -1378,6 +1410,11 @@ func meshDelivery(distM float64) time.Duration {
 	// hundred years, which is a peer never asked about again. The
 	// callers all check their coordinates; this is the floor under them.
 	if !(distM > 0) || math.IsInf(distM, 0) {
+		// The infinity is not covered by the test beside it: +Inf is
+		// greater than zero, so without naming it here it would fall
+		// through to the ceiling below and come back as the longest
+		// delay there is rather than the shortest. A distance that is
+		// not a distance means "ask again soon", not "never".
 		distM = 0
 	}
 	// And a ceiling, because int() below is what overflows and a floor
@@ -1651,7 +1688,11 @@ func (n *Node) Peers() []PeerInfo {
 	var out []PeerInfo
 	for _, mac := range n.order {
 		p := n.peers[mac]
-		out = append(out, PeerInfo{MAC: mac, Status: p.status, RSSI: p.rssi, LastHeard: p.lastHeard, ViaMesh: p.viaMesh, DistanceM: n.peerDistance(p)})
+		out = append(out, PeerInfo{
+			MAC: mac, Status: p.status, RSSI: p.rssi, LastHeard: p.lastHeard,
+			ViaMesh: p.viaMesh, DistanceM: n.peerDistance(p),
+			Lat: p.lat, Lon: p.lon, HasPosition: p.hasCoords,
+		})
 	}
 	return out
 }

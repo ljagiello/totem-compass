@@ -137,16 +137,28 @@ func (j *Journal) scan(buf []byte) {
 		if crc32.ChecksumIEEE(body) != sum {
 			// A record that does not check out is a write a reset cut
 			// short. Keep the one before it, and step over the wreckage:
-			// its bytes are written, so the next record cannot go there.
+			// its bytes are written, so the next record cannot go there,
+			// and a save after the reset wrote a good record past it.
 			//
 			// Its sequence number still counts, by the rule above: a
 			// reset caught mid-save is this journal's ordinary failure,
 			// and the number in that header is the one the save meant to
 			// use, so dropping it had the next save write it again.
+			//
+			// Its length does not. That is the same header, and the same
+			// argument applies to every field in it: sixteen bytes of
+			// noise carrying this magic and a length of 2000 would step
+			// the scan two kilobytes down the sector, past every good
+			// record in between — which Load would then never see, and
+			// the next save would append beyond. So the wreckage is
+			// stepped over by looking for where the next record actually
+			// starts. For a real torn write that is exactly where the
+			// length said it would be; for noise it is wherever the
+			// records resume.
 			j.torn++
 			j.keepSeq(seq, false)
-			off = end + pad(n)
-			continue // a save after the reset wrote a good record past it
+			off = resync(buf, off+align)
+			continue
 		}
 		// A record with nothing in it is stepped over rather than taken.
 		// Load reads a nil payload as "nothing saved", so letting one
@@ -212,6 +224,19 @@ func (j *Journal) keepSeq(seq uint32, proven bool) {
 	case j.seq < 0xfffffffe:
 		j.seq++
 	}
+}
+
+// resync finds where the next record starts, at or after off. Records
+// are written on the flash's word granularity, so only those offsets are
+// looked at; the end of the buffer means there is nothing further, which
+// is what the scan's own loop condition then sees.
+func resync(buf []byte, off int) int {
+	for o := off + (align-off%align)%align; o+headerLen <= len(buf); o += align {
+		if [4]byte(buf[o:o+4]) == magic {
+			return o
+		}
+	}
+	return len(buf)
 }
 
 // pad is the bytes that round a record up to the flash write granularity.

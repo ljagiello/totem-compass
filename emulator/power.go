@@ -100,6 +100,11 @@ func battPctFor(v float32, top float32) int8 {
 	// percentages and the gauge dipped seven points at 4.12 V — 99% then
 	// 92% climbing, and back up again on the way down.
 	full := battCurve[last].volts
+	// plausibleVolts again, although learn() gates on it too: a caller
+	// can hand a Power an implausible top through the config, and a
+	// curve stretched to an infinite maximum tops out at 86%. Removing
+	// this on the grounds that the only writer had already checked is a
+	// change TestBatteryCurve refuses.
 	if top > full && plausibleVolts(top) {
 		full = top
 	}

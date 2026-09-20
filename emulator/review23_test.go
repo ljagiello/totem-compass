@@ -4,8 +4,12 @@ package emulator
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/store"
 )
 
 // TestTheMeshScheduleIsATimeThisDeviceReaches: peerDistance feeds
@@ -155,5 +159,27 @@ func TestTheLowBatteryReminderWaitsForTheRing(t *testing.T) {
 	h.advance(2 * time.Second)
 	if got := h.n.LEDs().Animation(); got != AnimLowBattery {
 		t.Errorf("after the alarm ended the ring showed %s, and the reminder was owed", got)
+	}
+}
+
+// TestTheRecordHoldsEveryNameAFrameCan: the two name limits are set in
+// different packages — store.maxName bounds what SanitizeName leaves,
+// mesh.MaxPeerName bounds what a status frame carries — and a name that
+// passes the first and fails the second reaches mustMarshal, which
+// panics in the middle of a transmit rather than returning an error.
+// The sibling pair, maxBonds against store.MaxPeers, is pinned the same
+// way; this one had only prose saying they agree.
+func TestTheRecordHoldsEveryNameAFrameCan(t *testing.T) {
+	long := strings.Repeat("n", 200)
+	kept := store.SanitizeName(long)
+	if len(kept) > mesh.MaxPeerName {
+		t.Errorf("a name the settings keep is %d bytes and a peer frame holds %d",
+			len(kept), mesh.MaxPeerName)
+	}
+	// And the frame really takes what survives, rather than the two
+	// limits merely agreeing on paper.
+	h := newHarness(t, func(c *Config) { c.Name = long })
+	if _, err := h.n.status(h.now, mesh.PeerStatus, false).MarshalBinary(); err != nil {
+		t.Errorf("the status frame refused this device's own name: %v", err)
 	}
 }

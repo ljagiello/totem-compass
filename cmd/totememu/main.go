@@ -187,8 +187,15 @@ const rxPoll = 5 * time.Millisecond
 
 // radio moves frames between espradio and the node.
 type radio struct {
-	log      *slog.Logger
-	peers    map[mesh.MAC]bool
+	log   *slog.Logger
+	peers map[mesh.MAC]bool
+	// failed counts unicasts the radio did not see acknowledged. Against
+	// a real Totem that is a burst while the two are pairing and then
+	// nothing at all: 250 during the pairing window, and flat across the
+	// ten minutes of steady traffic afterwards while rx climbed by sixty
+	// a minute. A rising count means the link is unhappy now, not that
+	// frames are being lost — the peer acts on what it is sent either
+	// way — so it is worth watching rather than worth alarm.
 	failed   int
 	received int
 }
@@ -293,7 +300,8 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 			}
 			log.Info("peer", "mac", p.MAC, "name", p.Status.Name, "rssi", p.RSSI,
 				"heard_ms", heard, "mesh", p.ViaMesh,
-				"lat", p.Status.Lat, "lon", p.Status.Lon, "distance_m", int(p.DistanceM), "batt", p.Status.BattPct)
+				"lat", p.Lat, "lon", p.Lon, "has_position", p.HasPosition,
+				"distance_m", int(p.DistanceM), "batt", p.Status.BattPct)
 		}
 	case emulator.OpFormat:
 		jsonLog.Store(c.JSON)

@@ -83,7 +83,12 @@ func newMeshWatchCmd(g *globals) *cobra.Command {
 				ctx, cancel = context.WithTimeout(ctx, dur)
 				defer cancel()
 			}
-			e, err := openEmulator(cmd.Context(), g, true)
+			// ctx, not cmd.Context(): --for is how long the whole thing
+			// may take, and the handshake is part of it. Against a board
+			// that is not running the emulator, opening spends its own
+			// three-second reply window before giving up, so a
+			// --for 500ms took six times what it asked for.
+			e, err := openEmulator(ctx, g, true)
 			if err != nil {
 				return err
 			}
@@ -168,7 +173,7 @@ answers the Totem's bond request by itself; bonding needs a signal of
 			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), dur)
 			defer cancel()
-			e, err := openEmulator(cmd.Context(), g, false)
+			e, err := openEmulator(ctx, g, false)
 			if err != nil {
 				return err
 			}

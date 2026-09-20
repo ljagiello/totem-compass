@@ -342,3 +342,51 @@ func TestSaveNeverWritesTheErasedValue(t *testing.T) {
 		t.Errorf("after the saves: %q, %v", got, err)
 	}
 }
+
+// TestABogusLengthHidesNothing: a torn record's header failed its
+// checksum, so its length field is no more trustworthy than its
+// sequence number. Sixteen bytes of noise claiming a length of 2000
+// stepped the scan two kilobytes down the sector, past every good
+// record in between — Load never saw them and the next save appended
+// beyond them.
+func TestABogusLengthHidesNothing(t *testing.T) {
+	sec := newMemSector(4096)
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("an older setting")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Noise in the shape of a header: the magic, a length the sector can
+	// hold, and a checksum that does not match what follows.
+	off := j.Used()
+	copy(sec.b[off:], magic[:])
+	binary.LittleEndian.PutUint32(sec.b[off+4:], 7)
+	binary.LittleEndian.PutUint16(sec.b[off+8:], 2000)
+	binary.LittleEndian.PutUint32(sec.b[off+12:], 0xdeadbeef)
+
+	// And the newest settings, written right after it as a save would.
+	want := []byte("what the device chose last")
+	writeRaw(t, sec, off+headerLen+align, 2, want)
+
+	again, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Torn() != 1 {
+		t.Errorf("the noise was counted as %d torn writes", again.Torn())
+	}
+	got, err := again.Load()
+	if err != nil {
+		t.Fatalf("loading after the noise: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("loaded %q, and the newest record says %q", got, want)
+	}
+	// And the next save does not land beyond what it skipped.
+	if again.Used() > off+headerLen+align+headerLen+len(want)+64 {
+		t.Errorf("the scan left the next save at %d, far past the last record", again.Used())
+	}
+}
