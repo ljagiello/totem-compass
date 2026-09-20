@@ -20,6 +20,7 @@ type fakeLink struct {
 	mu     sync.Mutex
 	subs   map[protocol.Channel]func([]byte)
 	gate   chan struct{} // if set, writes wait until it is closed
+	held   chan struct{} // a write that reached the gate reports here
 	fail   error         // if set, writes fail with it
 	writes chan protocol.Frame
 	done   chan struct{}
@@ -31,6 +32,7 @@ func newFakeLink() *fakeLink {
 	return &fakeLink{
 		subs:   map[protocol.Channel]func([]byte){},
 		writes: make(chan protocol.Frame, 64),
+		held:   make(chan struct{}, 64),
 		done:   make(chan struct{}),
 	}
 }
@@ -47,6 +49,7 @@ func (l *fakeLink) Write(ch protocol.Channel, b []byte) error {
 	gate, fail := l.gate, l.fail
 	l.mu.Unlock()
 	if gate != nil {
+		l.held <- struct{}{}
 		<-gate
 	}
 	if fail != nil {
@@ -54,6 +57,16 @@ func (l *fakeLink) Write(ch protocol.Channel, b []byte) error {
 	}
 	l.writes <- protocol.Frame{Channel: ch, Bytes: append([]byte(nil), b...)}
 	return nil
+}
+
+// waitHeld waits until a write is blocked on the gate.
+func (l *fakeLink) waitHeld(t *testing.T) {
+	t.Helper()
+	select {
+	case <-l.held:
+	case <-time.After(time.Second):
+		t.Fatal("no write reached the gate")
+	}
 }
 
 func (l *fakeLink) holdWrites() (release func()) {
@@ -158,6 +171,28 @@ func TestStartLegacy(t *testing.T) {
 // app acks them. A record requested again later must be acked again: a
 // time-based dedupe once swallowed the second ack when a command re-read
 // Static Data within a second, and the device then repeated it forever.
+// TestLegacyAcksARepeatSentWhileTheAckIsInFlight: the device repeats Static
+// Data until the app acks it, and can send the next repeat while our ack is
+// still being written. The client used to hold the "already queued" flag
+// until that write finished and drop the second ack, which leaves the
+// device repeating the record forever and never sending Live Data. It
+// showed up as a flaky TestLegacyAcksEveryRequest on a loaded CI runner.
+func TestLegacyAcksARepeatSentWhileTheAckIsInFlight(t *testing.T) {
+	c, l := newClient(t, client.Options{})
+	release := l.holdWrites()
+	l.injectMsg(t, static)
+	l.waitHeld(t) // the ack left the queue and is in the write
+	l.injectMsg(t, static)
+	release()
+	l.expectWrite(t, protocol.AckStaticData())
+	l.expectWrite(t, protocol.AckStaticData())
+	for range 2 {
+		if ev := nextEvent(t, c); ev.Err != nil {
+			t.Fatal(ev.Err)
+		}
+	}
+}
+
 func TestLegacyAcksEveryRequest(t *testing.T) {
 	c, l := newClient(t, client.Options{})
 	peerAck, _ := protocol.RequestPeerDetails()
@@ -234,16 +269,27 @@ func TestWritesKeepTheirOrder(t *testing.T) {
 }
 
 // Repeats that arrive while the ack is still being written don't queue more.
-func TestLegacyAckNotDuplicatedWhileInFlight(t *testing.T) {
-	_, l := newClient(t, client.Options{})
+// TestLegacyAckNotDuplicatedWhileQueued: repeats that arrive while their
+// ack is still waiting in the queue share that one write.
+func TestLegacyAckNotDuplicatedWhileQueued(t *testing.T) {
+	c, l := newClient(t, client.Options{})
 	release := l.holdWrites()
+	// The Static Data ack leaves the queue and blocks in the write, so the
+	// WiFi ack behind it stays queued while its record repeats.
+	l.injectMsg(t, static)
+	l.waitHeld(t)
 	for range 3 {
-		l.injectMsg(t, static)
+		l.injectMsg(t, protocol.WiFiNetworks{SSIDs: []string{"a"}})
 	}
-	l.expectNoWrite(t)
 	release()
 	l.expectWrite(t, protocol.AckStaticData())
+	l.expectWrite(t, protocol.ClearWiFiScan())
 	l.expectNoWrite(t)
+	for range 4 {
+		if ev := nextEvent(t, c); ev.Err != nil {
+			t.Fatal(ev.Err)
+		}
+	}
 }
 
 func TestEventsCarryParsedFramesAndErrors(t *testing.T) {

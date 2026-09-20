@@ -85,7 +85,7 @@ type Client struct {
 	// Every GATT write goes through one FIFO queue served by writer.
 	qmu     sync.Mutex
 	queue   []writeReq
-	pending map[[2]byte]bool // acks queued or being written
+	pending map[[2]byte]bool // acks waiting in queue
 	wake    chan struct{}    // the queue has work
 }
 
@@ -174,10 +174,12 @@ func (c *Client) deliver(ev Event) {
 //	WiFi list    -> (2,0)  clears wifi_cmd_id and the cached scan
 //	Peer Sync    -> (6,8)  moves peer_cmd_id on and asks for every Peer Ping
 //
-// Every repeat is acked, except while the same ack is still queued:
-// a request made again later (e.g. Static Data re-read to confirm a setting)
-// must be acked again or the device repeats it forever and stops sending
-// Live Data. Extra acks are harmless.
+// Every repeat is acked, except while the same ack is still waiting in the
+// queue, where one write will answer them all. Once the ack is being
+// written the next repeat queues a fresh one: the device may have sent it
+// before ours arrived, and a request that goes unacked is repeated forever,
+// which also stops Live Data. A duplicate ack is harmless, a missing one is
+// not.
 //
 // The record is recognized by its header, not by decoding it: one the
 // client cannot parse (Static Data for a name over 127 bytes, say) must
@@ -407,15 +409,20 @@ func (c *Client) writer() {
 			}
 			r := c.queue[0]
 			c.queue = c.queue[1:]
+			if r.result == nil {
+				// The record can be repeated while this ack is still on the
+				// wire, and that repeat must queue a fresh one: clear the
+				// flag when the ack leaves the queue, not when its write
+				// finishes. A duplicate ack is harmless, a missing one
+				// leaves the device repeating the record forever.
+				delete(c.pending, [2]byte{r.f.Bytes[0], r.f.Bytes[1]})
+			}
 			c.qmu.Unlock()
 			err := c.writeNow(r.f)
 			if r.result != nil {
 				r.result <- err
 				continue
 			}
-			c.qmu.Lock()
-			delete(c.pending, [2]byte{r.f.Bytes[0], r.f.Bytes[1]})
-			c.qmu.Unlock()
 			c.backgroundErr("legacy ack", err)
 		}
 	}

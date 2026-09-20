@@ -563,16 +563,38 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 }
 
 // FuzzParseRawFrame checks the hex parser behind `totemctl raw`.
+// TestCleanHex: hex is pasted from documents that hold non-breaking and
+// thin spaces, and separated with colons.
+func TestCleanHex(t *testing.T) {
+	for _, tt := range []struct{ in, want string }{
+		{"01 01", "0101"},
+		{"00:01:01:00", "00010100"},
+		{"01\u00a001", "0101"},   // a non-breaking space
+		{"01\u200601", "0101"},   // a thin space
+		{"01\t01\n02", "010102"}, // tabs and newlines
+		{"0101", "0101"},
+	} {
+		if got := cleanHex(tt.in); got != tt.want {
+			t.Errorf("cleanHex(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func FuzzParseRawFrame(f *testing.F) {
 	for _, s := range []string{"01 01", "0101", "00:01:01:00", "01", "zz", "", "0 1 0 1", "ABCDEF"} {
 		f.Add(s, false)
 	}
 	f.Fuzz(func(t *testing.T, s string, conn bool) {
-		fr, err := parseRawFrame(strings.Fields(s), conn)
+		// The shell hands the command its arguments already split, so the
+		// model starts where parseRawFrame does: with those arguments
+		// joined. Splitting can even rejoin the bytes of a space that was
+		// split through the middle.
+		args := strings.Fields(s)
+		fr, err := parseRawFrame(args, conn)
 		if err != nil {
 			return
 		}
-		clean := strings.ToLower(strings.NewReplacer(" ", "", ":", "", "\t", "", "\n", "", "\r", "", "\v", "", "\f", "").Replace(s))
+		clean := strings.ToLower(cleanHex(strings.Join(args, "")))
 		if len(fr.Bytes) < 2 || hex.EncodeToString(fr.Bytes) != clean {
 			t.Fatalf("parseRawFrame(%q) = % x, want the bytes of %q", s, fr.Bytes, clean)
 		}
