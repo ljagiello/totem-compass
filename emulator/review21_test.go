@@ -3,14 +3,13 @@ package emulator
 // Regressions for the twenty-first review round.
 
 import (
+	"bytes"
 	"errors"
 	"log/slog"
 	"math"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ljagiello/totem-compass/mesh"
 
 	"github.com/ljagiello/totem-compass/store"
 )
@@ -154,28 +153,21 @@ func TestEveryRestorePathReadsTheSensorsOnce(t *testing.T) {
 // the default was filled in — `using=""` while the device came up as
 // emu_totem_xxxx.
 func TestTheNameWarningSaysWhatTheDeviceRunsAs(t *testing.T) {
-	var lines []string
-	log := slog.New(slog.NewTextHandler(writerFunc(func(b []byte) (int, error) {
-		lines = append(lines, string(b))
-		return len(b), nil
-	}), &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	n := New(Config{MAC: self, Owned: []mesh.MAC{totem}, Name: "\xff\xfe\xff", Logger: log}, t0)
-	var warned string
-	for _, l := range lines {
-		if strings.Contains(l, "name is not one a peer frame") {
-			warned = l
-		}
+	var logged bytes.Buffer
+	h := newHarness(t, func(c *Config) {
+		c.Name = "\xff\xfe\xff"
+		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+	})
+	got := h.n.Config().Name
+	if !strings.Contains(logged.String(), "name is not text") {
+		t.Fatalf("a name that is not text was taken without a word about it: %s", logged.String())
 	}
-	if warned == "" {
-		t.Fatal("a name that is not text was taken without a word about it")
+	if !strings.Contains(logged.String(), "using="+got) {
+		t.Errorf("the device runs as %q and the line says %s", got, logged.String())
 	}
-	if !strings.Contains(warned, "using="+n.Config().Name) {
-		t.Errorf("the device runs as %q and the line says %s", n.Config().Name, warned)
+	// And the line does not call the MAC-derived default a remnant of
+	// the name someone chose.
+	if strings.Contains(logged.String(), "using what is left") {
+		t.Error("the default name was described as what is left of the one that was given")
 	}
 }
-
-// writerFunc is an io.Writer from a function, for catching log lines.
-type writerFunc func([]byte) (int, error)
-
-func (f writerFunc) Write(b []byte) (int, error) { return f(b) }

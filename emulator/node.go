@@ -257,16 +257,22 @@ func New(cfg Config, now time.Time) *Node {
 	}
 	if short != gave {
 		// After the default has been filled in, so the line says what the
-		// device is actually called. It said `using=""` for a name that
-		// is not text at all, while the device came up as emu_totem_xxxx
-		// — a misleading line at exactly the moment someone is looking
-		// for why their name did not take.
+		// device is actually called: it said `using=""` for a name that
+		// is not text at all, while the device came up as emu_totem_xxxx.
 		//
-		// What SanitizeName did, which is not only shortening: a name
-		// that is not text loses the bytes that are not, so saying it did
-		// not fit would be wrong as often as right.
-		cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
-			"name", gave, "bytes", len(gave), "using", cfg.Name)
+		// Two messages, because there are two outcomes and calling the
+		// second one "what is left" would tell a reader that the name
+		// made from the MAC is a remnant of the one they chose. What
+		// SanitizeName did is not only shortening: a name that is not
+		// text loses the bytes that are not, so saying it did not fit
+		// would be wrong as often as right.
+		if short == "" {
+			cfg.Logger.Warn("name is not text a peer frame and the settings can hold, falling back to the default",
+				"name", gave, "bytes", len(gave), "using", cfg.Name)
+		} else {
+			cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
+				"name", gave, "bytes", len(gave), "using", cfg.Name)
+		}
 	}
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), binary.BigEndian.Uint64(append([]byte{0, 0}, cfg.MAC[:]...))))
@@ -336,6 +342,12 @@ func New(cfg Config, now time.Time) *Node {
 	if !n.hasJob(jobWindow) {
 		n.scheduleWindow(now)
 	}
+	// And the mode that follows from the reading, last, once the node is
+	// whole. A device built on a pack under the cutoff has to come up and
+	// go straight back down rather than report power mode normal until
+	// something else polls it — and the going down empties the job list,
+	// so it has to happen after the window above is armed and not before.
+	n.applyPowerMode(now)
 	return n
 }
 

@@ -107,12 +107,9 @@ func (j *Journal) scan(buf []byte) {
 	// 0xffffffff in old bytes hide every record saved afterwards.
 	//
 	// The number itself only ever climbs, which is why every branch below
-	// takes it through keepSeq. It is what a reader sees, and the next
-	// save has to write one the sector does not already hold — but a
-	// header can carry anything, and a record with nothing in it proves
-	// least of all: the checksum of an empty body is 0 whatever the
-	// header says, so sixteen bytes of noise in that shape would
-	// otherwise hand the journal any number at all.
+	// takes it through keepSeq — and how far it may climb on one record
+	// depends on what that record proved about itself, which keepSeq
+	// explains.
 	for off+headerLen <= len(buf) {
 		h := buf[off : off+headerLen]
 		if [4]byte(h[0:4]) != magic {
@@ -136,7 +133,7 @@ func (j *Journal) scan(buf []byte) {
 			// and the number in that header is the one the save meant to
 			// use, so dropping it had the next save write it again.
 			j.torn++
-			j.keepSeq(seq)
+			j.keepSeq(seq, false)
 			off = end + pad(n)
 			continue // a save after the reset wrote a good record past it
 		}
@@ -151,12 +148,12 @@ func (j *Journal) scan(buf []byte) {
 		// happen.
 		if len(body) == 0 {
 			j.blank++
-			j.keepSeq(seq)
+			j.keepSeq(seq, false)
 			off = end + pad(n)
 			continue
 		}
 		j.last = append([]byte(nil), body...)
-		j.keepSeq(seq)
+		j.keepSeq(seq, true)
 		off = end + pad(n)
 	}
 	// The padding that rounds the last record up to the write granularity
@@ -167,20 +164,34 @@ func (j *Journal) scan(buf []byte) {
 	j.next = min(off, j.sec.Size())
 }
 
-// keepSeq takes a sequence number off a header, which is the one part of
-// a record nothing can vouch for: a torn write and a record with nothing
-// in it both carry one, and an empty body checksums to 0 whatever the
-// header says. So it only ever climbs, and it never climbs to the value
-// erased flash reads as — all ones is the pattern of a sector nobody has
-// written, not a number anybody chose, and taking it would leave the
-// next save wrapping to zero and a sector of real records looking like a
-// fresh one. Save counts up from 1, so a written record reaches it after
-// four billion saves of a sector that erases every few dozen.
-func (j *Journal) keepSeq(seq uint32) {
-	if seq == 0xffffffff {
-		return
+// keepSeq takes a sequence number off a header. The checksum covers the
+// body and not the header, so how far a number may be believed depends
+// on what the body proved.
+//
+// A record whose checksum holds over a body with something in it was
+// written by this journal: nothing else lands that pattern by accident,
+// so its number is taken as it stands, and a board that has been saving
+// for a year goes on counting from where it left off.
+//
+// A torn write and a record carrying nothing prove nothing about their
+// own header — an empty body checksums to 0 whatever the header says, so
+// sixteen bytes of noise make a whole valid empty record — and they may
+// only step the counter on by one. That is enough for the next save to
+// write a number the sector does not already hold, which is the point of
+// counting, while a sector of noise can no longer drive the counter
+// wherever it likes: one word of rubbish claiming four billion would
+// otherwise pin the journal near the top of the range for good, and
+// every save after it would be wrapping to zero.
+func (j *Journal) keepSeq(seq uint32, proven bool) {
+	switch {
+	case seq <= j.seq:
+		// Only ever climbs: a number below the one already seen is an
+		// older record, or a sector that holds anything at all.
+	case proven:
+		j.seq = seq
+	default:
+		j.seq++
 	}
-	j.seq = max(j.seq, seq)
 }
 
 // pad is the bytes that round a record up to the flash write granularity.
@@ -217,9 +228,18 @@ func (j *Journal) Save(p []byte) error {
 	if len(p) > MaxRecord {
 		return fmt.Errorf("%w: %d bytes, the record holds %d", ErrTooLarge, len(p), MaxRecord)
 	}
+	// The next number, which never wraps. Reaching the top takes four
+	// billion saves of a sector that erases every few dozen, so this is
+	// not a thing that happens — but a counter that came back round to
+	// zero would make a sector of real records read as a fresh one, and
+	// repeating the last number is the smaller lie.
+	next := j.seq + 1
+	if next == 0 {
+		next = j.seq
+	}
 	rec := make([]byte, headerLen+len(p)+pad(len(p)))
 	copy(rec, magic[:])
-	binary.LittleEndian.PutUint32(rec[4:8], j.seq+1)
+	binary.LittleEndian.PutUint32(rec[4:8], next)
 	binary.LittleEndian.PutUint16(rec[8:10], uint16(len(p)))
 	binary.LittleEndian.PutUint32(rec[12:16], crc32.ChecksumIEEE(p))
 	copy(rec[headerLen:], p)
@@ -267,7 +287,7 @@ func (j *Journal) Save(p []byte) error {
 		return fmt.Errorf("store: writing %d bytes at %d: %w", len(rec), j.next, err)
 	}
 	j.next += len(rec)
-	j.seq++
+	j.seq = next
 	j.last = append([]byte(nil), p...)
 	return nil
 }

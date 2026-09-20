@@ -39,7 +39,11 @@ func FuzzSettings(f *testing.F) {
 		copy(sec.b, raw)
 
 		s := Open(discard(), sec)
-		n := node(nil, built, bonded)
+		// The fuzzer's t, not nil: node() only takes nil for the seed
+		// call above, where there is an *testing.F and no T. Passing it
+		// here let an AddBond that started refusing the owned Totem go
+		// by in silence, and every bond assertion below with it.
+		n := node(t, built, bonded)
 		was := n.Config().Name
 		s.Restore(n, t0)
 

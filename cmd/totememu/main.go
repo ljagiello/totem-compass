@@ -83,16 +83,24 @@ func main() {
 
 	// The settings sector is read before the node starts, so the name and
 	// the colour it was given last are the ones it comes up with.
-	saved := settings.Unread(log)
-	if storeAtBoot {
-		saved = settings.Open(log, settingsSector())
+	saved := settings.Open(log, settingsSector())
+	if !storeAtBoot {
+		// Unread says so on the console, so it is only called when it is
+		// true: calling it either way logged "settings not read at boot"
+		// on every boot, one line above "settings restored", and sent
+		// whoever was working out why a device lost its bonds after the
+		// wrong one.
+		saved = settings.Unread(log)
 	}
-	if saved.State().Name != "" && name == "" {
-		name = saved.State().Name
+	// One copy: State() clones the peers it hands out, and this is the
+	// window in which the board is also starting the radio and the ring.
+	boot0 := saved.State()
+	if boot0.Name != "" && name == "" {
+		name = boot0.Name
 	}
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
-		ColorID: saved.State().ColorID,
+		ColorID: boot0.ColorID,
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no
 		// credentials for a network, and nothing it does should depend on

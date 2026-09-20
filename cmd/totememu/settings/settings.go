@@ -59,6 +59,17 @@ func Unread(log *slog.Logger) *Store {
 // either way.
 func Open(log *slog.Logger, sec store.Sector) *Store {
 	s := &Store{log: log}
+	// Unread is how a caller says there is no sector, and this is the
+	// same answer for one that arrives without one anyway: the journal
+	// would call Size on it and the board would boot-loop, which is the
+	// outcome Unread exists to avoid. A nil interface is the only nil
+	// this can see — an interface holding a nil pointer is not equal to
+	// nil in Go and will still panic inside the driver it names, which
+	// is the driver's own business.
+	if sec == nil {
+		log.Warn("no settings sector, running without saving")
+		return s
+	}
 	j, err := store.Open(sec)
 	if err != nil {
 		log.Warn("settings unavailable, running without saving", "err", err)
@@ -118,9 +129,17 @@ func (s *Store) Found() bool { return s.found }
 // Restore puts the saved bonds and settings back into a node, so the
 // device comes up as it went down.
 func (s *Store) Restore(n *emulator.Node, now time.Time) {
+	// A copy, for the reason State() hands one out: this goes into
+	// another package, and the record it points at is the one this Store
+	// compares against to decide whether a save is needed. Nothing over
+	// there writes to it today, and the day something does — a name
+	// normalised in place, peers sorted — the comparison would match, the
+	// save that was needed would not happen, and the device would lose
+	// what it had just been told.
 	var rec *store.State
 	if s.found {
-		rec = &s.state
+		held := s.State()
+		rec = &held
 	}
 	had := n.BondCount()
 	for _, err := range n.Restore(rec, now) {

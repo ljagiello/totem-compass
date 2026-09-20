@@ -46,11 +46,20 @@ func TestTheRestoreBondWarningIsThrottled(t *testing.T) {
 // report the mode from before the restore in between — and on a device
 // coming up on a flat pack that is the interval in which nothing says so.
 func TestRestorePutsThePowerModeInStep(t *testing.T) {
-	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.4, 5 })
-	// No poll: this is a node as the driver has it at boot, with the
-	// settings about to be put back.
+	// A pack the node comes up happy with, which then reads low. New
+	// puts the mode in step with what it read at the time, so the
+	// reading has to change after it for this to be about Restore.
+	pack := &collapsingPack{b: Battery{Volts: 4.0, Percent: 90}}
+	h := newHarness(t, func(c *Config) { c.Sensors = pack })
 	if got := h.n.Power().Mode(); got != PowerNormal {
-		t.Fatalf("a node starts in mode %s, want normal", got)
+		t.Fatalf("a node on a full pack starts in mode %s, want normal", got)
+	}
+
+	// No poll in between: this is the driver's reading at boot, with the
+	// settings about to be put back.
+	pack.b = Battery{Volts: 3.4, Percent: 5}
+	if got := h.n.Power().Mode(); got != PowerNormal {
+		t.Fatalf("the node moved to %s before anything read the pack", got)
 	}
 	h.n.Restore(&store.State{}, h.now)
 	if got := h.n.Power().Mode(); got != PowerLow {

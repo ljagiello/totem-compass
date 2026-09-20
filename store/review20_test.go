@@ -188,3 +188,83 @@ func TestATornWriteKeepsItsNumber(t *testing.T) {
 		t.Errorf("the save after a torn write took number %d, which the torn record already carries", got)
 	}
 }
+
+// TestNoiseCannotDriveTheCounter: the checksum covers the body and not
+// the header, so a torn write and a record carrying nothing prove
+// nothing about their own number. One word of rubbish claiming four
+// billion would otherwise pin the counter near the top of the range for
+// good, and every save after it would wrap to zero.
+func TestNoiseCannotDriveTheCounter(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		torn bool
+	}{
+		{"a record with nothing in it", false},
+		{"a torn write", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec := newMemSector(4096)
+			j, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := j.Save([]byte("the settings someone chose")); err != nil {
+				t.Fatal(err)
+			}
+			was := j.Seq()
+
+			off := j.Used()
+			if tc.torn {
+				writeRaw(t, sec, off, 0xfffffe00, []byte("a save a reset cut short"))
+				sec.b[off+headerLen+3] ^= 0xff
+			} else {
+				writeRaw(t, sec, off, 0xfffffe00, nil)
+			}
+
+			again, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// One step at most: enough that the next save writes a number
+			// the sector does not hold, not enough to be driven.
+			if got := again.Seq(); got != was+1 {
+				t.Errorf("a header claiming %d took the counter from %d to %d",
+					uint32(0xfffffe00), was, got)
+			}
+			// And the saves after it climb rather than wrap.
+			for range 3 {
+				if err := again.Save([]byte("and what came after")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := again.Seq(); got <= was {
+				t.Errorf("after three more saves the counter reads %d, below the %d it started at", got, was)
+			}
+		})
+	}
+}
+
+// TestALongLivedBoardKeepsCounting: a record whose checksum holds over a
+// body with something in it was written by this journal — nothing else
+// lands that pattern by accident — so its number is taken as it stands,
+// and a board that has been saving for a year is not reset to 1 by a
+// reboot.
+func TestALongLivedBoardKeepsCounting(t *testing.T) {
+	sec := newMemSector(4096)
+	// What a sector looks like after many erases: the numbers carry on
+	// past the few records the sector currently holds.
+	writeRaw(t, sec, 0, 4000, []byte("an older setting"))
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := j.Seq(); got != 4000 {
+		t.Errorf("a board that had saved 4000 times came back at %d", got)
+	}
+	if err := j.Save([]byte("what it chose next")); err != nil {
+		t.Fatal(err)
+	}
+	if got := j.Seq(); got != 4001 {
+		t.Errorf("the next save took number %d", got)
+	}
+}

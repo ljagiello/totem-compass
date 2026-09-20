@@ -320,3 +320,27 @@ func TestStateHandsOutACopy(t *testing.T) {
 		t.Errorf("the sector says the peer is called %q", got)
 	}
 }
+
+// TestNoSectorDoesNotPanic: Open and Reopen take a sector from a caller,
+// and a board has none while its flash driver is being worked on. A
+// journal asked for the size of a sector that is not there brings the
+// board down in a boot loop, which is the outcome Unread exists to
+// avoid.
+func TestNoSectorDoesNotPanic(t *testing.T) {
+	n := node(t, "lcfs_spare", true)
+
+	s := Open(testLog(t), nil)
+	if s.Found() {
+		t.Error("a board with no sector reported a record")
+	}
+	s.Restore(n, t0)
+	s.Save(n)
+	s.Report()
+
+	// And the console path, which takes one from a caller too.
+	u := Unread(testLog(t))
+	u.Reopen(n, t0, nil)
+	if u.Found() {
+		t.Error("store open on a board with no sector reported a record")
+	}
+}
