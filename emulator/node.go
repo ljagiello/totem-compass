@@ -236,17 +236,11 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	if short := store.SanitizeName(cfg.Name); short != cfg.Name {
-		// Every status frame carries the name, so one the frame cannot
-		// hold would fail at the point of sending it, and one that is not
-		// text would travel on into whatever reads it.
-		// What SanitizeName did, which is not only shortening: a name
-		// that is not text loses the bytes that are not, so saying it did
-		// not fit would be wrong as often as right.
-		cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
-			"name", cfg.Name, "bytes", len(cfg.Name), "using", short)
-		cfg.Name = short
-	}
+	// Every status frame carries the name, so one the frame cannot hold
+	// would fail at the point of sending it, and one that is not text
+	// would travel on into whatever reads it.
+	gave, short := cfg.Name, store.SanitizeName(cfg.Name)
+	cfg.Name = short
 	// Whether anyone chose this name, recorded here because here is
 	// where it is known: Restore used to ask whether the name still
 	// equalled DefaultName, which is a guess at this fact, and one that
@@ -260,6 +254,19 @@ func New(cfg Config, now time.Time) *Node {
 	named := cfg.Name != ""
 	if cfg.Name == "" {
 		cfg.Name = DefaultName(cfg.MAC)
+	}
+	if short != gave {
+		// After the default has been filled in, so the line says what the
+		// device is actually called. It said `using=""` for a name that
+		// is not text at all, while the device came up as emu_totem_xxxx
+		// — a misleading line at exactly the moment someone is looking
+		// for why their name did not take.
+		//
+		// What SanitizeName did, which is not only shortening: a name
+		// that is not text loses the bytes that are not, so saying it did
+		// not fit would be wrong as often as right.
+		cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
+			"name", gave, "bytes", len(gave), "using", cfg.Name)
 	}
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), binary.BigEndian.Uint64(append([]byte{0, 0}, cfg.MAC[:]...))))

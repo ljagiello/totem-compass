@@ -20,14 +20,11 @@ import (
 // being worked on: the store open command then reads them by hand.
 const storeAtBoot = true
 
-// bootSector is the settings sector, or nil when the settings are not
-// read at boot.
-func bootSector() store.Sector {
-	if !storeAtBoot {
-		return nil
-	}
-	return flashSector{addr: storeSector}
-}
+// settingsSector is where the settings live. One function rather than
+// the literal in each place that needs it: `store open` built its own
+// copy, and two spellings of the same sector are two sectors as soon as
+// one of them changes.
+func settingsSector() store.Sector { return flashSector{addr: storeSector} }
 
 // flashSelfTest checks the flash driver on the scratch sector: erase, read
 // back, write a pattern, read it again. It never touches the settings

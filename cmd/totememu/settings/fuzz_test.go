@@ -1,25 +1,11 @@
 package settings
 
 import (
-	"log/slog"
 	"testing"
 
-	"github.com/ljagiello/totem-compass/emulator"
 	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/store"
 )
-
-func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
-
-func nodeFor(name string, bond bool) *emulator.Node {
-	n := emulator.New(emulator.Config{
-		MAC: self, Owned: []mesh.MAC{totem}, Name: name,
-		BattVolts: 4.1, BattPct: 90,
-	}, t0)
-	if bond {
-		_ = n.AddBond([6]byte(totem), "Lukasz", t0)
-	}
-	return n
-}
 
 // FuzzSettings drives the whole path a reboot takes over a sector holding
 // whatever the fuzzer supplies: read it, put it into a node, save what the
@@ -28,31 +14,57 @@ func nodeFor(name string, bond bool) *emulator.Node {
 // and every step here has had a fault in it that cost a device its
 // settings.
 //
+// The device's own name comes from the fuzzer too, and empty is the case
+// that matters: a board built without `-X main.name=` has not been named
+// by anyone, so the saved name is put back, and that is the one path
+// where bytes off the flash reach the name in every status frame on the
+// air. Naming the node in every seed left that path untested.
+//
 // The properties hold whatever the bytes mean: the device comes up as
-// itself, a sector cannot widen what it will talk to, and what a save
+// itself, no sector can widen what it will talk to, and what a save
 // reports as written is what comes back.
 func FuzzSettings(f *testing.F) {
-	f.Add([]byte{}, false)
-	f.Add([]byte{0xff, 0xff, 0xff, 0xff}, true)
-	f.Add([]byte("TTM1"), false)
-	f.Add(append([]byte("TTM1"), make([]byte, 60)...), true)
+	f.Add([]byte{}, false, "")
+	f.Add([]byte{0xff, 0xff, 0xff, 0xff}, true, "lcfs_spare")
+	f.Add([]byte("TTM1"), false, "")
+	f.Add(append([]byte("TTM1"), make([]byte, 60)...), true, "")
 
 	// A real record, so the corpus starts from something that parses.
 	seedSec := newMemSector()
-	Open(discard(), seedSec).Save(nodeFor("lcfs_spare", true))
-	f.Add(append([]byte(nil), seedSec.b[:256]...), true)
+	Open(discard(), seedSec).Save(node(nil, "lcfs_spare", true))
+	f.Add(append([]byte(nil), seedSec.b[:256]...), true, "")
 
-	f.Fuzz(func(t *testing.T, raw []byte, bonded bool) {
+	f.Fuzz(func(t *testing.T, raw []byte, bonded bool, built string) {
 		sec := newMemSector()
 		copy(sec.b, raw)
 
 		s := Open(discard(), sec)
-		n := nodeFor("lcfs_spare", bonded)
+		n := node(nil, built, bonded)
+		was := n.Config().Name
 		s.Restore(n, t0)
 
-		// The device is up and is still itself.
-		if n.Config().Name == "" {
-			t.Fatal("a sector left the device with no name at all")
+		// The device is up and is still itself. A name off the flash may
+		// replace the one it booted with — that is what the sector is
+		// for — but it has to be one a status frame can carry, and a
+		// device is never nameless.
+		got := n.Config().Name
+		if got == "" {
+			t.Fatalf("a sector left the device with no name at all (it booted as %q)", was)
+		}
+		// The frame's own limit, not a number picked here: a name a
+		// status frame cannot hold fails at the point of sending it, and
+		// this is the path that puts one off the flash into every frame.
+		if len(got) > mesh.MaxPeerName {
+			t.Fatalf("a sector named the device %q, which is %d bytes and the frame holds %d",
+				got, len(got), mesh.MaxPeerName)
+		}
+		// A name someone chose is not overwritten by one off the flash.
+		// "Chose" means one that survived being made into a name: a
+		// build flag that is not text at all leaves the device with the
+		// default, which nobody chose, and then the record's name is
+		// exactly what should come back.
+		if store.SanitizeName(built) != "" && got != was {
+			t.Fatalf("a sector renamed a device that was built as %q to %q", was, got)
 		}
 		if got := n.Config().Owned; len(got) != 1 || got[0] != totem {
 			t.Fatalf("a sector changed what the device will talk to: %v", got)

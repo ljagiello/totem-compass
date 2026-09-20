@@ -106,3 +106,85 @@ func TestAnEmptyRecordAtTheStartOfTheSector(t *testing.T) {
 		t.Errorf("after the save: %q, %v", got, err)
 	}
 }
+
+// TestASequenceNumberOnlyClimbs: the number is what a reader sees, so
+// the next save has to write one the sector does not already hold. A
+// record carrying nothing proves least of all — the checksum of an empty
+// body is 0 whatever the header says — so sixteen bytes of noise in that
+// shape could otherwise hand the journal any number at all, including
+// one that sends the counter backwards or wraps it to zero.
+func TestASequenceNumberOnlyClimbs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seq  uint32
+	}{
+		{"as far back as it goes", 0},
+		{"one, in a sector that has seen five", 1},
+		{"all ones, which wraps the next save to zero", 0xffffffff},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec := newMemSector(4096)
+			j, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for i := range 5 {
+				if err := j.Save([]byte{byte(i), 'x'}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			was := j.Seq()
+			writeRaw(t, sec, j.Used(), tc.seq, nil)
+
+			again, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := again.Seq(); got < was {
+				t.Errorf("a record with nothing in it took the counter from %d back to %d", was, got)
+			}
+			if err := again.Save([]byte("what came next")); err != nil {
+				t.Fatal(err)
+			}
+			if got := again.Seq(); got <= was {
+				t.Errorf("the save after it took number %d, and the sector already holds up to %d", got, was)
+			}
+		})
+	}
+}
+
+// TestATornWriteKeepsItsNumber: a reset caught mid-save is this
+// journal's ordinary failure, and the number in that header is the one
+// the save meant to use — so dropping it had the next save write it
+// again, twice in one sector.
+func TestATornWriteKeepsItsNumber(t *testing.T) {
+	sec := newMemSector(4096)
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("the settings before the reset")); err != nil {
+		t.Fatal(err)
+	}
+	was := j.Seq()
+
+	// The save the reset cut short: a whole header, and a body that does
+	// not check out.
+	off := j.Used()
+	writeRaw(t, sec, off, was+1, []byte("half of what it meant to write"))
+	sec.b[off+headerLen+2] ^= 0xff // where the reset landed
+
+	again, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Torn(); got != 1 {
+		t.Errorf("the torn write was counted %d times", got)
+	}
+	if err := again.Save([]byte("the settings after it")); err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Seq(); got <= was+1 {
+		t.Errorf("the save after a torn write took number %d, which the torn record already carries", got)
+	}
+}

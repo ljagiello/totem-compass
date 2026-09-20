@@ -4,9 +4,13 @@ package emulator
 
 import (
 	"errors"
+	"log/slog"
 	"math"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/ljagiello/totem-compass/mesh"
 
 	"github.com/ljagiello/totem-compass/store"
 )
@@ -48,8 +52,12 @@ func TestAnUpdateStopsWhenTheReadingSwitchesTheDeviceOff(t *testing.T) {
 	if !errors.Is(err, ErrPoweredDown) {
 		t.Errorf("update on a board the reading switched off: %v", err)
 	}
-	if st := h.n.OTA().State(); st == OTADone {
-		t.Error("the update reported itself complete on a powered-down board")
+	// The positive: it went through fail(), so the ring shows an update
+	// that did not happen rather than one still in flight. A plain
+	// return would leave the state at OTAChecking, and the ring holding
+	// AnimWiFi on a board that is off.
+	if st := h.n.OTA().State(); st != OTAFailed {
+		t.Errorf("the update ended in state %v, want it failed", st)
 	}
 }
 
@@ -90,11 +98,31 @@ func TestADistanceWhoseIntermediateGoesNegative(t *testing.T) {
 	}
 }
 
-// TestTheRestoreReadingHappensOnce: the reading and the power mode that
-// follows it are the node coming into step with its own sensors, so they
-// happen whether or not there was a record — and from one place, so a
-// change to the pairing cannot be made to one copy and not the other.
-func TestTheRestoreReadingHappensOnce(t *testing.T) {
+// countingPack answers like a driver and counts how often it is asked.
+type countingPack struct {
+	b     Battery
+	reads int
+}
+
+func (c *countingPack) Read(time.Time) Sensors {
+	c.reads++
+	return Sensors{Battery: c.b}
+}
+
+// TestEveryRestorePathReadsTheSensorsOnce: the reading and the power
+// mode that follows it are the node coming into step with its own
+// sensors rather than anything a record said, so they happen on every
+// path through Restore — including the one where there is no record,
+// which is where they were missing.
+//
+// Once, too, which is the narrower half: a reading taken in both
+// restoreRecord and the tail would poll a driver twice per boot and
+// book two spans of time against a device that lived through one.
+//
+// What no test here can see is that the pairing appears once in the
+// source; the refactor that put it there is for the reader, and this is
+// for the behavior.
+func TestEveryRestorePathReadsTheSensorsOnce(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		rec  *store.State
@@ -106,11 +134,48 @@ func TestTheRestoreReadingHappensOnce(t *testing.T) {
 			// A pack under the cutoff: the device has to come up and go
 			// straight back down, rather than report mode normal until
 			// something polls it.
-			h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.1, 40 })
+			pack := &countingPack{b: Battery{Volts: 3.1, Percent: 40}}
+			h := newHarness(t, func(c *Config) { c.Sensors = pack })
+			pack.reads = 0
+
 			h.n.Restore(tc.rec, h.now)
 			if !h.n.Power().Off() {
 				t.Error("a device restored on a flat pack kept running")
 			}
+			if pack.reads != 1 {
+				t.Errorf("Restore read the sensors %d times, want once", pack.reads)
+			}
 		})
 	}
 }
+
+// TestTheNameWarningSaysWhatTheDeviceRunsAs: this line is what someone
+// reads when a name did not take, and it reported the name from before
+// the default was filled in — `using=""` while the device came up as
+// emu_totem_xxxx.
+func TestTheNameWarningSaysWhatTheDeviceRunsAs(t *testing.T) {
+	var lines []string
+	log := slog.New(slog.NewTextHandler(writerFunc(func(b []byte) (int, error) {
+		lines = append(lines, string(b))
+		return len(b), nil
+	}), &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	n := New(Config{MAC: self, Owned: []mesh.MAC{totem}, Name: "\xff\xfe\xff", Logger: log}, t0)
+	var warned string
+	for _, l := range lines {
+		if strings.Contains(l, "name is not one a peer frame") {
+			warned = l
+		}
+	}
+	if warned == "" {
+		t.Fatal("a name that is not text was taken without a word about it")
+	}
+	if !strings.Contains(warned, "using="+n.Config().Name) {
+		t.Errorf("the device runs as %q and the line says %s", n.Config().Name, warned)
+	}
+}
+
+// writerFunc is an io.Writer from a function, for catching log lines.
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(b []byte) (int, error) { return f(b) }

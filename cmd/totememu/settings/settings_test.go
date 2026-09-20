@@ -83,16 +83,24 @@ func testLog(t *testing.T) *slog.Logger {
 	return slog.New(slog.NewTextHandler(testWriter{t}, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
+func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
 // node is a device with the given name, bonded to the owned Totem when
-// asked, which is what there is to save.
+// asked, which is what there is to save. A nil *testing.T is the fuzzer,
+// which has no log to write to and cannot fail here.
 func node(t *testing.T, name string, bond bool) *emulator.Node {
-	t.Helper()
+	log := discard()
+	if t != nil {
+		t.Helper()
+		log = testLog(t)
+	}
 	n := emulator.New(emulator.Config{
 		MAC: self, Owned: []mesh.MAC{totem}, Name: name,
-		BattVolts: 4.1, BattPct: 90, Logger: testLog(t),
+		BattVolts: 4.1, BattPct: 90, Logger: log,
 	}, t0)
 	if bond {
-		if err := n.AddBond([6]byte(totem), "Lukasz", t0); err != nil {
+		err := n.AddBond([6]byte(totem), "Lukasz", t0)
+		if err != nil && t != nil {
 			t.Fatal(err)
 		}
 	}
@@ -141,7 +149,7 @@ func TestReopenDoesNotWriteOverWhatItJustRead(t *testing.T) {
 	was.Save(n)
 
 	// It comes up without reading the sector, as the bring-up const does.
-	s := Open(testLog(t), nil)
+	s := Unread(testLog(t))
 	fresh := node(t, "", false)
 	s.Restore(fresh, t0) // nothing to restore: nothing was read
 
@@ -221,7 +229,7 @@ func TestASaveThatChangesNothingCostsNoWrite(t *testing.T) {
 // sector says, and a save that cannot land is reported rather than lost
 // silently or fatal.
 func TestABoardWithNoFlashStillRuns(t *testing.T) {
-	s := Open(testLog(t), nil)
+	s := Unread(testLog(t))
 	n := node(t, "lcfs_spare", true)
 	s.Restore(n, t0)
 	s.Save(n)
@@ -284,5 +292,31 @@ func TestARecordFromAnotherVersionIsIgnored(t *testing.T) {
 	s.Restore(n, t0)
 	if got := n.Config().Name; got != "lcfs_spare" {
 		t.Errorf("an unreadable record renamed the device to %q", got)
+	}
+}
+
+// TestStateHandsOutACopy: the struct alone is a copy, but the slice
+// header in it points at the Store's own peers. A caller writing through
+// it changes the record this Store compares against to decide whether a
+// save is needed, and the save that was needed then does not happen.
+func TestStateHandsOutACopy(t *testing.T) {
+	sec := newMemSector()
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	s.Save(n)
+
+	st := s.State()
+	if len(st.Peers) != 1 {
+		t.Fatalf("saved %d peers", len(st.Peers))
+	}
+	st.Peers[0].Name = "written through"
+
+	if got := s.State().Peers[0].Name; got == "written through" {
+		t.Error("a caller wrote through State() into the Store's own record")
+	}
+	// And the flash still holds what it held.
+	again := Open(testLog(t), sec)
+	if got := again.State().Peers[0].Name; got != "Lukasz" {
+		t.Errorf("the sector says the peer is called %q", got)
 	}
 }

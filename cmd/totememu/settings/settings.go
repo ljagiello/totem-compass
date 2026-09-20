@@ -40,16 +40,25 @@ type Store struct {
 	found bool
 }
 
+// Unread is a board whose flash driver is being worked on: it boots
+// without reading the sector and saves nothing, and `store open` reads
+// the settings by hand later.
+//
+// A constructor rather than a nil sector, because a nil interface and an
+// interface holding a nil pointer are not the same value in Go, and the
+// second would sail past a nil check and panic inside the journal —
+// which on a board is a boot loop rather than the missing driver it is
+// meant to describe.
+func Unread(log *slog.Logger) *Store {
+	log.Info("settings not read at boot; run store open")
+	return &Store{log: log}
+}
+
 // Open reads the settings sector. A board whose flash holds nothing, an
 // older format or noise starts with defaults: the device has to boot
-// either way. A nil sector is a board whose driver is being worked on —
-// it boots without saving, and `store open` reads them by hand later.
+// either way.
 func Open(log *slog.Logger, sec store.Sector) *Store {
 	s := &Store{log: log}
-	if sec == nil {
-		log.Info("settings not read at boot; run store open")
-		return s
-	}
 	j, err := store.Open(sec)
 	if err != nil {
 		log.Warn("settings unavailable, running without saving", "err", err)
@@ -88,7 +97,18 @@ func Open(log *slog.Logger, sec store.Sector) *Store {
 
 // State is what the device is running with, for the caller that builds
 // the node out of it.
-func (s *Store) State() store.State { return s.state }
+//
+// A copy, peers and all. The struct alone would be one: the slice header
+// is copied but the array under it is not, so a caller holding the
+// result could write through to the record this Store compares against
+// to decide whether a save is needed — and then the save that was needed
+// would not happen. The emulator package clones at the same boundary for
+// the same reason.
+func (s *Store) State() store.State {
+	st := s.state
+	st.Peers = append([]store.PeerState(nil), s.state.Peers...)
+	return st
+}
 
 // Found is whether the flash holds a record: one was read at boot, or
 // one has been written since. A board with nothing saved runs on the
@@ -228,7 +248,11 @@ func (s *Store) Report() {
 		// at boot — the firmware starts both at zero — so this line is
 		// the only place they can be seen.
 		"last_run_slept_ms", s.state.SleepMs, "last_run_max_volts", s.state.LearnedMaxVolts,
-		"seq", s.j.Seq(), "used", s.j.Used(), "free", s.j.Free(), "torn", s.j.Torn())
+		"seq", s.j.Seq(), "used", s.j.Used(), "free", s.j.Free(),
+		// Both counts: `store` is where someone looks after flash
+		// trouble, and a warning logged once at boot is not there any
+		// more when they do.
+		"torn", s.j.Torn(), "blank", s.j.Blank())
 	for _, p := range s.state.Peers {
 		s.log.Info("saved peer", "mac", mesh.MAC(p.MAC), "name", p.Name,
 			"lat", p.Lat, "lon", p.Lon, "seen_unix", p.LastSeenUnix)

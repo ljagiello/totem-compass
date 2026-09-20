@@ -83,7 +83,10 @@ func main() {
 
 	// The settings sector is read before the node starts, so the name and
 	// the colour it was given last are the ones it comes up with.
-	saved := settings.Open(log, bootSector())
+	saved := settings.Unread(log)
+	if storeAtBoot {
+		saved = settings.Open(log, settingsSector())
+	}
 	if saved.State().Name != "" && name == "" {
 		name = saved.State().Name
 	}
@@ -304,7 +307,7 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 				log.Info("settings forgotten: the bonds are gone at the next boot")
 			}
 		case "open":
-			saved.Reopen(n, now, flashSector{addr: storeSector})
+			saved.Reopen(n, now, settingsSector())
 		default:
 			saved.Report()
 		}

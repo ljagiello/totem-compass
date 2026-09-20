@@ -45,21 +45,12 @@ func TestTheDistanceToTheOtherSideOfTheWorld(t *testing.T) {
 			t.Error("a peer on the other side of the world is NaN away")
 		}
 	}
-	// And the schedule the distance feeds is a time this node will
-	// actually reach. peerDistance goes into meshDelivery and out into
-	// meshNext, where int(NaN) is implementation-defined and the
-	// arithmetic that follows overflows — a peer put off until the year
-	// 292277026596 is one the mesh never asks about again. Asserting on
-	// what was sent would not show this: the radio window broadcasts a
-	// status frame either way, whatever meshNext says.
-	for mac, p := range h.n.peers {
-		if p.meshNext.IsZero() {
-			continue
-		}
-		if p.meshNext.After(h.now.Add(24 * time.Hour)) {
-			t.Errorf("peer %s is next asked about at %v, which is not a time this device reaches",
-				mac, p.meshNext)
-		}
+	// And the fleet-wide figure the same distance feeds: furthestPeer
+	// takes the builtin max over every peer, which returns NaN if any
+	// argument is one, so a single unplaceable peer turned off the
+	// far-peer status copy for all of them.
+	if got := h.n.furthestPeer(); math.IsNaN(got) {
+		t.Error("one peer on the other side of the world made every distance NaN")
 	}
 }
 

@@ -101,6 +101,18 @@ func Open(sec Sector) (*Journal, error) {
 // reset.
 func (j *Journal) scan(buf []byte) {
 	off := 0
+	// Position decides which record is newest, not the sequence number:
+	// records are only ever appended, so the last good one in the sector
+	// is the last one written. Ordering by the number would let a bogus
+	// 0xffffffff in old bytes hide every record saved afterwards.
+	//
+	// The number itself only ever climbs, which is why every branch below
+	// takes it through keepSeq. It is what a reader sees, and the next
+	// save has to write one the sector does not already hold — but a
+	// header can carry anything, and a record with nothing in it proves
+	// least of all: the checksum of an empty body is 0 whatever the
+	// header says, so sixteen bytes of noise in that shape would
+	// otherwise hand the journal any number at all.
 	for off+headerLen <= len(buf) {
 		h := buf[off : off+headerLen]
 		if [4]byte(h[0:4]) != magic {
@@ -118,38 +130,33 @@ func (j *Journal) scan(buf []byte) {
 			// A record that does not check out is a write a reset cut
 			// short. Keep the one before it, and step over the wreckage:
 			// its bytes are written, so the next record cannot go there.
+			//
+			// Its sequence number still counts, by the rule above: a
+			// reset caught mid-save is this journal's ordinary failure,
+			// and the number in that header is the one the save meant to
+			// use, so dropping it had the next save write it again.
 			j.torn++
+			j.keepSeq(seq)
 			off = end + pad(n)
 			continue // a save after the reset wrote a good record past it
 		}
-		// Position decides which record is newest, not the sequence
-		// number: records are only ever appended, so the last good one in
-		// the sector is the last one written. The sequence number is what
-		// a reader sees, and a sector holding noise can carry any value
-		// for it — ordering by it would let a bogus 0xffffffff in old
-		// bytes hide every record saved afterwards.
 		// A record with nothing in it is stepped over rather than taken.
 		// Load reads a nil payload as "nothing saved", so letting one
 		// become j.last would report an empty sector and hide every good
 		// record written before it. Save refuses to write one now, but a
-		// sector from an earlier build can already hold one.
-		//
-		// Its sequence number is taken even though its payload is not:
-		// the number is what a reader sees, and leaving it behind would
-		// have the next save write a number already in the sector, so a
-		// counter that only ever climbs would repeat and appear to stall
-		// across a reboot. Not counted as torn: its magic, length and
-		// checksum all hold, nothing was cut short, and calling it a
-		// torn write sends whoever reads the console after a flash
-		// problem looking for one that did not happen.
+		// sector from an earlier build can already hold one. Not counted
+		// as torn: its magic, length and checksum all hold, nothing was
+		// cut short, and calling it a torn write sends whoever reads the
+		// console after a flash problem looking for one that did not
+		// happen.
 		if len(body) == 0 {
 			j.blank++
-			j.seq = seq
+			j.keepSeq(seq)
 			off = end + pad(n)
 			continue
 		}
 		j.last = append([]byte(nil), body...)
-		j.seq = seq
+		j.keepSeq(seq)
 		off = end + pad(n)
 	}
 	// The padding that rounds the last record up to the write granularity
@@ -158,6 +165,22 @@ func (j *Journal) scan(buf []byte) {
 	// noise, would otherwise leave next past the size — and the console
 	// would report a sector 4097 bytes used with -1 free.
 	j.next = min(off, j.sec.Size())
+}
+
+// keepSeq takes a sequence number off a header, which is the one part of
+// a record nothing can vouch for: a torn write and a record with nothing
+// in it both carry one, and an empty body checksums to 0 whatever the
+// header says. So it only ever climbs, and it never climbs to the value
+// erased flash reads as — all ones is the pattern of a sector nobody has
+// written, not a number anybody chose, and taking it would leave the
+// next save wrapping to zero and a sector of real records looking like a
+// fresh one. Save counts up from 1, so a written record reaches it after
+// four billion saves of a sector that erases every few dozen.
+func (j *Journal) keepSeq(seq uint32) {
+	if seq == 0xffffffff {
+		return
+	}
+	j.seq = max(j.seq, seq)
 }
 
 // pad is the bytes that round a record up to the flash write granularity.
