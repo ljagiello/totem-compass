@@ -784,7 +784,7 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 	}
 	p.heard, p.lastHeard, p.rssi, p.viaMesh, p.stale = true, now, rx.RSSI, false, false
 	p.status = m
-	if m.Lat != 0 || m.Lon != 0 {
+	if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	if bonded {
@@ -897,10 +897,10 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 		(n.lastReply.IsZero() || now.Sub(n.lastReply) >= meshReplyHold)
 	p.viaMesh, p.stale = true, false
 	p.heard, p.lastHeard = true, now
-	if m.Lat != 0 || m.Lon != 0 {
-		// Either half being set is a position: a Totem on the meridian or
-		// the equator sends one coordinate as a true zero. The status and
-		// reply paths already read it this way.
+	// Either half being set is a position: a Totem on the meridian or the
+	// equator sends one coordinate as a true zero. The status and reply
+	// paths already read it this way.
+	if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	n.log.Info("locate", "origin", m.Origin, "via", rx.Src, "request", m.ReplyRequested, "hops", m.Hops, "uid", m.UID)
@@ -1051,6 +1051,17 @@ func (n *Node) updateStale(now time.Time, p *peer) {
 	}
 }
 
+// livePosition reports whether a position off the air is one a device
+// could be at. A peer frame is bytes from a radio: nothing in the format
+// stops a NaN, an infinity or a latitude of 900, and a poisoned
+// coordinate would spread into the distance, the compass dial and the
+// relay decision. What arrives is used only if it could be real.
+func livePosition(lat, lon float32) bool {
+	return !math.IsNaN(float64(lat)) && !math.IsNaN(float64(lon)) &&
+		!math.IsInf(float64(lat), 0) && !math.IsInf(float64(lon), 0) &&
+		lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
 func (n *Node) peerDistance(p *peer) float64 {
 	f := n.fix()
 	if f == nil || !p.hasCoords {
@@ -1146,7 +1157,7 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 				continue
 			}
 			p := n.addPeer(m.MAC)
-			if m.Lat != 0 || m.Lon != 0 {
+			if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
 				p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 			}
 		}

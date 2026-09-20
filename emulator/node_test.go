@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -660,5 +661,49 @@ func TestMeshAskIsThrottledOnEveryPath(t *testing.T) {
 	// room for where the window falls.
 	if asks > 6 {
 		t.Errorf("%d mesh requests in two minutes, want about one every %s", asks, meshSendFreq)
+	}
+}
+
+// TestImpossiblePositionsAreIgnored: a peer frame is bytes off a radio,
+// and nothing in the format stops a NaN, an infinity or a latitude of
+// 900. A poisoned coordinate would spread into the distance, the compass
+// dial and the relay decision, so what arrives is used only if a device
+// could be at it.
+func TestImpossiblePositionsAreIgnored(t *testing.T) {
+	good := float32(37.775)
+	for _, bad := range []struct {
+		name     string
+		lat, lon float32
+	}{
+		{"nan latitude", float32(math.NaN()), -122.42},
+		{"nan longitude", good, float32(math.NaN())},
+		{"infinite latitude", float32(math.Inf(1)), -122.42},
+		{"latitude past the pole", 900, -122.42},
+		{"longitude past the meridian", good, 1000},
+	} {
+		h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: good, Lon: -122.42, AccuracyM: 3} })
+		h.bond()
+		// A good position first, so there is something to poison.
+		ok := statusFrame(t0)
+		ok.Lat, ok.Lon = 37.785, -122.42
+		h.rx(totem, self, -40, ok)
+		was := h.n.Peers()[0].DistanceM
+
+		poison := statusFrame(t0)
+		poison.Lat, poison.Lon = bad.lat, bad.lon
+		h.rx(totem, self, -40, poison)
+
+		got := h.n.Peers()[0].DistanceM
+		if math.IsNaN(got) {
+			t.Errorf("%s made the distance NaN", bad.name)
+		}
+		if got != was {
+			t.Errorf("%s moved the peer from %.0f m to %.0f m", bad.name, was, got)
+		}
+		// And the compass still points somewhere real.
+		h.advance(bootAnim + time.Second)
+		if desc := h.n.LEDs().Describe(); strings.Contains(desc, "NaN") {
+			t.Errorf("%s reached the ring: %s", bad.name, desc)
+		}
 	}
 }
