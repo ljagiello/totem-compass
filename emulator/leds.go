@@ -149,7 +149,6 @@ const (
 	AnimPairing
 	AnimBonded
 	AnimPeerDeleteCountdown
-	AnimDisconnect
 	AnimSOS
 	AnimDemiGod
 	AnimOTA
@@ -173,8 +172,6 @@ func (a Animation) String() string {
 		return "bonded"
 	case AnimPeerDeleteCountdown:
 		return "peer delete countdown"
-	case AnimDisconnect:
-		return "disconnect"
 	case AnimSOS:
 		return "sos"
 	case AnimDemiGod:
@@ -202,7 +199,6 @@ const (
 	ledFrame     = 25 * time.Millisecond
 	bootAnim     = 2 * time.Second
 	bondedAnim   = 3 * time.Second
-	disconnAnim  = 2 * time.Second
 	demiGodBlink = 3 * time.Second
 	otaFailAnim  = 4 * time.Second
 	peerDelAnim  = 2 * time.Second
@@ -285,8 +281,6 @@ func (l *LEDs) Play(a Animation, now time.Time) {
 		l.until = now.Add(bootAnim)
 	case AnimBonded:
 		l.until = now.Add(bondedAnim)
-	case AnimDisconnect:
-		l.until = now.Add(disconnAnim)
 	case AnimDemiGod:
 		l.until = now.Add(demiGodBlink)
 	case AnimOTAFailed:
@@ -398,10 +392,13 @@ func (l *LEDs) Tick(now time.Time) bool {
 	l.frame = max(int(now.Sub(l.start)/ledFrame), 0)
 	l.next = l.start.Add(time.Duration(l.frame+1) * ledFrame)
 	l.draw(now)
-	if l.anim == AnimIdle && l.dial < 0 {
-		// Nothing is moving: the crystal holds its colour and the ring is
-		// dark. Asking for another frame would keep the device awake for
-		// a picture that does not change.
+	if l.anim == AnimIdle {
+		// Nothing is moving: the crystal holds its colour, and the ring
+		// is dark or holding one lit point at the peer. Asking for
+		// another frame would keep the device awake for a picture that
+		// does not change — and a Totem with someone to point at is the
+		// normal case, so this is where the sleep is won. SetDial asks
+		// for a frame when the bearing or the colour moves.
 		l.next = time.Time{}
 	}
 	return true
@@ -436,11 +433,6 @@ func (l *LEDs) draw(now time.Time) {
 		n := max(RingPixels-l.frame, 0)
 		for i := 0; i < n; i++ {
 			l.ring[i] = l.dim(ColorRed.RGB())
-		}
-	case AnimDisconnect:
-		// disconn_animation: two red blinks.
-		if (l.frame/10)%2 == 0 {
-			l.fillRing(l.dim(ColorRed.RGB()))
 		}
 	case AnimSOS:
 		// crystal_sos_blink: the crystal blinks red, and the ring with it.

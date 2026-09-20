@@ -100,6 +100,13 @@ func (n *Node) device(now time.Time) {
 			n.leds.Play(AnimLowBattery, now)
 		}
 	}
+	if n.power.pluggedIn(n.sensors.Battery) {
+		// On the charger: the ring runs the powerup animation again, which
+		// is what power_conn_new does once v_in has settled.
+		n.leds.Play(AnimBoot, now)
+		n.log.Info("charger connected", "volts", n.sensors.Battery.Volts,
+			"batt", n.sensors.Battery.Percent)
+	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.
 	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.State() == OTADownloading)
@@ -122,13 +129,19 @@ func (n *Node) device(now time.Time) {
 }
 
 // wantedAnimation is what the device's state calls for when nothing
-// timed is playing: the alarm first, then a pairing window, then the
-// search for a fix, then rest. An update drives the ring itself while it
-// runs, and blocks the loop, so it is not decided here.
+// timed is playing: an update in flight, then the alarm, then a pairing
+// window, then the search for a fix, then rest.
 func (n *Node) wantedAnimation() Animation {
 	switch {
 	case n.power.Off():
 		return AnimIdle
+	case n.ota.State() == OTADownloading:
+		// An update drives the ring itself while it blocks the loop, but
+		// nothing enforces that a transport blocks: a poll that landed
+		// mid-download would otherwise wipe the progress ring.
+		return AnimOTA
+	case n.ota.State() == OTAChecking:
+		return AnimWiFi
 	case n.cfg.SOS && !n.sosMuted:
 		return AnimSOS
 	case n.pairing:

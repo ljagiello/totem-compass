@@ -172,7 +172,6 @@ type Node struct {
 	pairEnd  time.Time
 	bondMAC  *mesh.MAC
 	tempBond *mesh.MAC
-	bonding  bool // modes.bonding_start
 
 	smartUID   uint16
 	inGroup    bool
@@ -461,6 +460,17 @@ func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
 		return
 	}
 	wall := time.UnixMilli(int64(p.Unix)*1000 + int64(p.TimeOfDayMs%1000))
+	if !wall.After(minClock) {
+		// The same floor the GNSS path and the console apply. A peer that
+		// says 1970 — a garbled frame, or a device whose own clock never
+		// started — would otherwise pin this one there for good: nothing
+		// clears the clock once it is set, and every locate frame this
+		// node sent would carry an expiry 55 years in the past, which
+		// every peer with a real clock drops.
+		n.log.Warn("ignoring a peer's clock from before 2020",
+			"src", p.Name, "wall", wall.UTC().Format(time.RFC3339))
+		return
+	}
 	n.clockOffset = wall.Sub(now)
 	n.clockSet = true
 	n.log.Info("RTC set via peer", "wall", wall.UTC().Format(time.RFC3339Nano))
@@ -641,7 +651,7 @@ func (n *Node) startPairing(now time.Time) {
 		n.log.Warn("cannot have more than 8 bonds")
 		return
 	}
-	n.pairing, n.bonding = true, true
+	n.pairing = true // modes.bonding_start
 	n.bondMAC, n.tempBond = nil, nil
 	n.pairEnd = now.Add(pairingWindow)
 	n.leds.Play(AnimPairing, now)
@@ -677,7 +687,7 @@ func (n *Node) stopPairing(now time.Time) {
 	if !n.pairing {
 		return
 	}
-	n.pairing, n.bonding, n.bondMAC = false, false, nil
+	n.pairing, n.bondMAC = false, nil
 	if n.tempBond != nil {
 		n.log.Warn("deleting peer with failed bond", "mac", *n.tempBond)
 		n.deletePeer(*n.tempBond)
@@ -727,7 +737,7 @@ func (n *Node) Unbond(now time.Time, mac mesh.MAC) []Packet {
 	n.deletePeer(mac)
 	n.leds.Play(AnimPeerDeleteCountdown, now)
 	n.log.Info("peer deleted", "mac", mac)
-	return nil
+	return n.flush()
 }
 
 func mustMarshal(m mesh.Message) []byte {
@@ -999,15 +1009,18 @@ func (n *Node) meshTick(now time.Time) {
 			d = 50
 		}
 		delay := meshDelivery(d)
-		if delay.Milliseconds()%6 == 0 {
-			delay -= time.Second
-		}
 		// The lower MAC asks first. Comparing the bytes orders them the
 		// same way as the firmware's integer compare, and allocates
 		// nothing on a tick that runs every second.
 		if p.meshGrp != n.meshGrp || now.Sub(p.firstStale) >= delay || bytes.Compare(p.mac[:], n.cfg.MAC[:]) <= 0 {
 			send = true
 		} else {
+			// Only the wait is shortened, and only then: the firmware
+			// takes its second off after it has compared the elapsed
+			// time against the whole delivery time, not before.
+			if delay.Milliseconds()%6 == 0 {
+				delay -= time.Second
+			}
 			p.meshNext = now.Add(delay)
 		}
 	}
@@ -1097,13 +1110,13 @@ func distance(lat1, lon1, lat2, lon2 float32) float64 {
 func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 	switch g.Instruction {
 	case mesh.SmartGroupAbandon:
-		if !n.inGroup || n.smartUID == g.UID {
+		if n.inGroup && n.smartUID == g.UID {
 			n.inGroup, n.smartUID = false, 0
 			n.log.Info("smart group abandoned", "uid", g.UID)
 		}
 		return
 	case mesh.SmartGroupAdvertise:
-		if n.inGroup || !n.bonding {
+		if n.inGroup || !n.pairing {
 			if n.inGroup && g.UID == n.smartUID {
 				n.groupUntil = now.Add(time.Duration(g.TimeoutMs) * time.Millisecond)
 			}

@@ -76,7 +76,7 @@ matching effect:
 | `anim_add_peer`, `add_peer_animation`, `bonded_animation` | a new Totem bonded |
 | `anim_bonding_ctdwn` | bonding countdown |
 | `anim_peer_del_ctdwn` | peer removal countdown |
-| `disconn_animation` | peer / link disconnect |
+| `disconn_animation` | the charger going in, despite the name — it is the task name `Compass.power_conn_new` runs under, and that coroutine waits for `v_in` to read high three 100 ms samples running and then launches `powerup_animation` with the current volts |
 | `wifi_animation` | WiFi activity |
 | `crystal_sos`, `crystal_sos_blink`, `sos_led`, `start_sos`, `enable_sos`, `toggle_sos` | SOS alert blink; peer-in-SOS event (`evt_peer_in_sos`); mute/unmute (logs `Muting SOS` / `Un-muting SOS`) |
 | `demi_god_blink`, `demi_god_countdown` | a [demi-god](/protocols/demigod) command landed |

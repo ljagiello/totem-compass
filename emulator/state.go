@@ -42,10 +42,18 @@ func (n *Node) State(boots uint32) store.State {
 		}
 		if p.hasCoords {
 			ps.Lat, ps.Lon = p.lat, p.lon
-			ps.LastSeenUnix = p.coordsAt.Unix()
-		}
-		if !p.lastHeard.IsZero() {
-			ps.LastSeenUnix = p.lastHeard.Unix()
+			// When the position was reported, not when the peer was last
+			// heard from: Restore reads this back into coordsAt, which is
+			// what decides whether a peer is stale. The last time anything
+			// arrived from a peer would make a position from an hour ago
+			// look as fresh as the frame that carried nothing new.
+			//
+			// The zero time is the year 1, and its Unix value is a large
+			// negative number that would come back as a timestamp and
+			// saturate every duration measured from it.
+			if !p.coordsAt.IsZero() {
+				ps.LastSeenUnix = p.coordsAt.Unix()
+			}
 		}
 		st.Peers = append(st.Peers, ps)
 	}

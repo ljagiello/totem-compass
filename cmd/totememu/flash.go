@@ -34,7 +34,6 @@ const (
 	romSPIFlashWaitIdle    = 0x400622c0
 	romFlashChip           = 0x3ffae270 // g_rom_flashchip
 	romCacheReadDis        = 0x40009ab8 // Cache_Read_Disable_rom
-	romCacheFlush          = 0x40009a14 // Cache_Flush_rom
 	romCacheReadEnabl      = 0x40009a84 // Cache_Read_Enable_rom
 )
 
@@ -66,7 +65,6 @@ var romTable = C.totem_rom_t{
 	wait_idle:    C.totem_rom_chip_t(unsafe.Pointer(uintptr(romSPIFlashWaitIdle))),
 	chip:         unsafe.Pointer(uintptr(romFlashChip)),
 	cache_off:    C.totem_cache_t(unsafe.Pointer(uintptr(romCacheReadDis))),
-	cache_flush:  C.totem_cache_t(unsafe.Pointer(uintptr(romCacheFlush))),
 	cache_on:     C.totem_cache_t(unsafe.Pointer(uintptr(romCacheReadEnabl))),
 }
 

@@ -156,6 +156,13 @@ type Power struct {
 	// holdSleep is set while something must not be interrupted, such as a
 	// GNSS clock sync ("Block sleep for GNSS RTC Sync").
 	holdSleep bool
+	// chargeRun counts the polls in a row that have seen the charger, and
+	// chargeShown records that the powerup animation has already run for
+	// this connection. Compass.power_conn_new waits for v_in to read high
+	// three samples running before it plays it, so a contact that bounces
+	// on the way into the socket does not set it off.
+	chargeRun   int
+	chargeShown bool
 }
 
 func newPower(now time.Time) *Power {
@@ -208,6 +215,29 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	}
 	_ = now
 	return p.mode, p.mode != was
+}
+
+// chargeDebounce is how many polls in a row have to see the charger, as
+// power_conn_new's three 100 ms samples of v_in do.
+const chargeDebounce = 3
+
+// pluggedIn reports the single poll on which the charger has been there
+// long enough to show the battery level. The firmware launches
+// powerup_animation from power_conn_new at that point, the same animation
+// it plays at boot, so the ring reads as a battery gauge either way.
+func (p *Power) pluggedIn(b Battery) bool {
+	if !b.Charging || p.off {
+		p.chargeRun, p.chargeShown = 0, false
+		return false
+	}
+	if p.chargeRun < chargeDebounce {
+		p.chargeRun++
+	}
+	if p.chargeShown || p.chargeRun < chargeDebounce {
+		return false
+	}
+	p.chargeShown = true
+	return true
 }
 
 // sleep accounts for the time between now and the next thing the device

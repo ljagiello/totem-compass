@@ -22,12 +22,10 @@ import (
 type settings struct {
 	log *slog.Logger
 	j   *store.Journal
-	// held is what was written last, so a save that would change nothing
-	// costs no flash write. An erase runs with the radio stalled.
-	held []byte
-	// key is held with the free-running counter zeroed: what a person
-	// could have changed, plus the boot count. The total sleep grows on
-	// its own, and comparing it would make every save a write.
+	// key is the last record written, with the free-running counter
+	// zeroed: what a person could have changed, plus the boot count. A
+	// save that would not change it costs no flash write. The total sleep
+	// grows on its own, and comparing it would make every save a write.
 	key []byte
 	// state is what the device is running with.
 	state store.State
@@ -70,7 +68,6 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 		s.state = store.State{}
 		return s
 	}
-	s.held = b
 	s.key = emulator.SettingsKey(s.state)
 	s.state.BootCount++
 	log.Info("settings restored", "name", s.state.Name, "peers", len(s.state.Peers),
@@ -128,7 +125,7 @@ func (s *settings) save(n *emulator.Node) {
 		s.log.Warn("settings could not be saved", "err", err)
 		return
 	}
-	s.held, s.key, s.state = b, key, st
+	s.key, s.state = key, st
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
 }
@@ -150,7 +147,7 @@ func (s *settings) forget(n *emulator.Node, now time.Time) error {
 	if err := s.j.Save(b); err != nil {
 		return err
 	}
-	s.held, s.key, s.state = b, emulator.SettingsKey(empty), empty
+	s.key, s.state = emulator.SettingsKey(empty), empty
 	return nil
 }
 
@@ -162,7 +159,7 @@ func (s *settings) open(n *emulator.Node, now time.Time) {
 		return
 	}
 	fresh := openSettings(s.log, true)
-	s.j, s.held, s.key, s.state = fresh.j, fresh.held, fresh.key, fresh.state
+	s.j, s.key, s.state = fresh.j, fresh.key, fresh.state
 	if s.j == nil {
 		return
 	}

@@ -305,9 +305,13 @@ func (n *Node) Update(now time.Time) error {
 	}
 	// The battery gate comes first: an update that reboots a device with
 	// a flat battery is how a device does not come back.
-	// 0% is the flattest reading there is, so it belongs inside the gate,
-	// not outside it.
-	if b := n.sensors.Battery; b.Percent < otaMinPct && !b.Charging {
+	// 0% is the flattest reading there is, so it belongs inside the gate.
+	// A board with no power chip is a different matter: it reports 0% and
+	// 0 V because nothing has told it otherwise, and the power subsystem
+	// reads that as "no reading" too, so an update is not barred for it.
+	b := n.sensors.Battery
+	hasReading := b.Volts > 0 || b.Percent > 0
+	if hasReading && b.Percent < otaMinPct && !b.Charging {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
 	}
 	if n.cfg.OTATransport == nil {

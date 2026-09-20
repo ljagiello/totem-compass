@@ -271,6 +271,13 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	if r == nil {
 		return nil
 	}
+	// A release inside the edge lockout is noise, so a hold shorter than
+	// it would never end: the input would stay latched down and fire a
+	// hold of its own 800 ms later — on the power button, that powers the
+	// device off with the button still "held".
+	if d <= edgeLockout {
+		d = edgeLockout + time.Millisecond
+	}
 	end := now.Add(d)
 	r.press(now)
 	// Walk the press forward, firing what each moment brings, rather than

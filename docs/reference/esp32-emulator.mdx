@@ -175,7 +175,10 @@ with the exact RGB values, and the animations the LED task plays as events
 arrive: the pairing breathe, the fill when a peer bonds, the countdown
 when one is deleted, the SOS blink, the demi-god flash, the white 30%
 progress ring of a download (`PROGRESS_RGB`) and the orange fill of a
-failure (`ERROR_RGB`). At rest the ring is the compass: a lit pixel, with
+failure (`ERROR_RGB`). The charger going in replays the power-up ring, as
+`power_conn_new` does once `v_in` has read high three samples running — a
+contact that bounces on the way into the socket does not set it off. At
+rest the ring is the compass: a lit pixel, with
 its neighbours feathered, pointing at the bonded Totem, in the colour that
 peer was given when it bonded (`shuffle_bond_colors`).
 

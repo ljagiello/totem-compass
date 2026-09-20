@@ -8,11 +8,18 @@
 // struct the caller passes, copies that struct onto the stack before the
 // cache goes off, and calls nothing but ROM routines.
 //
-// The cache is gated with the ROM's Cache_Read_Disable, Cache_Flush and
-// Cache_Read_Enable. The flush between them is not optional: ESP-IDF
-// notes that a disable needs a flush before the enable even when nothing
-// was written, and a version of this file that left it out came back
-// from the window with every flash fetch reading 0xbad00bad.
+// The cache is gated with the ROM's Cache_Read_Disable and
+// Cache_Read_Enable, and nothing else. ESP-IDF's note about the ROM pair
+// says a disable wants a Cache_Flush before the enable even when nothing
+// was written, but on this image the opposite holds: every sequence with
+// a flush in it came back from the window with the next flash fetch
+// reading 0xbad00bad, and disable-then-enable on its own comes back
+// clean. That was found by bisecting the sequence on the board — a
+// no-op that only gated the cache was enough to reproduce it — and the
+// driver has since erased, written and read back thousands of records.
+//
+// The sector this driver touches is past the image and is never mapped,
+// so there are no cached lines of it to invalidate either way.
 //
 // The caller disables interrupts around it: a handler that happens to
 // live in flash would fault the same way.
@@ -44,13 +51,9 @@ typedef struct {
 	totem_rom_chip_t enable_write;
 	totem_rom_chip_t wait_idle;
 	void *chip;
-	// The ROM's cache routines. Flushing between the disable and the
-	// enable is not optional: ESP-IDF notes that Cache_Read_Disable
-	// needs a Cache_Flush before Cache_Read_Enable even when nothing was
-	// written, and without it this board came back from the window with
-	// every flash fetch reading 0xbad00bad.
+	// The ROM's cache routines. There is no flush: see the note at the
+	// top of this file, where leaving it out is the thing that works.
 	totem_cache_t cache_off;
-	totem_cache_t cache_flush;
 	totem_cache_t cache_on;
 } totem_rom_t;
 
