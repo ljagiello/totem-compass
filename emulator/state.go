@@ -31,8 +31,10 @@ func (n *Node) State(boots uint32) store.State {
 		SOSMuted:   n.sosMuted,
 		BootCount:  boots,
 		SleepMs:    uint64(n.power.SleptMs()),
-		// What device_power learned about this pack, which is a fact
-		// about the battery and so outlives a reboot.
+		// What this run learned about the pack and how long it slept.
+		// Both are written and never read back — the firmware starts them
+		// at zero on every boot — so they are here for whoever looks at
+		// the sector, which is what `store` prints.
 		LearnedMaxVolts: n.power.LearnedMaxVolts(),
 	}
 	for _, mac := range n.order {
@@ -151,11 +153,12 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// changes what a voltage means, and until the next poll the battery
 	// percentage would still be the one worked out without it — which
 	// `status`, a status frame and the OTA gate would all use.
+	// A reading, and the mode that follows from it: a device restoring
+	// its settings at boot has not polled yet, so without this it reports
+	// power mode normal until the first poll — and a device coming up on
+	// a pack below the cutoff has to power down rather than report that
+	// it has.
 	n.read(now)
-	// And the mode that follows from it, acted on rather than only moved:
-	// the percentage a restored curve gives can be a different power
-	// mode, and a device coming up on a flat pack has to power down
-	// rather than report that it has.
 	n.applyPowerMode(now)
 	return errs
 }

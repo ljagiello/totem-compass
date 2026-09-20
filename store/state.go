@@ -11,7 +11,8 @@ import (
 // State is what survives a reboot. It holds what firmware 5.0.3 keeps in
 // config.json — the device's name and crystal colour, whether SOS is
 // muted, the bonded peers with the colour each was given — plus the
-// counters a Totem carries across boots.
+// boot count it carries across boots, and a snapshot of the counters it
+// does not.
 //
 // The encoding is this package's own: a Totem writes JSON to a
 // filesystem, and the emulator has a flash sector and no filesystem. The

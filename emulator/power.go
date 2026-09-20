@@ -223,6 +223,15 @@ func plausibleVolts(v float32) bool {
 // for a pack that reads a little high. Past it the reading is wrong.
 const maxPlausibleVolts = 4.4
 
+// startRun begins a new run: the counters the firmware keeps in modes,
+// whose constructor sets them to zero. A power cycle is a boot, so what
+// the last run slept and what it learned about the pack go with it.
+func (p *Power) startRun(now time.Time) {
+	p.sleptMs, p.awakeMs, p.maxVolts = 0, 0, 0
+	p.lastTick = now
+	p.chargeSince, p.chargeShown = time.Time{}, false
+}
+
 // Mode is the power mode a status frame carries.
 func (p *Power) Mode() PowerMode { return p.mode }
 

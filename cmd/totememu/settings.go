@@ -95,8 +95,6 @@ func (s *settings) save(n *emulator.Node) {
 	if s.j == nil {
 		return
 	}
-	// The node carries the learned max volts itself now, restored into
-	// the power model at boot, so there is nothing to copy over here.
 	st := n.State(s.state.BootCount)
 	b, err := st.MarshalBinary()
 	if err != nil {
@@ -183,6 +181,10 @@ func (s *settings) report() {
 	}
 	s.log.Info("settings", "name", s.state.Name, "color", s.state.ColorID,
 		"boots", s.state.BootCount, "peers", len(s.state.Peers),
+		// What the device last reported about itself. Neither comes back
+		// at boot — the firmware starts both at zero — so this line is
+		// the only place they can be seen.
+		"last_run_slept_ms", s.state.SleepMs, "last_run_max_volts", s.state.LearnedMaxVolts,
 		"seq", s.j.Seq(), "used", s.j.Used(), "free", s.j.Free(), "torn", s.j.Torn())
 	for _, p := range s.state.Peers {
 		s.log.Info("saved peer", "mac", mesh.MAC(p.MAC), "name", p.Name,

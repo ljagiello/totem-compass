@@ -300,9 +300,14 @@ bond restored mac=8c94df7b0478 name="LCFs totem"
 
 A save happens when something a person changed is different from what is on the flash: a
 bond gained or lost, the name, the crystal colour, the brightness, the SOS mute. The
-counters the device keeps — the boot count, the total light sleep — ride along with those
-rather than causing a write of their own, because a counter that grows on its own would put
-a record on the flash every time anything so much as looked at the settings.
+counters the device keeps ride along with those rather than causing a write of their own,
+because a counter that grows on its own would put a record on the flash every time anything
+so much as looked at the settings.
+
+Only the boot count comes back. The total light sleep and the highest cell voltage seen are
+written as a snapshot of what the device last reported — `store` prints them — but not read
+back, because the firmware keeps both in `modes`, whose constructor sets them to zero: they
+start again at every boot, and a power cycle is a boot.
 
 Everything read back is untrusted — a write cut short by a reset, a previous firmware, or
 noise — so a record is believed only if its header and checksum agree, and a sector that

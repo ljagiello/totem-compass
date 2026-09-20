@@ -262,7 +262,12 @@ func (n *Node) Press(in Input, now time.Time) {
 		n.log.Debug("input pressed", "input", in)
 		return
 	}
-	n.log.Info("input press ignored: too soon after the last edge, or touch is blocked",
+	// At debug, unlike the console's own tap and hold: this is driven
+	// straight off a pin, and the edge lockout exists precisely to
+	// swallow the bounce of one physical press. Announcing each swallowed
+	// edge would put the noise on the console and leave the press that
+	// took it at a lower level than the ones that did not.
+	n.log.Debug("input press ignored: already down, too soon after the last edge, or touch is blocked",
 		"input", in)
 }
 
@@ -300,7 +305,7 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 			// Which one, because the ones before it did land and the
 			// recogniser will report the count it actually saw.
 			n.log.Info("tap ignored: the input is already down or blocked",
-				"input", in, "tap", i+1, "of", count, "taken", i)
+				"input", in, "tap", i+1, "of", count)
 			return
 		}
 		r.release(at.Add(tapHold))

@@ -574,6 +574,13 @@ func (n *Node) wall(now time.Time) time.Time { return now.Add(n.clockOffset) }
 // startAligned moves the radio windows and the mesh tick onto wall-clock
 // slots, once the node has a clock.
 func (n *Node) startAligned(now time.Time) {
+	// Not on a device that is off: PowerOff empties the job list, and
+	// arming it again here — a clock arriving while the device is down —
+	// had it running radio windows and building a status frame for each
+	// one for sendRaw to discard. PowerOn schedules its own.
+	if n.power.Off() {
+		return
+	}
 	n.jobs = slices.DeleteFunc(n.jobs, func(j job) bool { return j.kind != jobOnce })
 	n.scheduleWindow(now)
 	n.scheduleMeshTick(now)
@@ -1480,11 +1487,10 @@ func (n *Node) FactoryReset(now time.Time) {
 	// the stretch being forgotten, which would stand until the next poll
 	// and then jump — the thing the read is here to prevent.
 	//
-	// The reading that follows learns the pack in front of the device
-	// again, which is right: that is a measurement, not the memory being
-	// dropped. What must not survive is the *record* — a reset that wrote
-	// the old maximum back would have the next boot restore it — and
-	// that is the saving side's business, not this one's.
+	// What this run worked out about the pack goes with the bonds. The
+	// reading that follows measures it again while the device is on; a
+	// reset on a device that is switched off leaves nothing, and the
+	// next power-up starts the counters from zero anyway.
 	n.power.ClearLearnedMaxVolts()
 	n.read(now)
 	n.applyPowerMode(now)

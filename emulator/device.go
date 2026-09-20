@@ -74,6 +74,12 @@ func (n *Node) PowerOff(now time.Time) {
 	// the far side of a power cycle it never saw. Refusing to queue it
 	// afterwards is only half of that; this is the state that survives.
 	clear(n.outbox)
+	// And the mesh replies owed from before it. sendOutbox repeats the
+	// last locate reply for ten seconds, so one owed at the moment the
+	// power went would go out on the next power-up — answering, with a
+	// fresh position and the old UID, a request from the far side of a
+	// power cycle the peers never saw.
+	n.replyAt, n.replyUID, n.originUID = time.Time{}, 0, 0
 	clearPending(n.inputs)
 	n.leds.Dark(true, now)
 	n.log.Info("powered down: the radio windows stop here")
@@ -85,11 +91,21 @@ func (n *Node) PowerOn(now time.Time) {
 		return
 	}
 	n.power.off, n.power.mode = false, PowerNormal
+	// Coming back up is a boot: it runs the post-boot touch wait and the
+	// power-up ring, and on the device the wake restarts main.py and
+	// builds modes again. The counters modes starts at zero start again
+	// with it — the same rule that stops them being restored from flash.
+	n.power.startRun(now)
 	n.inputs = newInputs(now)
 	n.leds.Dark(false, now)
 	n.leds.Play(AnimBoot, now)
-	n.scheduleWindow(now)
-	if n.clockSet {
+	// Guarded, because something may have armed a chain while the device
+	// was down: two window chains means a status frame to every peer
+	// twice a period, for the rest of the run.
+	if !n.hasJob(jobWindow) {
+		n.scheduleWindow(now)
+	}
+	if n.clockSet && !n.hasJob(jobMeshTick) {
 		n.scheduleMeshTick(now)
 	}
 	n.log.Info("powered up")
