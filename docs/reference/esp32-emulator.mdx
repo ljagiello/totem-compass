@@ -113,10 +113,10 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `touch crystal\|power\|sos tap\|double\|triple\|hold [ms]` | make a gesture on an input |
 | `leds` | what the ring and the crystal are doing |
 | `color <name>` | the crystal's default colour, from the firmware's 13 |
-| `power [normal\|eco\|low\|off\|on]` | the power state, or set it |
+| `power`, `power on\|off` | the power state, or switch the device off and on as the button held does |
 | `ota [update]` | the last update, or run one |
 | `rx <src mac> self\|all <rssi> <hex frame>` | feed the node a frame as though the radio had heard it, for the paths that need a second Totem |
-| `store`, `store forget` | the saved settings and bonds, or wipe them as a factory reset does |
+| `store`, `store forget` | the saved settings and bonds, or forget them: the flash and the live bonds both, as a factory reset does |
 | `flash` | check the flash driver on its scratch sector: erase, write, read back |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
 | `help` | list the commands |
@@ -237,7 +237,10 @@ The battery curve is v5.0.3's recalibrated `get_batt_pct`, where 4.12 V
 reads 100%, 4.0 V reads 86% and 3.8 V reads 50%. The mode follows the
 battery — normal, eco, low below about 3.45 V — and at 3.3 V the device
 powers itself down rather than brown out, which a peer sees as the status
-frames stopping. Light sleep is accounted the way the firmware logs it,
+frames stopping. A pack on the charger never hits that cutoff, however
+flat it reads. The mode is not settable by hand, because the next battery
+reading five milliseconds later would undo it: change the battery with
+`batt` instead. Light sleep is accounted the way the firmware logs it,
 including the two reasons it stays awake: a radio window about to open,
 and a clock sync that has not finished. The watchdog model is
 `wdt_manager`'s: the feed loop runs only while no blocker is held, and a
