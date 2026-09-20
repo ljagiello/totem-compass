@@ -88,6 +88,7 @@ jobs:
           - { package: ./store, target: FuzzScan }
           - { package: ./store, target: FuzzStateDecode }
           - { package: ./emulator, target: FuzzOTAServer }
+          - { package: ./emulator, target: FuzzLEDs }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -239,3 +239,39 @@ func FuzzOTAServer(f *testing.F) {
 		}
 	})
 }
+
+// FuzzLEDs drives the strip with arbitrary animations, dial bearings and
+// jumps in time, including backwards ones. A frame number indexes the
+// ring, so it must never run off either end, whatever the clock does.
+func FuzzLEDs(f *testing.F) {
+	f.Add([]byte{1, 2, 3}, int64(25), int16(90))
+	f.Add([]byte{7}, int64(-1000), int16(-1))
+	f.Add([]byte{}, int64(0), int16(32767))
+	f.Fuzz(func(t *testing.T, steps []byte, stepMs int64, dial int16) {
+		l := newLEDs(t0, ColorTeal)
+		now := t0
+		for _, s := range steps {
+			// Every byte picks an animation, a dial and a step in time.
+			l.Play(Animation(s%(uint8(AnimLowBattery)+1)), now)
+			l.SetDial(dial, Color(int8(s)))
+			l.SetProgress(float64(s) / 255)
+			if s%3 == 0 {
+				l.ToggleBrightness()
+			}
+			now = now.Add(time.Duration(stepMs) * time.Millisecond)
+			l.Tick(now)
+			if got := len(l.Ring()); got != RingPixels {
+				t.Fatalf("ring holds %d pixels", got)
+			}
+			if got := len(l.Crystal()); got != CrystalPixels {
+				t.Fatalf("crystal holds %d pixels", got)
+			}
+			if b := l.Brightness(); b < 0 || b > 1 {
+				t.Fatalf("brightness = %v", b)
+			}
+			if l.Describe() == "" {
+				t.Fatal("no description")
+			}
+		}
+	})
+}

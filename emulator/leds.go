@@ -337,7 +337,10 @@ func (l *LEDs) Tick(now time.Time) bool {
 	if !l.until.IsZero() && !now.Before(l.until) {
 		l.Play(AnimIdle, now)
 	}
-	l.frame = int(now.Sub(l.start) / ledFrame)
+	// A frame number indexes the ring, so it must never go negative: a
+	// caller whose clock has stepped back would otherwise index out of
+	// the strip.
+	l.frame = max(int(now.Sub(l.start)/ledFrame), 0)
 	l.next = l.start.Add(time.Duration(l.frame+1) * ledFrame)
 	l.draw(now)
 	if l.anim == AnimIdle && l.dial < 0 {
