@@ -133,7 +133,12 @@ func TestBatteryDrivesThePowerMode(t *testing.T) {
 		{4.10, 95, PowerNormal},
 		{3.75, 35, PowerEco},
 		{3.44, 8, PowerLow},
-		{3.29, 1, PowerOff},
+		// Still running at the table's flat end: the device reads 0%
+		// from 3.19 V down, and only switches itself off below 3.15.
+		// Those are two different numbers in the firmware and this used
+		// to treat them as one, with a cutoff guessed at 3.30.
+		{3.19, 0, PowerLow},
+		{3.14, 0, PowerOff},
 	}
 	for _, tt := range tests {
 		h := newHarness(t, nil)
@@ -816,21 +821,35 @@ func TestEveryAnimationEnds(t *testing.T) {
 // TestUpdateRefusesAtZeroPercent: 0% is the flattest reading there is, so
 // it belongs inside the battery gate. It used to fall outside it.
 //
-// It is also under the cutoff, and a reading under the cutoff switches
-// the device off wherever it is taken — so an update is refused for that
-// first, and the gate itself is what a pack that is low and still alive
-// runs into.
+// 0% is not the same as switched off, which is what this test used to
+// assume. The table reads 0% from 3.19 V down and the device only powers
+// itself off below 3.15, so a pack at 0% is still running — which is
+// exactly the pack the gate exists for. Both refusals are checked, each
+// against the reading that actually produces it.
 func TestUpdateRefusesAtZeroPercent(t *testing.T) {
 	srv := newFakeOTA()
 	h := newHarness(t, func(c *Config) { c.OTATransport = srv })
 	if err := h.n.SetBattery(0, false, h.now); err != nil {
 		t.Fatal(err)
 	}
+	if h.n.Power().Off() {
+		t.Fatal("0% switched the device off; it is flat, not empty")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Fatalf("update on a flat battery: %v", err)
+	}
+	if len(srv.posts) != 0 {
+		t.Error("it asked the server anyway")
+	}
+
+	// Below the cutoff the device is off, and that is the refusal.
+	h.n.sensors.Battery.Volts = cutoffVolts - 0.01
+	h.n.applyPowerMode(h.now)
 	if !h.n.Power().Off() {
-		t.Fatal("an empty battery left the device running")
+		t.Fatalf("%.2f V is under the cutoff and left the device running", cutoffVolts-0.01)
 	}
 	if err := h.n.Update(h.now); !errors.Is(err, ErrPoweredDown) {
-		t.Fatalf("update on an empty battery: %v", err)
+		t.Fatalf("update on a powered-down device: %v", err)
 	}
 	if len(srv.posts) != 0 {
 		t.Error("it asked the server anyway")

@@ -39,7 +39,8 @@ func TestAnUpdateStopsWhenTheReadingSwitchesTheDeviceOff(t *testing.T) {
 	}
 
 	// The pack collapses, and nothing has read it yet.
-	pack.b = Battery{Volts: 3.2, Percent: 80}
+	// Under the cutoff: 3.15, not the 3.30 this used to assume.
+	pack.b = Battery{Volts: 3.1, Percent: 80}
 	if h.n.Power().Off() {
 		t.Fatal("the node was told about the collapse before it read it")
 	}

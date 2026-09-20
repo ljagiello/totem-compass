@@ -19,10 +19,12 @@ import (
 // reports a change once, every poll afterwards saw nothing to do. The
 // radio windows kept running on a pack below the cutoff.
 func TestARestoreOnAFlatPackPowersDown(t *testing.T) {
-	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.2, 1 })
+	// Under the cutoff, which is 3.15 rather than the 3.30 this used to
+	// assume — 3.2 V is a flat pack that is still running.
+	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.1, 0 })
 	h.n.Restore(&store.State{}, h.now)
 	if got := h.n.Power().Mode(); got != PowerOff {
-		t.Fatalf("a 3.2 V pack reads mode %s, want off", got)
+		t.Fatalf("a 3.1 V pack reads mode %s, want off", got)
 	}
 	if !h.n.Power().Off() {
 		t.Error("the device reports power mode off while still running")

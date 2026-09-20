@@ -194,11 +194,18 @@ func TestAnUpdateOnAFlatPackPowersDown(t *testing.T) {
 		t.Fatal("the device was down before the test started")
 	}
 
+	// 0% is not under the cutoff — the table reads 0% from 3.19 V down
+	// and the device only powers off below 3.15 — so the pack is put
+	// under it directly rather than by asking for the flattest level.
 	if err := h.n.SetBattery(0, false, h.now); err != nil {
 		t.Fatal(err)
 	}
+	h.n.SetSensors(NewStatic(Sensors{
+		Battery: Battery{Volts: cutoffVolts - 0.01, Percent: 0},
+	}), h.now)
+	h.collect(h.n.Poll(h.now))
 	if v := h.n.Sensors().Battery.Volts; v > cutoffVolts {
-		t.Fatalf("a flat pack reads as %v V, above the cutoff of %v", v, cutoffVolts)
+		t.Fatalf("the pack reads as %v V, above the cutoff of %v", v, cutoffVolts)
 	}
 	// Acted on where it was read, which is what read() does now: the
 	// device is down before anything asks it for an update.

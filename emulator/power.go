@@ -58,8 +58,13 @@ const (
 	// lowBattVolts is where modes.power_level becomes 2 and the touch
 	// driver turns on its low-battery sensitivity.
 	lowBattVolts = 3.45
-	// cutoffVolts is "Voltages too low, powering down | {}v".
-	cutoffVolts = 3.30
+	// cutoffVolts is "Voltages too low, powering down | {}v", which
+	// backend_checks compares as "modes.batt_volts < 3.15" — read out of
+	// the bytecode rather than guessed from the curve, which is where
+	// the 3.30 that used to be here came from. It sits below the table's
+	// own flat end of 3.19, so the device reports 0% for a little while
+	// before it switches itself off.
+	cutoffVolts = 3.15
 	// ecoBattPct is where a device settles into eco mode. Inferred: the
 	// threshold is not in the strings.
 	ecoBattPct = 40
@@ -277,13 +282,15 @@ const battMaxMargin = 0.04
 // curve hid this by stretching rather than scaling, so the mistake cost
 // nothing until the curve was made to match the firmware's.
 func (p *Power) learn(b Battery) {
-	if !b.Charging {
-		return
-	}
+	// The peak itself is tracked whatever the charger is doing, as
+	// backend_checks does it — only the promotion below is charge-gated.
+	// So a pack seen at 4.1 V and then run down to 3.5 still promotes
+	// 4.1 when it next goes on charge, which is the firmware's answer
+	// and a truer one than the voltage it happens to be plugged in at.
 	if b.Volts > p.peakVolts && plausibleVolts(b.Volts) {
 		p.peakVolts = b.Volts
 	}
-	if p.peakVolts == 0 {
+	if !b.Charging || p.peakVolts == 0 {
 		return
 	}
 	// Still climbing: remember where it got to and wait.
