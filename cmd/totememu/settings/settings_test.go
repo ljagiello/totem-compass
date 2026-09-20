@@ -25,6 +25,9 @@ type memSector struct {
 	erases int
 	// failWrite makes every write fail, which is a driver that has gone.
 	failWrite bool
+	// onWrite runs inside WriteAt, which is where a test can see what
+	// the device's own state looks like while the flash is busy.
+	onWrite func()
 }
 
 // sectorSize is the smallest region the ESP32 can erase, which is what
@@ -50,6 +53,9 @@ func (s *memSector) ReadAt(p []byte, off int) error {
 }
 
 func (s *memSector) WriteAt(p []byte, off int) error {
+	if s.onWrite != nil {
+		s.onWrite()
+	}
 	if s.failWrite {
 		return errors.New("no flash driver")
 	}

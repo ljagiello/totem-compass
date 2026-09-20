@@ -36,14 +36,16 @@ func (p *printer) status(format string, args ...any) {
 
 // emit writes v as one JSON line tagged with its type.
 //
-// A value JSON cannot hold still produces a line. Frames come off the
-// air carrying floats — a latitude, a longitude, a cell voltage — and
-// any of them may arrive as a NaN or an infinity, which encoding/json
-// refuses outright; giving up there dropped exactly the frames someone
-// watching a stream would most want to see, in silence, and every
-// caller of this had the same hole. What goes out instead says what
-// could not be written and what type it was, which is a record that
-// something arrived.
+// A value JSON cannot hold still produces a line, saying what could not
+// be written and what type it was.
+//
+// This is a backstop, not the fix for a hole any caller has: the
+// protocol decoder already puts every float it hands out through
+// finite(), for this reason, and mesh frames are handled where they are
+// decoded — there the raw hex survives, which matters more than the
+// type name. What this catches is a value that reaches JSON without
+// having been through either, which is a shape this tool grows every
+// time it prints something new.
 func (p *printer) emit(v any) {
 	t := reflect.TypeOf(v)
 	b, err := json.Marshal(struct {
@@ -55,13 +57,12 @@ func (p *printer) emit(v any) {
 		return
 	}
 	p.log.Warn("cannot encode as JSON", "type", t.Name(), "err", err)
-	b, err = json.Marshal(struct {
+	// Two strings, which encoding/json cannot refuse: an invalid byte in
+	// one is escaped rather than returned as an error.
+	b, _ = json.Marshal(struct {
 		Type  string `json:"type"`
 		Error string `json:"error"`
 	}{t.Name(), err.Error()})
-	if err != nil {
-		return // nothing left to say it with
-	}
 	p.println(string(b))
 }
 

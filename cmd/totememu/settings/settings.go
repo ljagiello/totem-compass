@@ -98,7 +98,7 @@ func Open(log *slog.Logger, sec store.Sector) *Store {
 		s.state = store.State{}
 		return s
 	}
-	s.key = emulator.SettingsKey(s.state)
+	s.key = s.keyOf(s.state)
 	s.found = true
 	s.state.BootCount++
 	log.Info("settings restored", "name", s.state.Name, "peers", len(s.state.Peers),
@@ -177,18 +177,9 @@ func (s *Store) Save(n *emulator.Node) {
 	// a write would put a record on the flash every time anything so much
 	// as looked at the settings, filling a sector — and an erase stalls
 	// the radio — for no news at all.
-	key := emulator.SettingsKey(st)
+	key := s.keyOf(st)
 	if key == nil {
-		// SettingsKey encodes the same state that marshaled a few lines
-		// up, changing the two free-running counters and rebuilding the
-		// peer list, so today it cannot fail where that succeeded. The
-		// branch stays because of what its absence costs: with a nil key
-		// and a Store that has never saved, the comparison below is
-		// nil == nil, and the save returns having written nothing and
-		// said nothing. A fault nobody can see is worse than a branch
-		// nobody reaches.
-		s.log.Warn("settings could not be encoded for comparison")
-		return
+		return // keyOf has said why
 	}
 	if bytes.Equal(key, s.key) {
 		return // nothing a person changed, so nothing to write
@@ -205,6 +196,23 @@ func (s *Store) Save(n *emulator.Node) {
 	s.key, s.state, s.found = key, st, true
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
+}
+
+// keyOf is what a save compares against to decide whether the flash
+// needs writing: the state with its free-running counters zeroed.
+//
+// One function for the three places that make one, because a nil is
+// worth the same warning wherever it happens. It cannot happen today —
+// SettingsKey encodes a state that has already marshaled — but a nil
+// key stored is a Store whose next save compares nil against nil, finds
+// them equal, and returns having written nothing and said nothing. A
+// fault nobody can see is worse than a branch nobody reaches.
+func (s *Store) keyOf(st store.State) []byte {
+	key := emulator.SettingsKey(st)
+	if key == nil {
+		s.log.Warn("settings could not be encoded for comparison")
+	}
+	return key
 }
 
 // write puts a record on the flash with the watchdog blocker held.
@@ -248,20 +256,22 @@ func (s *Store) Forget(n *emulator.Node, now time.Time) error {
 	// found with them: the sector holds a record from here on, whatever
 	// it held at boot, and the field says what is on the flash rather
 	// than what was found on it once.
-	s.key, s.state, s.found = emulator.SettingsKey(empty), empty, true
+	s.key, s.state, s.found = s.keyOf(empty), empty, true
 	return nil
 }
 
 // Reopen reads the settings sector now, for a board whose driver is
 // being brought up.
 func (s *Store) Reopen(n *emulator.Node, now time.Time, sec store.Sector) {
-	if s.j != nil {
-		return // already open; the deferred report says what is in it
-	}
 	// Whatever comes of this, say what the settings are now: the command
 	// exists to answer that, and the three ways out of it each used to
-	// answer differently or not at all.
+	// answer differently or not at all. Before the early return below,
+	// not after it — put after, this printed nothing at all on the one
+	// path a working board actually takes.
 	defer s.Report()
+	if s.j != nil {
+		return // already open, and the report says what is in it
+	}
 	fresh := Open(s.log, sec)
 	// found as well as the rest. Leaving it behind made this path restore
 	// nothing — Restore reads no record where there was one — and then

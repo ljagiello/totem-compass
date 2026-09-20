@@ -119,9 +119,13 @@ func TestSetBatteryAndHeadingReportTheirRefusals(t *testing.T) {
 	if err := h.n.SetHeading(900, h.now); err == nil {
 		t.Error("SetHeading(900) was accepted")
 	}
-	// And nothing moved on the way to being refused.
-	if got := h.n.Sensors(); got.Battery.Percent != was.Battery.Percent || got.Azimuth != was.Azimuth {
-		t.Errorf("a refused setting changed the reading: %+v", got)
+	// And nothing moved on the way to being refused — asked of the frame
+	// the device would send, which is what a peer would see, rather than
+	// of the reading: both setters return before anything reads the
+	// sensors at all, so a check there cannot fail whatever they do.
+	f := h.n.status(h.now, mesh.PeerStatus, false)
+	if f.BattPct != was.Battery.Percent || f.Azimuth != was.Azimuth {
+		t.Errorf("a refused setting reached the air: batt %d%%, azimuth %d", f.BattPct, f.Azimuth)
 	}
 	if err := h.n.SetPosition(&Position{Lat: 91, Lon: 0}, h.now); err == nil {
 		t.Error("SetPosition(91) was accepted")

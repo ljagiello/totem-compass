@@ -238,10 +238,11 @@ type Node struct {
 	// busy with a boot animation, an alarm or a download; the reminder
 	// waits for the strip rather than being lost or drawn over them.
 	lowOwed bool
-	// saidVolts and saidPct are latches on the two battery warnings.
-	// read() runs on every pass of a loop that polls every 5 ms, and a
-	// driver stuck out of range would otherwise say the same thing two
-	// hundred times a second for as long as the board is on.
+	// saidVolts, saidPct and saidAzimuth are latches on the three
+	// warnings read() can raise — two about the battery, one about the
+	// compass. read() runs on every pass of a loop that polls every
+	// 5 ms, and a driver stuck out of range would otherwise say the same
+	// thing two hundred times a second for as long as the board is on.
 	saidVolts, saidPct, saidAzimuth bool
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
@@ -585,6 +586,26 @@ func (n *Node) read(now time.Time) {
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
+	// A bearing that is one, wherever the reading came from: a config, a
+	// driver or a simulation. SetHeading refuses its own argument, but
+	// that is one door of several, and an azimuth of 900 reaches every
+	// status frame through any of the others.
+	//
+	// Brought into range rather than zeroed. The field has no value
+	// meaning "unknown" — HeadingOfMotion and PosAccuracyM carry -1 for
+	// that and this one does not — so zeroing it would have the device
+	// tell every peer it points due north, which is a bearing someone
+	// could act on. 900° is 180°, and that is the best this can say
+	// about a reading that is otherwise thrown away.
+	if a := n.sensors.Azimuth; a < 0 || a > 359 {
+		was := a
+		n.sensors.Azimuth = ((a % 360) + 360) % 360
+		if !n.saidAzimuth {
+			n.saidAzimuth = true
+			n.log.Warn("heading is outside a full turn, bringing it into one",
+				"heading", was, "using", n.sensors.Azimuth)
+		}
+	}
 	// A reading the frame can carry, asked of every reading rather than
 	// of the config alone: a source set later — SetSensors takes a real
 	// board's drivers, and the console's batt goes through Controls —
@@ -604,17 +625,6 @@ func (n *Node) read(now time.Time) {
 	// diagnostic channel the board has with two hundred copies a second
 	// of the same line — the reason warnedClock, saidBondLimit and
 	// saidRestoreLimit are all latches.
-	// A bearing that is one, wherever the reading came from: a config, a
-	// driver or a simulation. SetHeading refuses its own argument, but
-	// that is one door of several, and an azimuth of 900 reaches every
-	// status frame through any of the others.
-	if a := n.sensors.Azimuth; a < 0 || a > 359 {
-		if !n.saidAzimuth {
-			n.saidAzimuth = true
-			n.log.Warn("heading is not a bearing, ignoring it", "heading", a)
-		}
-		n.sensors.Azimuth = 0
-	}
 	b := &n.sensors.Battery
 	if b.Volts != 0 && (!(b.Volts > 0) || b.Volts > maxSendableVolts) {
 		if !n.saidVolts {
@@ -2006,12 +2016,23 @@ func (n *Node) Config() Config {
 	// own.
 	c := n.cfg
 	c.Owned = slices.Clone(n.cfg.Owned)
-	// The position from the reading, not from the field: cfg.Position is
-	// what the node was built or last told, and the sources hand out a
-	// fresh Fix on every read, so the field is a snapshot from whenever
-	// it was last written. A walking simulation moved and this went on
-	// answering with where it set off from. Cloned, as before, so a
+	// The live reading rather than the fields, for everything a sensor
+	// reports. cfg holds what the node was built or last told by hand,
+	// and the sources hand out a fresh reading every time, so those
+	// fields are a snapshot from whenever one of the setters last ran: a
+	// walking simulation moved and this went on answering with where it
+	// set off from, and with the battery it set off with.
+	//
+	// The position through fix(), not raw: New and SetPosition both
+	// refuse a place no device could be at, and answering with an
+	// unchecked reading here would hand a caller through the front door
+	// what those two turn away — a NaN from a driver, or Null Island,
+	// which is how this firmware says it has no fix at all. Cloned, so a
 	// caller cannot write into the node's own reading.
-	c.Position = clonePosition(n.sensors.Fix)
+	c.Position = clonePosition(n.fix())
+	c.Heading = n.sensors.Azimuth
+	c.Orientation = n.sensors.Orientation
+	c.BattPct = n.sensors.Battery.Percent
+	c.BattVolts = n.sensors.Battery.Volts
 	return c
 }
