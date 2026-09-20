@@ -437,12 +437,53 @@ func TestATornWriteCostsNoErase(t *testing.T) {
 	if sec.erases != erases {
 		t.Errorf("the save after a torn write erased the sector %d times", sec.erases-erases)
 	}
-	// And what was there before is still there to fall back on.
+	// And the save lands: what comes back is what was written last,
+	// past the wreckage rather than instead of it. What was there before
+	// the reset is gone from Load by design — only the newest record is
+	// kept — but it was not erased to get here, which is what the erase
+	// count above says.
 	third, err := Open(sec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, err := third.Load(); err != nil || string(got) != "the settings after it" {
+		t.Errorf("after the save: %q, %v", got, err)
+	}
+}
+
+// TestAFailedWriteCostsNoErase: a driver that gives up partway through a
+// write is not a reset — the journal is still running and knows what it
+// attempted. Leaving the head where it was had the next save find bytes
+// that are not erased and clear the whole sector, which is the cost this
+// design exists to avoid.
+func TestAFailedWriteCostsNoErase(t *testing.T) {
+	sec := newMemSector(4096)
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("the settings before the failure")); err != nil {
+		t.Fatal(err)
+	}
+
+	sec.failWriteAfter = 12
+	if err := j.Save([]byte("a write the driver gave up on")); err == nil {
+		t.Fatal("a write that failed reported success")
+	}
+	sec.failWriteAfter = -1
+
+	erases := sec.erases
+	if err := j.Save([]byte("the settings after it")); err != nil {
+		t.Fatal(err)
+	}
+	if sec.erases != erases {
+		t.Errorf("the save after a failed write erased the sector %d times", sec.erases-erases)
+	}
+	again, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := again.Load(); err != nil || string(got) != "the settings after it" {
 		t.Errorf("after the save: %q, %v", got, err)
 	}
 }

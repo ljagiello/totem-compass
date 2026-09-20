@@ -171,6 +171,40 @@ func TestMeshStatusPeerWithoutAFix(t *testing.T) {
 	if got := h.out.String(); !strings.Contains(got, `"LCFs totem"  rssi 0  heard never  no fix`) {
 		t.Errorf("a peer with no position did not say so:\n%s", got)
 	}
+	f.waitFor(t, []string{"", "format json", "status", "format text"})
+}
+
+// TestWhereFrom covers the shapes a status line arrives in, including
+// the two that used to print something worse than nothing.
+func TestWhereFrom(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		a    map[string]any
+		want string
+	}{
+		{"a position the board accepted", map[string]any{
+			"has_position": true, "lat": 37.586754, "lon": -122.007301,
+		}, "37.586754,-122.007301"},
+		{"one the board refused", map[string]any{
+			"has_position": false, "lat": 0.0, "lon": 0.0,
+		}, "no fix"},
+		// A board built before the field existed says nothing about it,
+		// and for those the coordinates are the only answer there is.
+		{"a board that does not send the field", map[string]any{
+			"lat": 37.586754, "lon": -122.007301,
+		}, "37.586754,-122.007301"},
+		// Half a position printed "37.586754,%!f(<nil>)" into the row.
+		{"a line carrying only a latitude", map[string]any{
+			"has_position": true, "lat": 37.586754,
+		}, "no fix"},
+		{"a line carrying neither", map[string]any{}, "no fix"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := whereFrom(tc.a); got != tc.want {
+				t.Errorf("whereFrom(%v) = %q, want %q", tc.a, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestMeshStatusNoPeers(t *testing.T) {

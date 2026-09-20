@@ -197,10 +197,16 @@ type radio struct {
 	// count means the link is unhappy now, not that frames are being
 	// lost — the peer acts on what it is sent either way.
 	//
-	// Atomic because espradio calls the send handler from the WiFi task
-	// and the report below is read from the main loop: on a dual-core
-	// ESP32 that is two cores at the same counter, and a number offered
-	// as a signal about the link should not be a torn read.
+	// Atomic because the send handler below is a callback and nothing
+	// here establishes which context runs it. Not a claim that it runs
+	// on the WiFi task: rx.go explains that Go called from there raises
+	// AllocaCause and is fatal under TinyGo's vector, which is why the
+	// receive path is a C ring — so if this closure ran there the board
+	// would not survive its first unicast, and it plainly does. The
+	// atomic costs nothing and is the right shape for a counter written
+	// from a callback and read from the loop; the counter is only ever
+	// read for a log line, so nothing depends on it beyond being a
+	// number rather than a torn one.
 	failed   atomic.Int32
 	received int
 }

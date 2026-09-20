@@ -714,6 +714,29 @@ func instructionName(i mesh.SmartGroupInstruction) string {
 	return fmt.Sprintf("instruction %d", i)
 }
 
+// whereFrom renders the position in a status line, or "no fix".
+//
+// Both halves are asserted, not only the latitude: a line carrying one
+// and not the other printed "37.586754,%!f(<nil>)" into the row.
+//
+// has_position is the board saying whether it accepted the position at
+// all — a bond restored from flash and never heard from since has none,
+// and printing its zeroes puts the peer on Null Island, a thousand
+// kilometers off the coast of Ghana. A board built before that field
+// existed does not send it, and for those the coordinates themselves are
+// the only answer available, so its absence is not taken as a no.
+func whereFrom(a map[string]any) string {
+	if has, ok := a["has_position"]; ok && has != true {
+		return "no fix"
+	}
+	lat, latOK := a["lat"].(float64)
+	lon, lonOK := a["lon"].(float64)
+	if !latOK || !lonOK {
+		return "no fix"
+	}
+	return fmt.Sprintf("%.6f,%.6f", lat, lon)
+}
+
 func (p *printer) meshStatus(self consoleLine, peers []consoleLine) {
 	if p.json {
 		p.emit(self.event())
@@ -723,10 +746,7 @@ func (p *printer) meshStatus(self consoleLine, peers []consoleLine) {
 		return
 	}
 	a := self.attrs
-	pos := "no fix"
-	if lat, ok := a["lat"].(float64); ok {
-		pos = fmt.Sprintf("%.6f,%.6f", lat, a["lon"])
-	}
+	pos := whereFrom(a)
 	p.printf("emulator %v %q  pairing %s  sos %s  heading %v°  %s\n", a["mac"], a["name"],
 		onOff(a["pairing"] == true), onOff(a["sos"] == true), a["heading"], pos)
 	if len(peers) == 0 {
@@ -747,17 +767,7 @@ func (p *printer) meshStatus(self consoleLine, peers []consoleLine) {
 		if a["mesh"] == true {
 			via = " via mesh"
 		}
-		// The same "no fix" the emulator row above uses, and for the
-		// same reason: a bond restored from flash and not heard from
-		// since has no position, and printing its zeroes puts the peer
-		// on Null Island. The board says which it is.
-		where := "no fix"
-		if a["has_position"] == true {
-			if lat, ok := a["lat"].(float64); ok {
-				where = fmt.Sprintf("%.6f,%.6f", lat, a["lon"])
-			}
-		}
 		p.printf("peer     %v %q  rssi %v  heard %s%s  %s  batt %v%%\n",
-			a["mac"], a["name"], a["rssi"], heard, via, where, a["batt"])
+			a["mac"], a["name"], a["rssi"], heard, via, whereFrom(a), a["batt"])
 	}
 }

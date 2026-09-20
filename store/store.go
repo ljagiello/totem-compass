@@ -73,8 +73,9 @@ type Journal struct {
 	seq  uint32
 	// last is the newest valid payload, nil when there is none.
 	last []byte
-	// torn counts records that did not survive their checksum: a torn
-	// write, which the caller may want to log.
+	// torn counts headers the scan could not believe: a checksum that
+	// did not hold, or a length the sector cannot hold. Both are a write
+	// a reset cut short, and both are worth a line on the console.
 	torn int
 	// blank counts well-formed records carrying nothing, which an
 	// earlier build could write and this one refuses. They are not torn
@@ -138,11 +139,11 @@ func (j *Journal) scan(buf []byte) {
 			// nothing about where the next one starts: stopping here
 			// would hide every record beyond it.
 			j.torn++
-			if next := resync(buf, off+headerLen); next >= 0 {
-				off = next
+			j.keepSeq(seq, false)
+			var more bool
+			if off, more = j.resume(buf, off); more {
 				continue
 			}
-			off = writeHead(buf, off+headerLen)
 			break
 		}
 		body := buf[off+headerLen : end]
@@ -169,19 +170,10 @@ func (j *Journal) scan(buf []byte) {
 			// records resume.
 			j.torn++
 			j.keepSeq(seq, false)
-			if next := resync(buf, off+headerLen); next >= 0 {
-				off = next
+			var more bool
+			if off, more = j.resume(buf, off); more {
 				continue
 			}
-			// Nothing further in the sector, which is the ordinary torn
-			// write: a reset caught the last save. The next record goes
-			// after what is actually written rather than where this
-			// header said the record ended — believing the length here
-			// is the thing this branch exists not to do, and taking the
-			// end of the sector instead threw the rest of it away, so
-			// every save after a reset cost a full erase and a second
-			// reset in that window wiped the settings entirely.
-			off = writeHead(buf, off+headerLen)
 			break
 		}
 		// A record with nothing in it is stepped over rather than taken.
@@ -250,6 +242,28 @@ func (j *Journal) keepSeq(seq uint32, proven bool) {
 	}
 }
 
+// resume carries the scan past a header it has given up on. It answers
+// where to go next and whether there is anything there to read.
+//
+// Both callers reach it for the same reason — a header that proved
+// nothing about itself, whether by a length the sector cannot hold or by
+// a checksum that did not hold — and both owe the same two things: the
+// sequence number, which climbs by at most one from an unproven header,
+// and a position that does not depend on the length that header claimed.
+//
+// When records resume further down, that is where to go. When they do
+// not, this is the ordinary torn write — a reset caught the last save —
+// and the next record goes after what is actually written. Taking the
+// end of the sector instead threw the rest of it away, so every save
+// after a reset cost a full erase, and a second reset in that window
+// wiped the settings entirely.
+func (j *Journal) resume(buf []byte, off int) (int, bool) {
+	if next := resync(buf, off+headerLen); next >= 0 {
+		return next, true
+	}
+	return writeHead(buf, off+headerLen), false
+}
+
 // resync finds where the next record starts, at or after off, or -1 when
 // nothing further looks like one. Records are written on the flash's
 // word granularity, so only those offsets are looked at.
@@ -303,8 +317,9 @@ func (j *Journal) Load() ([]byte, error) {
 	return append([]byte(nil), j.last...), nil
 }
 
-// Torn is how many records failed their checksum, which is a reset caught
-// mid-save.
+// Torn is how many headers the scan could not believe — a checksum that
+// did not hold, or a length the sector cannot hold — which is a reset
+// caught mid-save.
 func (j *Journal) Torn() int { return j.torn }
 
 // Blank is how many well-formed records carrying nothing were stepped
@@ -380,6 +395,13 @@ func (j *Journal) Save(p []byte) error {
 		j.next, j.torn, j.blank, erased = 0, 0, 0, true
 	}
 	if err := j.sec.WriteAt(rec, j.next); err != nil {
+		// Whatever landed before the driver gave up is written, so the
+		// next record cannot go there. Stepping over the whole thing
+		// costs the space and keeps the erase budget: leaving the head
+		// where it was had the next save find bytes that are not erased
+		// and clear the sector, which is the cost this whole design is
+		// arranged to avoid.
+		j.next = min(j.next+len(rec), j.sec.Size())
 		if erased {
 			// The sector was cleared and the record that should have
 			// replaced its contents did not land, so what this journal

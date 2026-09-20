@@ -269,30 +269,6 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.Name == "" {
 		cfg.Name = DefaultName(cfg.MAC)
 	}
-	// The battery, like the name, the position and the colour above it.
-	// It was the one part of a Config nothing checked, and it reaches
-	// further than any of them: the status frame on the air, the power
-	// mode, the OTA gate, the console's own lines. A voltage no cell
-	// reads is not a reading, and a percentage outside 0..100 is not one
-	// either — the frame carries the percentage as a signed byte, so a
-	// caller's 120 goes out as 120 and a -50 as -50.
-	// Not plausibleVolts, which asks a different question: its floor is
-	// the curve's, and a pack below that is the reading the cutoff
-	// exists for — refusing it here would leave a dying device running,
-	// which two tests say plainly. This asks only whether the number is
-	// a voltage at all. Above the top it is not, and it is also past
-	// what a peer frame can carry: that field is a half float whose
-	// encoder has no range check, so a reading of 131072 goes out as -0
-	// and one of a million as -0.000233.
-	if v := cfg.BattVolts; v != 0 && (!(v > 0) || v > maxPlausibleVolts) {
-		cfg.Logger.Warn("battery voltage is not one a cell reads, ignoring it",
-			"volts", v, "most", maxPlausibleVolts)
-		cfg.BattVolts = 0
-	}
-	if p := cfg.BattPct; p < 0 || p > 100 {
-		cfg.Logger.Warn("battery percentage is not a percentage, ignoring it", "percent", p)
-		cfg.BattPct = 0
-	}
 	if short != gave {
 		// After the default has been filled in, so the line says what the
 		// device is actually called: it said `using=""` for a name that
@@ -593,6 +569,28 @@ func (n *Node) read(now time.Time) {
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
+	// What a battery can read, asked of every reading rather than of the
+	// config alone. New checks the config, but a source set later —
+	// SetSensors takes a real board's drivers, and the console's batt
+	// goes through Controls — arrives here and nowhere else, and from
+	// here it reaches the status frame on the air.
+	//
+	// The ceiling is the only bound worth having: below it, a flat pack
+	// is exactly the reading the cutoff exists for. Above it the number
+	// is not a voltage, and it is also past what a peer frame can carry
+	// — the field is a half float whose encoder has no range check, so
+	// 131072 goes out as -0 and a million as -0.000233.
+	if b := &n.sensors.Battery; b.Volts != 0 && (!(b.Volts > 0) || b.Volts > maxPlausibleVolts) {
+		n.log.Warn("battery voltage is not one a cell reads, ignoring it",
+			"volts", b.Volts, "most", maxPlausibleVolts)
+		b.Volts = 0
+	}
+	// And a percentage that is one. The frame carries it as a signed
+	// byte, so a driver's 120 goes out as 120 and a -50 as -50.
+	if b := &n.sensors.Battery; b.Percent < 0 || b.Percent > 100 {
+		n.log.Warn("battery percentage is not a percentage, ignoring it", "percent", b.Percent)
+		b.Percent = 0
+	}
 	// A real power chip reports a cell voltage; the percentage is what
 	// get_batt_pct makes of it. A source that gives the voltage and no
 	// percentage gets one here, so every reader — the status frame, the
@@ -1118,15 +1116,22 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 		return
 	}
 	if m.Command == mesh.PeerStatus {
-		// The position and the voltage as this node took them, not as
-		// the frame said them. A peer may send NaN or an infinity for
-		// either, and the board's own handler writes JSON, which cannot
-		// hold one at all: a single such frame turned the whole line
-		// into "lat":"!ERROR:json: unsupported value: NaN". The compass
-		// and the distance already ignore those; this is the same
-		// answer for the line that says what happened.
+		// This frame's own position, and whether it carried one. Not the
+		// peer's last known position: that is a different fact, and
+		// printing it against a frame that said nothing about where the
+		// peer is reads as though the frame had said it.
+		//
+		// The values only when they are usable, because the board's
+		// handler writes JSON and that cannot hold a NaN at all — one
+		// frame carrying one turned the whole line into
+		// "lat":"!ERROR:json: unsupported value: NaN".
+		var lat, lon float32
+		carried := usablePosition(m.Lat, m.Lon)
+		if carried {
+			lat, lon = m.Lat, m.Lon
+		}
 		n.log.Info("peer status", "mac", p.mac, "name", m.Name, "rssi", rx.RSSI,
-			"lat", p.lat, "lon", p.lon, "has_position", p.hasCoords,
+			"lat", lat, "lon", lon, "has_position", carried,
 			"acc", m.PosAccuracyM, "azimuth", m.Azimuth,
 			"orientation", m.Orientation, "sos", m.SOS, "batt", m.BattPct,
 			"volts", loggableVolts(m.BattVolts),
