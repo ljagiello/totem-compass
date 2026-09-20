@@ -101,6 +101,12 @@ func (c Color) String() string {
 // LogValue names the colour in a log line, in either format.
 func (c Color) LogValue() slog.Value { return slog.StringValue(c.String()) }
 
+// dur is a length of time for a log line. slog on the board renders a
+// time.Duration as a float of nanoseconds — "held=5e+06" for five
+// milliseconds — which is no use to anyone reading the console, so every
+// duration that reaches a log line goes through this instead.
+func dur(d time.Duration) slog.Value { return slog.StringValue(d.String()) }
+
 // ParseColor reads a palette name.
 //
 // The loop indexes the array rather than ranging over its values. Written

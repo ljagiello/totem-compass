@@ -722,7 +722,7 @@ func (n *Node) startPairing(now time.Time) {
 	n.bondMAC, n.tempBond = nil, nil
 	n.pairEnd = now.Add(pairingWindow)
 	n.leds.Play(AnimPairing, now)
-	n.log.Info("pairing started", "for", pairingWindow)
+	n.log.Info("pairing started", "for", dur(pairingWindow))
 	n.pairLoop(now)
 	n.at(n.pairEnd, n.cancelPairing)
 }

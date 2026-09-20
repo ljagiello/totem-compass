@@ -295,7 +295,7 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	// as the console having missed the line.
 	if d <= edgeLockout {
 		n.log.Info("hold too short to register, as on the device",
-			"input", in, "held", d, "shortest", edgeLockout)
+			"input", in, "held", dur(d), "shortest", dur(edgeLockout))
 	}
 	end := now.Add(d)
 	r.press(now)
