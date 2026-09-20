@@ -118,7 +118,8 @@ func (n *Node) device(now time.Time) {
 	n.pollInputs(now)
 	n.applyPowerMode(now)
 	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
-		restful(w) && n.leds.Animation() == w && n.power.takeCharger() {
+		restful(w) && n.leds.Animation() == w {
+		n.power.takeCharger()
 		// On the charger: the ring runs the powerup animation again, which
 		// is what power_conn_new does once v_in has settled. It is a timed
 		// animation, so it goes on only over a strip that is resting —

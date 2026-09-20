@@ -229,7 +229,10 @@ const maxPlausibleVolts = 4.4
 func (p *Power) startRun(now time.Time) {
 	p.sleptMs, p.awakeMs, p.maxVolts = 0, 0, 0
 	p.lastTick = now
-	p.chargeSince, p.chargeShown = time.Time{}, false
+	// The charger is not touched: it is a thing in the world rather than
+	// a counter, and charging() sets chargeShown while the device is down
+	// precisely so the ring is not replayed when it comes back on a cable
+	// that never moved.
 }
 
 // Mode is the power mode a status frame carries.
@@ -336,11 +339,11 @@ const chargeAnnounce = 30 * time.Second
 // takeCharger spends this connection's one showing of the ring. It is
 // separate from charging so that the decision to draw and the record of
 // having drawn cannot come apart: a caller that asks and then does not
-// draw would otherwise lose the animation for the whole connection.
-func (p *Power) takeCharger() bool {
-	p.chargeShown = true
-	return true
-}
+// draw would otherwise lose the animation for the whole connection. It
+// is called once the caller has decided to draw, not as part of
+// deciding — it cannot refuse, and a condition that cannot fail reads
+// like one that can.
+func (p *Power) takeCharger() { p.chargeShown = true }
 
 // sleep accounts for the time between now and the next thing the device
 // has to do. It returns how long a real Totem would have slept: zero when
@@ -351,7 +354,13 @@ func (p *Power) sleep(now, next time.Time) time.Duration {
 	if elapsed < 0 {
 		elapsed = 0
 	}
-	if next.IsZero() || p.holdSleep || p.off {
+	if p.off {
+		// Neither asleep nor awake: the driver keeps polling so the power
+		// button works, and booking that as time awake made a device that
+		// had been switched off all day report a duty cycle for it.
+		return 0
+	}
+	if next.IsZero() || p.holdSleep {
 		p.awakeMs += elapsed.Milliseconds()
 		return 0
 	}

@@ -37,10 +37,11 @@ func (n *Node) State(boots uint32) store.State {
 		// the sector, which is what `store` prints.
 		LearnedMaxVolts: n.power.LearnedMaxVolts(),
 	}
+	// No cap here: n.order cannot hold more than maxBonds, which is half
+	// of store.MaxPeers, so a limit at this end could never bind and
+	// would only send a reader looking for a truncation that never
+	// happens.
 	for _, mac := range n.order {
-		if len(st.Peers) == store.MaxPeers {
-			break
-		}
 		p := n.peers[mac]
 		ps := store.PeerState{
 			MAC:     [6]byte(mac),
@@ -75,6 +76,12 @@ func (n *Node) State(boots uint32) store.State {
 // which is what happens when a board is reflashed for a different one.
 func (n *Node) Restore(st store.State, now time.Time) []error {
 	var errs []error
+	// A record that carries nothing at all is the absence of settings,
+	// not a set of them: the bonds, the brightness and the reading below
+	// are all worth applying from a real record, and none of them is
+	// worth applying from a blank one.
+	empty := st.Name == "" && st.ColorID == 0 && st.Brightness == 0 &&
+		!st.SOSMuted && len(st.Peers) == 0
 	for _, p := range st.Peers {
 		if err := n.AddBond(p.MAC, p.Name, now); err != nil {
 			errs = append(errs, err)
@@ -125,13 +132,13 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if st.Brightness > 0 {
 		n.leds.SetBrightness(float64(st.Brightness) / 255)
 	}
-	// The name comes back too. State saves it, so a Restore that ignored
-	// it left the `store open` path reading the saved name off the flash
-	// and then writing the default one straight back over it — the name
-	// gone for good, on the one path that exists to recover it. The boot
-	// path only worked because the driver reads it into Config before
-	// New ever runs.
-	if name := store.SanitizeName(st.Name); name != "" {
+	// The name comes back, unless this device was built with one. The
+	// board takes `-X main.name=` over the saved name on purpose, and
+	// restore() runs straight after New — so assigning unconditionally
+	// put the old name back and then saved it again, and a reflash with
+	// a new name never took effect. DefaultName is not a choice anyone
+	// made, so a device still carrying it yields to the record.
+	if name := store.SanitizeName(st.Name); name != "" && n.cfg.Name == DefaultName(n.cfg.MAC) {
 		n.cfg.Name = name
 	}
 	// Neither the sleep total nor the learned maximum is put back. Both
@@ -140,20 +147,28 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// its own firmware never does. They are saved so that whoever reads
 	// the sector can see what the device last said, and the pack is
 	// measured again on the first poll.
-	// A muted alarm stays muted: someone silenced it, and a power cut is
-	// not them changing their mind.
-	n.sosMuted = st.SOSMuted
-	// The crystal's own colour comes off the same sector as the peers',
-	// so it gets the same check. 0 is red, which is also the default, so
-	// there is nothing to tell apart there.
-	c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
-	n.cfg.ColorID = int8(c)
-	n.leds.SetDefaultColor(c)
-	// A reading taken with what was just restored: the learned maximum
-	// changes what a voltage means, and until the next poll the battery
-	// percentage would still be the one worked out without it — which
-	// `status`, a status frame and the OTA gate would all use.
-	// A reading, and the mode that follows from it: a device restoring
+	// The alarm's mute and the crystal's colour come from a record that
+	// says something. `store open` on a sector that is empty or
+	// unreadable restores a zero State, and taking that at face value
+	// un-muted an alarm and turned the crystal red — settings the
+	// operator had chosen on a device that had not saved them yet.
+	//
+	// A muted alarm otherwise stays muted: someone silenced it, and a
+	// power cut is not them changing their mind.
+	if empty {
+		n.log.Info("nothing saved to restore; keeping what the device is running with")
+	} else {
+		n.sosMuted = st.SOSMuted
+		// The crystal's own colour comes off the same sector as the
+		// peers', so it gets the same check. 0 is red, which is also the
+		// default, so there is nothing to tell apart there.
+		c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
+		n.cfg.ColorID = int8(c)
+		n.leds.SetDefaultColor(c)
+	}
+	// A reading, and the mode that follows from it, whatever the record
+	// said — this is the node coming into step with its own sensors, not
+	// a setting. A device restoring
 	// its settings at boot has not polled yet, so without this it reports
 	// power mode normal until the first poll — and a device coming up on
 	// a pack below the cutoff has to power down rather than report that

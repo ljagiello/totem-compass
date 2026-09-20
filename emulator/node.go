@@ -663,11 +663,12 @@ func (n *Node) period() time.Duration {
 // scheduleWindow arms the next radio window (EspConn.communicate_v2 and
 // radio_timer): wall-clock aligned, transmitting 75 ms after the slot.
 func (n *Node) scheduleWindow(now time.Time) {
-	period := n.period()
 	var start time.Time
 	if n.clockSet {
+		// period() walks every bonded peer, and the other branch does not
+		// want it.
 		w := n.wall(now).UnixMilli()
-		p := period.Milliseconds()
+		p := n.period().Milliseconds()
 		start = now.Add(time.Duration(p-w%p) * time.Millisecond)
 	} else {
 		start = n.lastTX.Add(noSatPeriod)
@@ -1376,7 +1377,11 @@ func distance(lat1, lon1, lat2, lon2 float32) float64 {
 	φ1, φ2 := float64(lat1)*math.Pi/180, float64(lat2)*math.Pi/180
 	dφ, dλ := φ2-φ1, float64(lon2-lon1)*math.Pi/180
 	a := math.Sin(dφ/2)*math.Sin(dφ/2) + math.Cos(φ1)*math.Cos(φ2)*math.Sin(dλ/2)*math.Sin(dλ/2)
-	return 2 * r * math.Asin(math.Sqrt(a))
+	// Clamped: for two points near opposite sides of the world, rounding
+	// can leave a just above 1, and Asin of that is NaN — which spreads
+	// into the mesh delay (where int(NaN) is implementation-defined) and
+	// into furthestPeer, where the builtin max carries it to every peer.
+	return 2 * r * math.Asin(math.Sqrt(min(a, 1)))
 }
 
 // ---- Smart Group client ------------------------------------------------------

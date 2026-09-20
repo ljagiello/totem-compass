@@ -414,6 +414,10 @@ func (c *Client) writer() {
 				break
 			}
 			r := c.queue[0]
+			// The vacated slot is cleared: the queue is reused in place, so
+			// leaving the request there keeps its frame's bytes reachable
+			// through the backing array until an append happens to grow it.
+			c.queue[0] = writeReq{}
 			c.queue = c.queue[1:]
 			if r.result == nil {
 				// The record can be repeated while this ack is still on the

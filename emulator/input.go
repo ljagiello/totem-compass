@@ -201,7 +201,7 @@ func (r *recogniser) poll(now time.Time) []Gesture {
 	}
 	// A tap count is only decided once the finger is up: a press that is
 	// still down may yet become a double tap.
-	if !r.down && r.taps > 0 && now.Sub(r.lastRelease) >= multiTapWindow {
+	if r.taps > 0 && now.Sub(r.lastRelease) >= multiTapWindow {
 		switch r.taps {
 		case 1:
 			out = append(out, SingleTap)

@@ -325,3 +325,34 @@ func TestSanitizeName(t *testing.T) {
 		}
 	}
 }
+
+// TestAnEmptyRecordIsRefused: Load reads "nothing saved" off a payload
+// with nothing in it, so a save with nothing in it reported success and
+// left every reader — and the next scan — believing the sector had never
+// held anything. The settings that were there were gone and nobody was
+// told.
+func TestAnEmptyRecordIsRefused(t *testing.T) {
+	sec := newMemSector(512)
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("the settings that were there")); err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save(nil); !errors.Is(err, ErrEmptyRecord) {
+		t.Errorf("saving nothing returned %v, want %v", err, ErrEmptyRecord)
+	}
+	got, err := j.Load()
+	if err != nil {
+		t.Fatalf("after the refused save: %v", err)
+	}
+	if string(got) != "the settings that were there" {
+		t.Errorf("the record became %q", got)
+	}
+	// And a fresh scan of the same sector says the same.
+	got, err = mustReopen(t, sec).Load()
+	if err != nil || string(got) != "the settings that were there" {
+		t.Errorf("reopened: %q, %v", got, err)
+	}
+}

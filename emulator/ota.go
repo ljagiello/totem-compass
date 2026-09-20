@@ -350,6 +350,11 @@ func (n *Node) Update(now time.Time) error {
 	// say so — never because it happens to report zeroes, which a failed
 	// reading and a dead cell also do, and those are the cases the gate
 	// exists for.
+	// A reading taken now, not whatever the last poll left: a driver that
+	// polls rarely, or a loop stalled by a flash erase, would otherwise
+	// have the gate decide on a battery from seconds ago — and seconds
+	// ago is what the gate exists not to reboot on.
+	n.read(now)
 	b := n.sensors.Battery
 	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))

@@ -18,6 +18,7 @@ package emulator
 import (
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 )
@@ -422,6 +423,13 @@ func (l *LEDs) SetDial(deg int16, c Color) {
 
 // SetProgress sets the OTA download's share, 0 to 1.
 func (l *LEDs) SetProgress(f float64) {
+	// NaN survives min and max — every comparison with it is false — and
+	// would reach the uint8 conversion in scale(), which Go leaves
+	// implementation-defined. Nothing is a safer share than something
+	// that is not a number.
+	if math.IsNaN(f) {
+		return
+	}
 	if p := min(max(f, 0), 1); p != l.progress {
 		l.progress = p
 		l.redraw()
@@ -446,6 +454,11 @@ func (l *LEDs) Brightness() float64 { return l.brightness }
 // SetBrightness puts the scale back to a level the device was left at,
 // which is what a saved setting restores after a reboot.
 func (l *LEDs) SetBrightness(f float64) {
+	// See SetProgress: a NaN would go through min and max untouched and
+	// then into every pixel.
+	if math.IsNaN(f) {
+		return
+	}
 	if b := min(max(f, 0), 1); b != l.brightness {
 		l.brightness = b
 		l.redraw()

@@ -53,6 +53,9 @@ var (
 	// ErrEmpty means the sector holds no record yet: a first boot, or the
 	// sector right after an erase.
 	ErrEmpty = errors.New("store: no saved state")
+	// ErrEmptyRecord is a save with nothing in it, which the journal
+	// cannot tell apart from no save at all.
+	ErrEmptyRecord = errors.New("store: a record must carry something")
 	// ErrTooLarge means the payload does not fit a record.
 	ErrTooLarge = errors.New("store: state too large")
 )
@@ -150,6 +153,14 @@ func (j *Journal) Torn() int { return j.torn }
 // Save appends the state. When the sector has no room it erases and starts
 // again, so a save costs an erase only once a sector's worth of them.
 func (j *Journal) Save(p []byte) error {
+	// Nothing to save is not a save. Load reads "no saved state" off a
+	// payload with nothing in it, so writing one reported success and
+	// left every reader — and the next scan of the sector — believing it
+	// had never held anything: the settings that were there gone, and
+	// nobody told.
+	if len(p) == 0 {
+		return ErrEmptyRecord
+	}
 	if len(p) > MaxRecord {
 		return fmt.Errorf("%w: %d bytes, the record holds %d", ErrTooLarge, len(p), MaxRecord)
 	}

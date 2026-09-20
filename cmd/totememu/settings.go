@@ -84,8 +84,11 @@ func (s *settings) restore(n *emulator.Node, now time.Time) {
 		// a different Totem and the old bond is being dropped.
 		s.log.Warn("saved bond not restored", "err", err)
 	}
-	if len(s.state.Peers) > 0 {
-		s.log.Info("bonds restored", "peers", len(s.state.Peers))
+	// What came back, not what was in the record: a board reflashed for a
+	// different Totem refuses every saved bond, and saying three were
+	// restored beside three refusals is the opposite of a report.
+	if got := n.BondCount(); got > 0 {
+		s.log.Info("bonds restored", "peers", got, "saved", len(s.state.Peers))
 	}
 }
 
