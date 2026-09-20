@@ -38,8 +38,9 @@ typedef int (*totem_rom_erase_t)(uint32_t sector);
 typedef int (*totem_rom_read_status_t)(void *chip, uint32_t *status);
 typedef int (*totem_rom_write_status_t)(void *chip, uint32_t status);
 typedef int (*totem_rom_chip_t)(void *chip);
-// Cache_Read_Disable_rom, Cache_Flush_rom and Cache_Read_Enable_rom all
-// take the CPU number.
+// Cache_Read_Disable_rom and Cache_Read_Enable_rom both take the CPU
+// number. There is no third: the flush is deliberately absent, for the
+// reason at the top of this file.
 typedef void (*totem_cache_t)(int cpu);
 
 typedef struct {

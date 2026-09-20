@@ -176,8 +176,11 @@ arrive: the pairing breathe, the fill when a peer bonds, the countdown
 when one is deleted, the SOS blink, the demi-god flash, the white 30%
 progress ring of a download (`PROGRESS_RGB`) and the orange fill of a
 failure (`ERROR_RGB`). The charger going in replays the power-up ring, as
-`power_conn_new` does once `v_in` has read high three samples running — a
-contact that bounces on the way into the socket does not set it off. At
+`power_conn_new` does once `v_in` has read high for three 100 ms samples
+— a contact that bounces on the way into the socket does not set it off,
+and neither does a poll rate, because the wait is 300 ms of clock rather
+than a count of polls. It only goes on over a resting ring: plugging in
+during an alarm, a pairing window or an update leaves those showing. At
 rest the ring is the compass: a lit pixel, with
 its neighbours feathered, pointing at the bonded Totem, in the colour that
 peer was given when it bonded (`shuffle_bond_colors`).
@@ -261,8 +264,12 @@ The update client runs the firmware's exchange against
 `api.totemportal.com`: POST the release poll, GET `contents.json`, pick the
 `.bin` (or the `.tgz` for a preview), read the version out of the name
 between `_v` and the extension, download it with the progress ring
-running. The battery gate comes first, as `Battery too low for OTA update`
-does.
+running. A device that has switched itself off is refused first — there is
+no rebooting a device that has already stopped — and then the battery
+gate, as `Battery too low for OTA update` does. A board wired without a
+power chip says so, rather than being read as flat: a reading of 0 V and
+0% is also what a dead cell and a failed ADC report, and those two are
+exactly what the gate is for.
 
 The emulator stops before writing a slot: it has one image, and losing it
 would take the board off the mesh. Everything up to that point is real,

@@ -141,13 +141,26 @@ func (r *recogniser) press(now time.Time) {
 
 // release reports the finger lifted, and returns a tap gesture once the
 // multi-tap window closes. A press that already fired a hold ends silently.
+//
+// A release always ends the press, even one inside the edge lockout. The
+// lockout is there to swallow contact bounce, and swallowing the release
+// with it is what a bouncing button actually produces: the recogniser
+// would stay down with nobody touching it, and 800 ms later poll would
+// report a hold no one made — on the power button, a device that switches
+// itself off; on SOS, an alarm that starts by itself. The driver calls
+// this straight off a GPIO edge, so the pair arrives exactly that way.
 func (r *recogniser) release(now time.Time) {
-	if !r.down || now.Sub(r.lastEdge) < edgeLockout {
+	if !r.down {
 		return
 	}
+	bounce := now.Sub(r.lastEdge) < edgeLockout
 	r.down, r.lastEdge = false, now
 	if r.held || r.longHeld {
 		r.taps = 0
+		return
+	}
+	if bounce {
+		// Ended, but not a tap: nothing a finger did that fast is one.
 		return
 	}
 	r.taps++

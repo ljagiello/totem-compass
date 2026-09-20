@@ -47,6 +47,13 @@ type Battery struct {
 	Charging bool
 	// Low is modes.power_level 2, below about 3.45 V.
 	Low bool
+	// Present is whether these numbers came from a power chip at all. A
+	// board with none reports zeroes, and so does a chip whose reading
+	// has failed or a cell that really is flat — but those two must not
+	// be treated alike, and a zero cannot tell them apart. Anything that
+	// reads a battery sets this; only a board wired without one leaves
+	// it false.
+	Present bool
 }
 
 // SensorSource reads the sensors. Both the simulator and a real board's
@@ -297,7 +304,7 @@ func (s *Sim) battery(now time.Time) Battery {
 		pct -= float64(s.battFrom) * now.Sub(s.battAt).Seconds() / s.cfg.Life.Seconds()
 	}
 	p := int8(min(max(pct, 0), 100))
-	return Battery{Volts: voltsFor(p), Percent: p, Charging: s.cfg.Charging, Low: p <= 10}
+	return Battery{Volts: voltsFor(p), Percent: p, Charging: s.cfg.Charging, Low: p <= 10, Present: true}
 }
 
 // voltsFor maps a charge level back to a cell voltage. It walks the same
@@ -401,7 +408,7 @@ func (f *staticSensors) SetFlat(flat bool) {
 // SetBattery sets the charge level and whether it is charging. A board
 // with no power chip holds it there.
 func (f *staticSensors) SetBattery(percent int8, charging bool, _ time.Time) {
-	f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10}
+	f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10, Present: true}
 }
 
 // SetClock hands the fixed receiver the wall time, which then runs on.

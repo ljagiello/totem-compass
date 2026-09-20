@@ -77,7 +77,12 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 		// can point at it before it has been heard from again — which is
 		// what it was saved for.
 		peer := n.peers[mesh.MAC(p.MAC)]
-		if p.Lat != 0 || p.Lon != 0 {
+		// The same guard every frame off the air gets. These four bytes
+		// came off a flash sector, which a torn write, a bad block or a
+		// different firmware's layout can leave saying anything at all —
+		// and NaN != 0, so the zero check alone lets it through, into the
+		// distance, the compass dial and the relay decision.
+		if (p.Lat != 0 || p.Lon != 0) && livePosition(p.Lat, p.Lon) {
 			peer.hasCoords, peer.lat, peer.lon = true, p.Lat, p.Lon
 			// The saved second is a wall time and coordsAt is in the
 			// device's base, so it can only be put back once this node has
@@ -91,8 +96,11 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 				peer.coordsAt = now.Add(time.Unix(p.LastSeenUnix, 0).Sub(n.wall(now)))
 			}
 		}
-		if p.ColorID != 0 {
-			peer.color = Color(p.ColorID)
+		// Only a colour in the palette: an id off the flash that is not
+		// one renders as an unlit pixel, so the peer would be given a
+		// dial point that cannot be seen.
+		if c := Color(p.ColorID); c != 0 && c.InPalette() {
+			peer.color = c
 		}
 	}
 	if st.Brightness > 0 {

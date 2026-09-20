@@ -141,6 +141,9 @@ var (
 	ErrBadContents = errors.New("ota: contents.json does not parse")
 	// ErrBadRelease means the release object is missing what an update needs.
 	ErrBadRelease = errors.New("ota: the release is not usable")
+	// ErrPoweredDown means the device has switched itself off, which is no
+	// state to write a boot slot and reset from.
+	ErrPoweredDown = errors.New("ota: the device is powered down")
 )
 
 // OTA runs one update at a time.
@@ -161,6 +164,17 @@ func newOTA() *OTA { return &OTA{} }
 
 // State is where the last update got to.
 func (o *OTA) State() OTAState { return o.state }
+
+// Running reports whether an update is in flight — anywhere between
+// asking the server and the reboot. The ring belongs to the update for
+// all of it, not only while bytes are arriving.
+func (o *OTA) Running() bool {
+	switch o.state {
+	case OTAChecking, OTADownloading, OTAVerifying, OTAInstalling:
+		return true
+	}
+	return false
+}
 
 // Release is what the server said this device should be running.
 func (o *OTA) Release() Release { return o.release }
@@ -303,15 +317,22 @@ func (n *Node) Update(now time.Time) error {
 		n.unblockTouch(blocked)
 		return err
 	}
-	// The battery gate comes first: an update that reboots a device with
-	// a flat battery is how a device does not come back.
-	// 0% is the flattest reading there is, so it belongs inside the gate.
-	// A board with no power chip is a different matter: it reports 0% and
-	// 0 V because nothing has told it otherwise, and the power subsystem
-	// reads that as "no reading" too, so an update is not barred for it.
+	// A device that has powered itself down is not a device to reboot
+	// into a new image: its radio windows have stopped, and on a board
+	// this would write a boot slot and reset.
+	if n.power.Off() {
+		return fail(ErrPoweredDown)
+	}
+	// The battery gate comes next: an update that reboots a device with a
+	// flat battery is how a device does not come back. 0% is the flattest
+	// reading there is, so it belongs inside the gate, and so does Low
+	// from a charger chip that reports no percentage at all. Only a board
+	// with no power chip is exempt, and it says so itself rather than
+	// being guessed at from a pair of zeroes — a failed reading and a
+	// dead cell produce those too, and they are the case the gate exists
+	// for.
 	b := n.sensors.Battery
-	hasReading := b.Volts > 0 || b.Percent > 0
-	if hasReading && b.Percent < otaMinPct && !b.Charging {
+	if b.Present && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
 	}
 	if n.cfg.OTATransport == nil {

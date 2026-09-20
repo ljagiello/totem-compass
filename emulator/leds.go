@@ -78,6 +78,10 @@ var palette = [...]struct {
 	{"hot_pink", RGB{255, 0, 128}},
 }
 
+// InPalette reports whether the colour is one of the thirteen. An id off
+// the air or off the flash is a number, not a promise.
+func (c Color) InPalette() bool { return c >= 0 && int(c) < len(palette) }
+
 // RGB is the colour's pixel value.
 func (c Color) RGB() RGB {
 	if c < 0 || int(c) >= len(palette) {
@@ -225,7 +229,15 @@ type LEDs struct {
 	until time.Time
 	// frame counts the frames played, which the effects step through.
 	frame int
-	next  time.Time
+	// next is when the next frame is due, and paces the redraw. resting
+	// is whether anyone should be woken for it: a picture that does not
+	// change still has a frame deadline, so Tick knows not to redraw
+	// before it, but nothing has to be woken up to watch it. The two were
+	// one field, and zeroing next to mean "do not wake" turned the pacing
+	// off with it — now.Before(the zero time) is never true, so every
+	// call redrew the whole strip.
+	next    time.Time
+	resting bool
 
 	// brightness is GLOBAL_BRT, 0 to 1. A tap of the power button drops
 	// it and another restores it (toggle_brightness).
@@ -275,7 +287,7 @@ func openEnded(a Animation) bool {
 // calls for — an alarm, a pairing, a search for a fix — rather than the
 // strip trying to remember.
 func (l *LEDs) Play(a Animation, now time.Time) {
-	l.anim, l.start, l.frame, l.next = a, now, 0, now
+	l.anim, l.start, l.frame, l.next, l.resting = a, now, 0, now, false
 	switch a {
 	case AnimBoot:
 		l.until = now.Add(bootAnim)
@@ -315,10 +327,10 @@ func (l *LEDs) Dark(off bool, now time.Time) {
 		l.Play(AnimIdle, now)
 		l.fillRing(Off)
 		l.fillCrystal(Off)
-		l.next = time.Time{}
+		l.next, l.resting = time.Time{}, true
 		return
 	}
-	l.next = now
+	l.next, l.resting = now, false
 }
 
 // Animation is what is playing.
@@ -337,7 +349,7 @@ func (l *LEDs) SetDial(deg int16, c Color) {
 	if deg != l.dial || c != l.dialColor {
 		// The picture changed, so a frame is due even if the strip had
 		// gone quiet.
-		l.next = l.start
+		l.next, l.resting = l.start, false
 	}
 	l.dial, l.dialColor = deg, c
 }
@@ -367,7 +379,12 @@ func (l *LEDs) SetBrightness(f float64) {
 }
 
 // Next is when Tick next has a frame to draw.
-func (l *LEDs) Next() time.Time { return l.next }
+func (l *LEDs) Next() time.Time {
+	if l.resting {
+		return time.Time{}
+	}
+	return l.next
+}
 
 // Tick draws the frames due at now. It reports whether anything changed,
 // so a driver can skip writing an unchanged strip.
@@ -375,7 +392,7 @@ func (l *LEDs) Tick(now time.Time) bool {
 	if l.off {
 		// A powered-down device draws nothing: the pixels stay as Dark
 		// left them, and no frame is ever due.
-		l.next = time.Time{}
+		l.next, l.resting = time.Time{}, true
 		return false
 	}
 	if now.Before(l.next) {
@@ -392,15 +409,15 @@ func (l *LEDs) Tick(now time.Time) bool {
 	l.frame = max(int(now.Sub(l.start)/ledFrame), 0)
 	l.next = l.start.Add(time.Duration(l.frame+1) * ledFrame)
 	l.draw(now)
-	if l.anim == AnimIdle {
-		// Nothing is moving: the crystal holds its colour, and the ring
-		// is dark or holding one lit point at the peer. Asking for
-		// another frame would keep the device awake for a picture that
-		// does not change — and a Totem with someone to point at is the
-		// normal case, so this is where the sleep is won. SetDial asks
-		// for a frame when the bearing or the colour moves.
-		l.next = time.Time{}
-	}
+	// Resting when nothing is moving: the crystal holds its colour, and
+	// the ring is dark or holding one lit point at the peer. Waking for
+	// another frame would keep the device up for a picture that does not
+	// change — and a Totem with someone to point at is the normal case,
+	// so this is where the sleep is won. SetDial asks for a frame when
+	// the bearing or the colour moves. next keeps its deadline either
+	// way: it is what stops the strip being redrawn on every poll, which
+	// on the board is every few milliseconds.
+	l.resting = l.anim == AnimIdle
 	return true
 }
 

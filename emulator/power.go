@@ -156,12 +156,12 @@ type Power struct {
 	// holdSleep is set while something must not be interrupted, such as a
 	// GNSS clock sync ("Block sleep for GNSS RTC Sync").
 	holdSleep bool
-	// chargeRun counts the polls in a row that have seen the charger, and
+	// chargeSince is when the charger was first seen without a break, and
 	// chargeShown records that the powerup animation has already run for
 	// this connection. Compass.power_conn_new waits for v_in to read high
-	// three samples running before it plays it, so a contact that bounces
-	// on the way into the socket does not set it off.
-	chargeRun   int
+	// three 100 ms samples running before it plays it, so a contact that
+	// bounces on the way into the socket does not set it off.
+	chargeSince time.Time
 	chargeShown bool
 }
 
@@ -217,23 +217,36 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	return p.mode, p.mode != was
 }
 
-// chargeDebounce is how many polls in a row have to see the charger, as
-// power_conn_new's three 100 ms samples of v_in do.
-const chargeDebounce = 3
+// chargeDebounce is how long the charger has to read as connected before
+// the ring says so: power_conn_new's three 100 ms samples of v_in. It is
+// a length of time rather than a count of polls, because the poll rate is
+// not the sample rate — the board runs the loop every few milliseconds
+// and the console harness runs it when the next radio window comes round.
+const chargeDebounce = 300 * time.Millisecond
 
 // pluggedIn reports the single poll on which the charger has been there
 // long enough to show the battery level. The firmware launches
 // powerup_animation from power_conn_new at that point, the same animation
 // it plays at boot, so the ring reads as a battery gauge either way.
-func (p *Power) pluggedIn(b Battery) bool {
-	if !b.Charging || p.off {
-		p.chargeRun, p.chargeShown = 0, false
+//
+// It has side effects, which is why it is not exported and not named like
+// a question: the report is a one-shot, and taking it consumes it.
+func (p *Power) pluggedIn(b Battery, now time.Time) bool {
+	if !b.Charging {
+		p.chargeSince, p.chargeShown = time.Time{}, false
 		return false
 	}
-	if p.chargeRun < chargeDebounce {
-		p.chargeRun++
+	if p.off {
+		// Powered down, so nothing is drawn. The connection is not
+		// forgotten: the charger never left the socket, and coming back
+		// on should not replay the ring the power-up already played.
+		p.chargeShown = true
+		return false
 	}
-	if p.chargeShown || p.chargeRun < chargeDebounce {
+	if p.chargeSince.IsZero() {
+		p.chargeSince = now
+	}
+	if p.chargeShown || now.Sub(p.chargeSince) < chargeDebounce {
 		return false
 	}
 	p.chargeShown = true

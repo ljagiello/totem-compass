@@ -100,10 +100,16 @@ func (n *Node) device(now time.Time) {
 			n.leds.Play(AnimLowBattery, now)
 		}
 	}
-	if n.power.pluggedIn(n.sensors.Battery) {
+	if n.power.pluggedIn(n.sensors.Battery, now) {
 		// On the charger: the ring runs the powerup animation again, which
-		// is what power_conn_new does once v_in has settled.
-		n.leds.Play(AnimBoot, now)
+		// is what power_conn_new does once v_in has settled. It is a timed
+		// animation, so it goes on only over a strip that is resting —
+		// plugging in is the obvious thing to do during a download or an
+		// alarm, and neither should lose the ring for two seconds because
+		// of it.
+		if w := n.wantedAnimation(); restful(w) && n.leds.Animation() == w {
+			n.leds.Play(AnimBoot, now)
+		}
 		n.log.Info("charger connected", "volts", n.sensors.Battery.Volts,
 			"batt", n.sensors.Battery.Percent)
 	}
@@ -128,6 +134,13 @@ func (n *Node) device(now time.Time) {
 	}
 }
 
+// restful reports whether an animation is one the device shows because
+// nothing is happening, rather than because something is. Only over one
+// of these may a passing event — the charger going in — take the ring:
+// an alarm, a pairing window or an update in flight is the picture
+// someone is actually looking at.
+func restful(a Animation) bool { return a == AnimIdle || a == AnimGNSSSearch }
+
 // wantedAnimation is what the device's state calls for when nothing
 // timed is playing: an update in flight, then the alarm, then a pairing
 // window, then the search for a fix, then rest.
@@ -135,13 +148,14 @@ func (n *Node) wantedAnimation() Animation {
 	switch {
 	case n.power.Off():
 		return AnimIdle
-	case n.ota.State() == OTADownloading:
-		// An update drives the ring itself while it blocks the loop, but
-		// nothing enforces that a transport blocks: a poll that landed
-		// mid-download would otherwise wipe the progress ring.
-		return AnimOTA
 	case n.ota.State() == OTAChecking:
 		return AnimWiFi
+	case n.ota.Running():
+		// An update drives the ring itself while it blocks the loop, but
+		// nothing enforces that a transport blocks: a poll that landed
+		// anywhere between the download and the reboot would otherwise
+		// wipe the progress ring.
+		return AnimOTA
 	case n.cfg.SOS && !n.sosMuted:
 		return AnimSOS
 	case n.pairing:

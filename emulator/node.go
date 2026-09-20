@@ -247,7 +247,12 @@ func New(cfg Config, now time.Time) *Node {
 	if n.source == nil {
 		n.source = &staticSensors{s: Sensors{
 			Fix: cfg.Position, Orientation: cfg.Orientation, Azimuth: cfg.Heading,
-			Battery: Battery{Volts: cfg.BattVolts, Percent: cfg.BattPct},
+			// A board told nothing about its battery has no power chip:
+			// zeroes here are the absence of a reading, not a flat cell.
+			Battery: Battery{
+				Volts: cfg.BattVolts, Percent: cfg.BattPct,
+				Present: cfg.BattVolts > 0 || cfg.BattPct > 0,
+			},
 		}}
 	}
 	n.inputs = newInputs(now)
@@ -467,7 +472,12 @@ func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
 		// clears the clock once it is set, and every locate frame this
 		// node sent would carry an expiry 55 years in the past, which
 		// every peer with a real clock drops.
-		n.log.Warn("ignoring a peer's clock from before 2020",
+		//
+		// At debug: a peer whose own RTC never started broadcasts status
+		// every one to four seconds, and warning on each one would fill
+		// the log for as long as it is in range. On the board the rotate
+		// that follows holds the watchdog blocker.
+		n.log.Debug("ignoring a peer's clock from before 2020",
 			"src", p.Name, "wall", wall.UTC().Format(time.RFC3339))
 		return
 	}
@@ -992,12 +1002,14 @@ func (n *Node) meshTick(now time.Time) {
 	for _, mac := range n.order {
 		p := n.peers[mac]
 		n.updateStale(now, p)
-		if p.viaMesh && now.Sub(p.lastHeard) >= meshStaleHeard {
+		if p.viaMesh && now.Sub(p.lastHeard) >= meshStaleHeard &&
+			!now.Before(p.meshNext) && p.meshCount <= meshPeerLimit {
 			// A peer heard only through the mesh has gone quiet. Asking
-			// for it counts against the same throttle as any other ask:
-			// without that this path fired on every tick its group slot
-			// came round, which is every five seconds rather than the
-			// thirty MESH_SEND_FREQ_MS allows.
+			// for it counts against the same throttle as any other ask,
+			// which means reading meshNext here and not only writing it
+			// below: without that this path fired on every tick its group
+			// slot came round, which is every five seconds rather than
+			// the thirty MESH_SEND_FREQ_MS allows.
 			asked[mac] = true
 			send = true
 		}

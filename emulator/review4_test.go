@@ -5,6 +5,7 @@ package emulator
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -15,44 +16,103 @@ import (
 
 // TestChargerPlaysThePowerupAnimation: 'disconn_animation' is the task
 // name Compass.power_conn_new runs under, and what it does is wait for
-// v_in to read high three samples running and then launch
-// powerup_animation — the ring the device shows at boot. A contact that
-// bounces once on the way into the socket must not set it off.
+// v_in to read high three 100 ms samples running and then launch
+// powerup_animation — the ring the device shows at boot.
+//
+// The wait is a length of time, not a number of polls: the board runs its
+// loop every few milliseconds and this harness runs it when the next
+// radio window comes round, so counting polls made the debounce either
+// far too short or far too long depending on who was driving.
 func TestChargerPlaysThePowerupAnimation(t *testing.T) {
+	// poll drives the node the way a board does, in small steps, and
+	// reports whether the powerup ring started.
+	poll := func(h *harness, d time.Duration) bool {
+		played := false
+		for end := h.now.Add(d); h.now.Before(end); h.now = h.now.Add(5 * time.Millisecond) {
+			was := h.n.LEDs().Animation()
+			h.collect(h.n.Poll(h.now))
+			if was != AnimBoot && h.n.LEDs().Animation() == AnimBoot {
+				played = true
+			}
+		}
+		return played
+	}
+
+	// The lengths here are real ones, not chargeDebounce ± a margin:
+	// scaling the test with the constant is how a debounce of fifteen
+	// milliseconds passed a test meant to prove it was three hundred.
+	const (
+		bounce = 200 * time.Millisecond // a contact rattling into a socket
+		settle = 500 * time.Millisecond // long enough that it is plugged in
+	)
+	if chargeDebounce < bounce || chargeDebounce > settle {
+		t.Fatalf("chargeDebounce is %s; power_conn_new waits three 100 ms samples", chargeDebounce)
+	}
+
 	h := newHarness(t, nil)
 	h.advance(bootAnim + time.Second)
 	if got := h.n.LEDs().Animation(); got == AnimBoot {
 		t.Fatalf("the boot animation is still playing: %s", got)
 	}
 
-	// One poll on the charger is a bounce, not a connection.
+	// A contact that bounces on the way into the socket is not a
+	// connection, however many polls fall inside it.
 	if err := h.n.SetBattery(80, true, h.now); err != nil {
 		t.Fatal(err)
 	}
-	h.collect(h.n.Poll(h.now))
-	if got := h.n.LEDs().Animation(); got == AnimBoot {
-		t.Error("a single charging poll played the powerup animation")
+	if poll(h, bounce) {
+		t.Error("a bouncing contact played the powerup animation")
 	}
 	if err := h.n.SetBattery(80, false, h.now); err != nil {
 		t.Fatal(err)
 	}
-	h.collect(h.n.Poll(h.now))
+	if poll(h, 100*time.Millisecond) {
+		t.Error("letting go of the charger played the powerup animation")
+	}
 
-	// Settled on the charger, it plays once and only once.
+	// Settled on the charger, it plays once and stays played.
 	if err := h.n.SetBattery(80, true, h.now); err != nil {
 		t.Fatal(err)
 	}
-	played := 0
-	for i := 0; i < chargeDebounce+3; i++ {
-		was := h.n.LEDs().Animation()
-		h.collect(h.n.Poll(h.now))
-		if h.n.LEDs().Animation() == AnimBoot && was != AnimBoot {
-			played++
-		}
-		h.now = h.now.Add(100 * time.Millisecond)
+	if !poll(h, settle) {
+		t.Fatal("a settled charger never played the powerup animation")
 	}
-	if played != 1 {
-		t.Errorf("the powerup animation ran %d times on one connection, want 1", played)
+	h.advance(bootAnim + time.Second)
+	if poll(h, 2*time.Second) {
+		t.Error("the powerup animation played twice on one connection")
+	}
+}
+
+// TestChargerDoesNotStealTheRing: the powerup ring is a timed animation,
+// so once it starts nothing can put back what was underneath for two
+// seconds. Plugging in is the obvious thing to do during an update or an
+// alarm — the battery is low, that is why you reached for the cable — and
+// neither may lose the ring to it.
+func TestChargerDoesNotStealTheRing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		setup func(h *harness)
+		want  Animation
+	}{
+		{"an alarm", func(h *harness) { h.n.SetSOS(true) }, AnimSOS},
+		{"an update", func(h *harness) { h.n.ota.state = OTADownloading }, AnimOTA},
+	} {
+		h := newHarness(t, nil)
+		h.advance(bootAnim + time.Second)
+		tc.setup(h)
+		h.collect(h.n.Poll(h.now))
+		if got := h.n.LEDs().Animation(); got != tc.want {
+			t.Fatalf("%s: the ring shows %s before the charger, want %s", tc.name, got, tc.want)
+		}
+		if err := h.n.SetBattery(5, true, h.now); err != nil {
+			t.Fatal(err)
+		}
+		for end := h.now.Add(chargeDebounce + time.Second); h.now.Before(end); h.now = h.now.Add(5 * time.Millisecond) {
+			h.collect(h.n.Poll(h.now))
+			if got := h.n.LEDs().Animation(); got != tc.want {
+				t.Fatalf("%s: the charger put %s over it", tc.name, got)
+			}
+		}
 	}
 }
 
@@ -63,27 +123,39 @@ func TestChargerPlaysThePowerupAnimation(t *testing.T) {
 // reads that as "no reading". The gate has to agree with it, or such a
 // board could never update.
 func TestUpdateWithNoPowerChip(t *testing.T) {
-	// A real reading of 0% is still refused.
+	// A real reading below the limit is refused. It has to be above the
+	// low-voltage cutoff to be a battery case at all: a poll at 0% powers
+	// the device down, and then it is refused for that instead.
 	h := newHarness(t, nil)
-	if err := h.n.SetBattery(0, false, h.now); err != nil {
+	if err := h.n.SetBattery(3, false, h.now); err != nil {
 		t.Fatal(err)
 	}
 	h.collect(h.n.Poll(h.now))
-	if err := h.n.Update(h.now); err == nil {
-		t.Error("a flat battery did not stop the update")
-	} else if !strings.Contains(err.Error(), "battery") {
-		t.Errorf("refused for the wrong reason: %v", err)
+	if h.n.Power().Off() {
+		t.Fatal("3% powered the device down; pick a level above the cutoff")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("a flat battery was refused with %v, want %v", err, ErrBatteryLow)
 	}
 
-	// A board that reports nothing at all is not refused for its battery.
+	// A board with no power chip reports zeroes because nothing has told
+	// it otherwise, and says so — the gate reads that rather than
+	// guessing from the zeroes, which a failed reading also produces.
 	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 0, 0 })
 	h.collect(h.n.Poll(h.now))
-	if b := h.n.Sensors().Battery; b.Volts != 0 || b.Percent != 0 {
-		t.Fatalf("expected a board with no reading, got %+v", b)
+	if b := h.n.Sensors().Battery; b.Present {
+		t.Fatalf("expected a board with no power chip, got %+v", b)
 	}
-	err := h.n.Update(h.now)
-	if err != nil && strings.Contains(err.Error(), "battery") {
-		t.Errorf("a board with no power chip was refused for its battery: %v", err)
+	if err := h.n.Update(h.now); errors.Is(err, ErrBatteryLow) {
+		t.Error("a board with no power chip was refused for its battery")
+	}
+
+	// A device that has switched itself off is not one to reboot into a
+	// new image.
+	h = newHarness(t, nil)
+	h.n.PowerOff(h.now)
+	if err := h.n.Update(h.now); !errors.Is(err, ErrPoweredDown) {
+		t.Errorf("a powered-down device was refused with %v, want %v", err, ErrPoweredDown)
 	}
 }
 

@@ -647,7 +647,13 @@ func TestMeshAskIsThrottledOnEveryPath(t *testing.T) {
 	h.advance(meshStaleHeard + time.Second)
 	h.take()
 
-	h.advance(2 * time.Minute)
+	// Ten minutes, so the throttled and unthrottled rates are far enough
+	// apart to tell apart: at one ask every thirty seconds that is twenty,
+	// and on the unthrottled path — every five-second group slot — it was
+	// thirty. Two minutes could not distinguish them, because six was both
+	// the ceiling this asserted and exactly what the bug produced.
+	const run = 10 * time.Minute
+	h.advance(run)
 	var asks int
 	for _, s := range h.take() {
 		if m, ok := s.msg.(mesh.Locate); ok && m.Origin == self && m.ReplyRequested {
@@ -657,10 +663,9 @@ func TestMeshAskIsThrottledOnEveryPath(t *testing.T) {
 	if asks == 0 {
 		t.Fatal("the node never asked the mesh about a peer it had lost")
 	}
-	// Two minutes at one ask per thirty seconds is four, with a little
-	// room for where the window falls.
-	if asks > 6 {
-		t.Errorf("%d mesh requests in two minutes, want about one every %s", asks, meshSendFreq)
+	if want := int(run/meshSendFreq) + 2; asks > want {
+		t.Errorf("%d mesh requests in %s, want at most %d — one every %s",
+			asks, run, want, meshSendFreq)
 	}
 }
 
