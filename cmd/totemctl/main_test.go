@@ -562,24 +562,33 @@ func TestBadArgumentsFailBeforeConnecting(t *testing.T) {
 	}
 }
 
-// FuzzParseRawFrame checks the hex parser behind `totemctl raw`.
 // TestCleanHex: hex is pasted from documents that hold non-breaking and
-// thin spaces, and separated with colons.
+// thin spaces, and separated with colons or dashes. Frames and MACs go
+// through the same cleaner, so the same paste works in every command —
+// they used to disagree about the Unicode spaces.
 func TestCleanHex(t *testing.T) {
 	for _, tt := range []struct{ in, want string }{
 		{"01 01", "0101"},
 		{"00:01:01:00", "00010100"},
+		{"00-01-01-00", "00010100"},
 		{"01\u00a001", "0101"},   // a non-breaking space
 		{"01\u200601", "0101"},   // a thin space
 		{"01\t01\n02", "010102"}, // tabs and newlines
 		{"0101", "0101"},
 	} {
-		if got := cleanHex(tt.in); got != tt.want {
-			t.Errorf("cleanHex(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := protocol.CleanHex(tt.in); got != tt.want {
+			t.Errorf("CleanHex(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+	// And a MAC written the same way parses, which it did not before.
+	for _, in := range []string{"a1:b2:c3:d4:e5:f6", "a1\u00a0b2c3d4e5f6", "a1-b2-c3-d4-e5-f6"} {
+		if _, err := protocol.ParseMAC(in); err != nil {
+			t.Errorf("ParseMAC(%q): %v", in, err)
 		}
 	}
 }
 
+// FuzzParseRawFrame checks the hex parser behind `totemctl raw`.
 func FuzzParseRawFrame(f *testing.F) {
 	for _, s := range []string{"01 01", "0101", "00:01:01:00", "01", "zz", "", "0 1 0 1", "ABCDEF"} {
 		f.Add(s, false)
@@ -594,7 +603,7 @@ func FuzzParseRawFrame(f *testing.F) {
 		if err != nil {
 			return
 		}
-		clean := strings.ToLower(cleanHex(strings.Join(args, "")))
+		clean := strings.ToLower(protocol.CleanHex(strings.Join(args, "")))
 		if len(fr.Bytes) < 2 || hex.EncodeToString(fr.Bytes) != clean {
 			t.Fatalf("parseRawFrame(%q) = % x, want the bytes of %q", s, fr.Bytes, clean)
 		}

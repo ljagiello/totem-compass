@@ -208,6 +208,10 @@ type Node struct {
 	// sosMuted is is_sos_mute: the alarm still goes out, the device just
 	// stops blinking about it.
 	sosMuted bool
+	// saidBondLimit records that the full bond list has been reported, so
+	// a Totem pairing next to a full device does not fill the log.
+	// Cleared whenever the list changes.
+	saidBondLimit bool
 	// warnedClock is the peers already reported for broadcasting a clock
 	// from before 2020, so each is said once rather than every few
 	// seconds for as long as it is in range. Keyed by address rather than
@@ -482,6 +486,13 @@ func (n *Node) read(now time.Time) {
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
+	// A real power chip reports a cell voltage; the percentage is what
+	// get_batt_pct makes of it. A source that gives one and not the other
+	// gets the other here, so every reader — the status frame, the power
+	// mode, the OTA gate — sees the same battery.
+	if b := &n.sensors.Battery; !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
+		b.Percent = battPctFor(b.Volts)
+	}
 	// n.fix(), not the raw reading: a receiver whose position this node
 	// refuses has not earned its clock either, and that clock would be
 	// advertised to every peer and would re-slot every radio window.
@@ -543,6 +554,10 @@ func (n *Node) adoptClock(now time.Time, src mesh.MAC, p mesh.Peer) {
 		// node sent would carry an expiry 55 years in the past, which
 		// every peer with a real clock drops.
 		//
+		// The ceiling as well: a clock past what the int32 can hold is no
+		// more usable than one before 2020, and the message has to say
+		// which it was rather than name the floor for both.
+		//
 		// Once per name: a peer whose own RTC never started broadcasts
 		// status every one to four seconds, and warning on each would
 		// fill the log for as long as it is in range — on the board the
@@ -555,8 +570,9 @@ func (n *Node) adoptClock(now time.Time, src mesh.MAC, p mesh.Peer) {
 			// line whose src is a name fails to parse and is dropped
 			// whole — so the one warning that explains why a Totem never
 			// picks up a clock would never reach the person watching.
-			n.log.Warn("ignoring a peer's clock from before 2020",
-				"mac", src, "name", p.Name, "wall", wall.UTC().Format(time.RFC3339))
+			n.log.Warn("ignoring a peer's clock: outside what a peer frame can carry",
+				"mac", src, "name", p.Name, "wall", wall.UTC().Format(time.RFC3339),
+				"earliest", minClock.Format("2006"), "latest", maxClock.Format("2006"))
 		}
 		return
 	}
@@ -664,13 +680,17 @@ func (n *Node) sendOutbox(now time.Time) {
 		return
 	}
 	if len(n.order) > 0 {
-		st := n.status(now, mesh.PeerStatus, false)
+		// Encoded once and sent to each peer: the same bytes go to all of
+		// them, and with eight bonds and a far peer this ran sixteen
+		// marshals and sixteen 108-byte allocations every window, on a
+		// heap of a few hundred kilobytes.
+		st := mustMarshal(n.status(now, mesh.PeerStatus, false))
 		for _, mac := range n.order {
-			n.send(mac, st)
+			n.sendRaw(mac, st)
 		}
 		if n.furthestPeer() > farPeerM {
 			for _, mac := range n.order {
-				n.send(mac, st)
+				n.sendRaw(mac, st)
 			}
 		}
 	}
@@ -746,7 +766,14 @@ func (n *Node) startPairing(now time.Time) {
 	case n.pairing:
 		return
 	case len(n.peers) >= maxBonds:
-		n.log.Warn("cannot have more than 8 bonds")
+		// Once until the bond list changes: onPeer calls this for every
+		// bond broadcast while a peer is pairing, and pair_nearby repeats
+		// every 50-99 ms for six seconds — eighty identical lines on a
+		// console that has frames to carry.
+		if !n.saidBondLimit {
+			n.saidBondLimit = true
+			n.log.Warn("cannot have more than 8 bonds")
+		}
 		return
 	}
 	n.pairing = true // modes.bonding_start
@@ -809,6 +836,8 @@ func (n *Node) addPeer(mac mesh.MAC) *peer {
 func (n *Node) deletePeer(mac mesh.MAC) {
 	delete(n.peers, mac)
 	n.order = slices.DeleteFunc(n.order, func(m mesh.MAC) bool { return m == mac })
+	// There is room again, so the next time there is not is worth saying.
+	n.saidBondLimit = false
 }
 
 // ForgetPeers drops every bond without telling anyone, as a factory
@@ -955,6 +984,20 @@ func (n *Node) onBond(now time.Time, rx Received, m mesh.Peer) (bonded, done boo
 
 // ---- mesh ---------------------------------------------------------------------
 
+// locateExpiry is when a locate frame stops being worth relaying, as an
+// int32 of Unix seconds — the field the frame carries, so the lifetime
+// has to be added inside it. Near the ceiling the sum wraps, and a
+// negative expiry is one every receiver reads as long past, so the flood
+// would die at the first hop rather than travel. Capped instead: an
+// expiry at the ceiling says "as long as this format can mean".
+func locateExpiry(wall time.Time) int32 {
+	sec := wall.Unix()
+	if sec > math.MaxInt32-mesh.LocateLifetimeSec {
+		return math.MaxInt32
+	}
+	return int32(sec) + mesh.LocateLifetimeSec
+}
+
 // locate is Messages.gen_mesh_msg.
 func (n *Node) locate(now time.Time, request bool, uid uint16) mesh.Locate {
 	if uid == 0 {
@@ -963,7 +1006,7 @@ func (n *Node) locate(now time.Time, request bool, uid uint16) mesh.Locate {
 	l := mesh.Locate{
 		Origin: n.cfg.MAC, PosAccuracyM: -1, SOS: n.cfg.SOS, UID: uid, ReplyRequested: request,
 		MinRSSI: mesh.DefaultMinRSSI, MinDistM: -1, MaxDistM: -1, MaxHops: mesh.DefaultMaxHops,
-		Expiry: int32(n.wall(now).Unix()) + mesh.LocateLifetimeSec, RelayMinDistM: mesh.DefaultRelayMinDist,
+		Expiry: locateExpiry(n.wall(now)), RelayMinDistM: mesh.DefaultRelayMinDist,
 	}
 	if f := n.fix(); f != nil {
 		l.Lat, l.Lon, l.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
@@ -1533,4 +1576,17 @@ func (n *Node) SetHeading(deg int16, now time.Time) error {
 func (n *Node) Sensors() Sensors { return n.sensors }
 
 // Config returns the node's current settings.
-func (n *Node) Config() Config { return n.cfg }
+func (n *Node) Config() Config {
+	// A copy that shares nothing the node relies on. The Owned slice is
+	// the one invariant this package promises to keep — allowedTX reads
+	// the same backing array — so handing it out would let a caller add
+	// a Totem its owner never listed, through a method that looks like a
+	// read. The position is the same story for fix().
+	c := n.cfg
+	c.Owned = slices.Clone(n.cfg.Owned)
+	if n.cfg.Position != nil {
+		p := *n.cfg.Position
+		c.Position = &p
+	}
+	return c
+}

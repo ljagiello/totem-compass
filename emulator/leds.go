@@ -246,7 +246,7 @@ const (
 
 // progressRGB is PROGRESS_RGB in ota_callback.py: white at 30%, the ring
 // filling as an update downloads.
-var progressRGB = dimLEDs(ColorWhite.RGB(), 0.3)
+var progressRGB = scale(ColorWhite.RGB(), 0.3)
 
 // errorRGB is ERROR_RGB: orange at the global brightness, filled over the
 // ring when an update fails.
@@ -598,9 +598,6 @@ func (l *LEDs) fillCrystal(c RGB) {
 
 // dim applies the global brightness, as dim_leds(rgb, GLOBAL_BRT) does.
 func (l *LEDs) dim(c RGB) RGB { return scale(c, l.brightness) }
-
-// dimLEDs is the firmware's dim_leds: each channel scaled.
-func dimLEDs(c RGB, f float64) RGB { return scale(c, f) }
 
 func scale(c RGB, f float64) RGB {
 	f = min(max(f, 0), 1)

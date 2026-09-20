@@ -316,9 +316,16 @@ func (n *Node) Update(now time.Time) error {
 	// ever reported, never used to decide anything.
 	began := time.Now()
 	fail := func(err error) error {
-		o.state, o.err, o.took = OTAFailed, err, time.Since(began)
+		took := time.Since(began)
+		o.state, o.err, o.took = OTAFailed, err, took
 		n.log.Warn("ota failed", "err", err)
-		n.leds.Play(AnimOTAFailed, now)
+		// The clock the node will be on when it next polls, not the one
+		// Update was entered on: an update blocks the loop, so a download
+		// that ran for thirty seconds and then failed left the error
+		// ring's four seconds already spent, and the next tick replaced
+		// it with idle before a frame was ever drawn. The progress
+		// callback already does this.
+		n.leds.Play(AnimOTAFailed, now.Add(took))
 		n.unblockTouch(blocked)
 		return err
 	}

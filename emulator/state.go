@@ -21,14 +21,19 @@ import (
 // would stop every save that followed.
 func (n *Node) State(boots uint32) store.State {
 	st := store.State{
-		Name:       store.SanitizeName(n.cfg.Name),
-		ColorID:    n.cfg.ColorID,
-		Brightness: uint8(n.leds.Brightness() * 255),
+		Name:    store.SanitizeName(n.cfg.Name),
+		ColorID: n.cfg.ColorID,
+		// Rounded, not truncated: 0.25 stored as 63 comes back as
+		// 0.2470…, which is a change, so SetBrightness redraws and the
+		// next save writes a different byte again — a flash write for a
+		// level nobody touched.
+		Brightness: uint8(n.leds.Brightness()*255 + 0.5),
 		SOSMuted:   n.sosMuted,
 		BootCount:  boots,
 		SleepMs:    uint64(n.power.SleptMs()),
-		// LearnedMaxVolts belongs to the battery rather than to the node,
-		// so whoever holds the saved state carries it over.
+		// What device_power learned about this pack, which is a fact
+		// about the battery and so outlives a reboot.
+		LearnedMaxVolts: n.power.LearnedMaxVolts(),
 	}
 	for _, mac := range n.order {
 		if len(st.Peers) == store.MaxPeers {
@@ -92,8 +97,13 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 			// was saved for: something for the compass to point at until
 			// the peer is heard from again.
 			peer.coordsAt = now
-			if p.LastSeenUnix != 0 && n.clockSet {
-				peer.coordsAt = now.Add(time.Unix(p.LastSeenUnix, 0).Sub(n.wall(now)))
+			// The second is four bytes off the same sector as the rest,
+			// and store decodes it without a range check: one that is not
+			// a time a device could have seen would come back as a
+			// coordsAt centuries away, and a peer whose position is
+			// always fresh is one the mesh never asks about again.
+			if saved := time.Unix(p.LastSeenUnix, 0); p.LastSeenUnix != 0 && n.clockSet && usableClock(saved) {
+				peer.coordsAt = now.Add(saved.Sub(n.wall(now)))
 			}
 		}
 		// 0 is red and also the zero value, so a saved 0 is left as the
@@ -115,6 +125,7 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if name := store.SanitizeName(st.Name); name != "" {
 		n.cfg.Name = name
 	}
+	n.power.SetLearnedMaxVolts(st.LearnedMaxVolts)
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted
@@ -135,6 +146,12 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 // is a boot that is never recorded.
 func SettingsKey(st store.State) []byte {
 	st.SleepMs = 0
+	// And what the power model learned about the pack, for the same
+	// reason: nobody chose it, it creeps on its own as the battery is
+	// read, and letting it drive the comparison would put a record on the
+	// flash for a hundredth of a volt. It is still written whenever
+	// something a person did causes a save.
+	st.LearnedMaxVolts = 0
 	// The same goes for where and when each peer was last heard: a bonded
 	// Totem sends its position every few seconds, and letting that drive
 	// a write would put a record on the flash every minute for the life

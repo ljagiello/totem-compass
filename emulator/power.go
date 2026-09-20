@@ -163,10 +163,26 @@ type Power struct {
 	// bounces on the way into the socket does not set it off.
 	chargeSince time.Time
 	chargeShown bool
+	// maxVolts is the highest cell voltage this pack has been seen at,
+	// which device_power learns and logs as "Max volts updated". It is
+	// kept across reboots, so a pack that charges above the curve's top
+	// is not read as 100% for ever after.
+	maxVolts float32
 }
 
 func newPower(now time.Time) *Power {
 	return &Power{lastTick: now, blockers: map[WdtBlocker]bool{}}
+}
+
+// LearnedMaxVolts is the highest cell voltage seen, which the settings
+// carry across reboots.
+func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
+
+// SetLearnedMaxVolts puts back what a previous boot learned.
+func (p *Power) SetLearnedMaxVolts(v float32) {
+	if v > p.maxVolts {
+		p.maxVolts = v
+	}
 }
 
 // Mode is the power mode a status frame carries.
@@ -195,6 +211,9 @@ func (p *Power) HoldSleep(on bool) { p.holdSleep = on }
 // alone, and a parameter it could not use read as though it were not.
 func (p *Power) update(b Battery) (PowerMode, bool) {
 	was := p.mode
+	if b.Volts > p.maxVolts {
+		p.maxVolts = b.Volts
+	}
 	switch {
 	case p.off:
 		return p.mode, false

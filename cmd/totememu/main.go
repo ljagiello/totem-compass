@@ -194,12 +194,17 @@ func (r *radio) addPeer(m mesh.MAC) error {
 
 func (r *radio) send(ps []emulator.Packet) {
 	for _, p := range ps {
+		// "tx failed", not "tx": totemctl reads a "tx" line as a frame it
+		// should decode, and hides it unless asked for. A board that
+		// cannot transmit at all would have looked silent rather than
+		// broken, and with --tx it printed "invalid frame" instead of
+		// the radio's error.
 		if err := r.addPeer(p.Dst); err != nil {
-			r.log.Error("tx", "err", err)
+			r.log.Error("tx failed", "dst", p.Dst, "err", err)
 			continue
 		}
 		if err := espradio.ESPNowSend((*[6]byte)(&p.Dst), p.Data); err != nil {
-			r.log.Error("tx", "dst", p.Dst, "cat", p.Data[2], "cmd", p.Data[3], "err", err)
+			r.log.Error("tx failed", "dst", p.Dst, "cat", p.Data[2], "cmd", p.Data[3], "err", err)
 			continue
 		}
 		r.log.Debug("tx", "dst", p.Dst, "len", len(p.Data), "frame", fmt.Sprintf("%x", p.Data))

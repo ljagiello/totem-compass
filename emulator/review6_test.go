@@ -237,7 +237,7 @@ func TestABrokenPeerClockIsReportedOnce(t *testing.T) {
 		h.rx(totem, self, -40, old)
 		h.advance(2 * time.Second)
 	}
-	if n := strings.Count(logged.String(), "before 2020"); n != 1 {
+	if n := strings.Count(logged.String(), "ignoring a peer's clock"); n != 1 {
 		t.Errorf("a peer with a broken clock was reported %d times, want once", n)
 	}
 	if h.n.clockSet {

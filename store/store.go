@@ -124,7 +124,12 @@ func (j *Journal) scan(buf []byte) {
 		j.seq = seq
 		off = end + pad(n)
 	}
-	j.next = off
+	// The padding that rounds the last record up to the write granularity
+	// can land past the end: a record whose length is not a multiple of
+	// it, written near the sector's end by a previous firmware or left by
+	// noise, would otherwise leave next past the size — and the console
+	// would report a sector 4097 bytes used with -1 free.
+	j.next = min(off, j.sec.Size())
 }
 
 // pad is the bytes that round a record up to the flash write granularity.

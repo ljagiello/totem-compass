@@ -146,7 +146,7 @@ func TestTheClockWarningReachesTheConsole(t *testing.T) {
 
 	var line string
 	for _, l := range strings.Split(logged.String(), "\n") {
-		if strings.Contains(l, "before 2020") {
+		if strings.Contains(l, "ignoring a peer's clock") {
 			line = l
 			break
 		}

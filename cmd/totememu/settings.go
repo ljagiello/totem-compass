@@ -95,8 +95,9 @@ func (s *settings) save(n *emulator.Node) {
 	if s.j == nil {
 		return
 	}
+	// The node carries the learned max volts itself now, restored into
+	// the power model at boot, so there is nothing to copy over here.
 	st := n.State(s.state.BootCount)
-	st.LearnedMaxVolts = s.state.LearnedMaxVolts
 	b, err := st.MarshalBinary()
 	if err != nil {
 		s.log.Warn("settings could not be encoded", "err", err)
