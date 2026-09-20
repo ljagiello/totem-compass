@@ -306,6 +306,22 @@ func (s *Sim) move(distanceM, bearing float64) {
 		}
 		// The far side of the world, since the track has crossed it.
 		s.lon += 180
+		// And the course turns round with it: go over the North Pole
+		// heading north and you come down the far side heading south,
+		// so a bearing of b continues as 180-b. Reflecting the position
+		// and not the course was the whole bug — the next step set off
+		// north again from just below the pole, crossed it again, and
+		// the track sat there alternating between two points and two
+		// headings for as long as it was left running, with the
+		// odometer climbing and the longitude flipping 180 degrees at
+		// the poll rate. It never went down the other side at all.
+		//
+		// Both the local copy, for the rest of this step, and the
+		// configured one, which is where the next step reads it.
+		bearing = norm360(180 - bearing)
+		rad = bearing * math.Pi / 180
+		s.bearing = bearing
+		s.cfg.Bearing = int16(bearing)
 	}
 	s.lon += distanceM * math.Sin(rad) / (meterPerDegree * math.Cos(s.lat*math.Pi/180))
 	// And a longitude that has wrapped the meridian folds back, rather
@@ -388,7 +404,20 @@ func bearingBetween(lat1, lon1, lat2, lon2 float64) float64 {
 
 // NewStatic returns a source that always reports s, as a board with no
 // sensors does.
-func NewStatic(s Sensors) SensorSource { return &staticSensors{s: s} }
+// The Fix is copied, because it is a pointer and this is an exported
+// constructor a board driver calls. Read and SetFix below both copy for
+// the stated reason that a caller must not be able to write through into
+// the readings, and New launders cfg.Position through clonePosition —
+// this was the one ingress that kept the caller's. A driver that held on
+// to its *Fix and updated it in place would change the stored reading
+// between polls, going round usablePosition and usableClock in read().
+func NewStatic(s Sensors) SensorSource {
+	if s.Fix != nil {
+		fix := *s.Fix
+		s.Fix = &fix
+	}
+	return &staticSensors{s: s}
+}
 
 // staticSensors reports one fixed reading, as the pos, heading, batt and
 // flat commands set it.

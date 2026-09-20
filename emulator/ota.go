@@ -239,6 +239,16 @@ func parseContents(b []byte) ([]string, error) {
 		if n == "" || strings.ContainsAny(n, "/\\") || strings.Contains(n, "..") {
 			return nil, fmt.Errorf("%w: %q is not a file name", ErrBadContents, n)
 		}
+		// And not a second line. This name is joined onto the release
+		// URL and handed to a transport, and parseRelease refuses
+		// whitespace in that URL fifteen lines up for exactly this
+		// reason — the same address was guarded at one end and not the
+		// other. The exchange is plain HTTP with no key and no
+		// signature, so the server is the thing being defended against,
+		// and a name carrying a carriage return is a second request.
+		if strings.ContainsFunc(n, func(r rune) bool { return r <= ' ' || r == 0x7f }) {
+			return nil, fmt.Errorf("%w: %q has whitespace or control characters in it", ErrBadContents, n)
+		}
 	}
 	return names, nil
 }
@@ -361,7 +371,17 @@ func (n *Node) Update(now time.Time) error {
 	n.read(now)
 	b := n.sensors.Battery
 	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
-		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
+		// Named for the half that actually tripped. Battery.Low is the
+		// driver's own flag and is not derived from the percentage, so
+		// a charger chip asserting it while the gauge reads healthy
+		// used to print "battery too low for an update: 62%" against a
+		// threshold of 30 — which reads like a broken comparison and
+		// sends whoever is debugging at the wrong half of the
+		// condition. The same correction the touch reasons were given.
+		if b.Percent < otaMinPct {
+			return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
+		}
+		return fail(fmt.Errorf("%w: the power chip reports it low at %d%%", ErrBatteryLow, b.Percent))
 	}
 	// Acting on the reading can also switch the device off, under a
 	// cutoff measured in volts where the gate above reads a percentage:

@@ -36,10 +36,20 @@ const (
 	// for 292 million years is not the likelier explanation.
 	maxHeardMs = float64(math.MaxInt64 / int64(time.Millisecond))
 	// consoleChunk and consoleChunkGap pace a line onto the wire: 64 bytes
-	// is half the board's receive FIFO, and 5 ms is longer than it takes
-	// to drain at 115200 baud.
+	// is half the board's receive FIFO, and the gap is longer than the
+	// chunk takes to go out.
+	//
+	// 8 ms, not the 5 that used to be here under a comment claiming it
+	// was longer. 64 bytes at 115200 8N1 is 64*10/115200 = 5.56 ms, so
+	// the gap was shorter than the chunk it followed and the FIFO gained
+	// about 6.5 bytes every time round. The invariant that is supposed
+	// to hold — never more than half the FIFO outstanding — decayed over
+	// a long line, and the longest line the console now accepts is a
+	// 749-character pasted frame, which is twelve chunks. That is before
+	// the loop stalls on a flash erase, which is the thing the headroom
+	// is actually for.
 	consoleChunk    = 64
-	consoleChunkGap = 5 * time.Millisecond
+	consoleChunkGap = 8 * time.Millisecond
 )
 
 // esp32BridgeVIDs are the USB vendor ids of the serial bridges on ESP32
@@ -434,7 +444,19 @@ func (e *emulator) send(line string) error {
 }
 
 // next returns the next console line.
+//
+// Lines first, in a select of their own. A board that answers and then
+// drops the port leaves buffered lines beside a closed done, and Go
+// picks uniformly among ready cases — so the answer already in hand was
+// reported as an EOF about half the time, at random. The reader closes
+// done after its last send, so anything still buffered was sent before
+// the port went, and is the reply we asked for.
 func (e *emulator) next(ctx context.Context) (consoleLine, error) {
+	select {
+	case l := <-e.lines:
+		return l, nil
+	default:
+	}
 	select {
 	case l := <-e.lines:
 		return l, nil

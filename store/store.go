@@ -58,6 +58,9 @@ var (
 	ErrEmptyRecord = errors.New("store: a record must carry something")
 	// ErrTooLarge means the payload does not fit a record.
 	ErrTooLarge = errors.New("store: state too large")
+	// ErrErasedRecord is the one payload a record cannot carry: four
+	// 0xff bytes, which erasedRecord explains.
+	ErrErasedRecord = errors.New("store: a record cannot be four erased bytes")
 	// ErrNoSector is Open without one, which is a board whose flash
 	// driver is not there. A caller may want to tell that apart from a
 	// driver that is there and failing.
@@ -107,6 +110,40 @@ func Open(sec Sector) (*Journal, error) {
 	return j, nil
 }
 
+// erasedRecord reports whether a record's body and checksum are nothing
+// but erased flash, which passes the checksum for one length and one
+// only: crc32 of four 0xff bytes is 0xffffffff, the value the erased
+// checksum field already reads as. So a save of a 4-byte payload cut
+// short after its header — magic and length written, body and checksum
+// not yet — validates, and Load hands back "\xff\xff\xff\xff" as the
+// saved state while the good record before it stays hidden.
+//
+// The checksum covers the body and not the header, which is what leaves
+// the gap; widening it would be the other fix, and would mean every
+// record already on a device failing to load. This says the same thing
+// without changing the format: erased flash is not a record, whatever
+// arithmetic agrees with it.
+//
+// The cost is that a 4-byte payload of four 0xff bytes cannot be stored,
+// because nothing distinguishes it from the sector it would be written
+// to. Save refuses it rather than write something Load will not return.
+func erasedRecord(body []byte, sum uint32) bool {
+	if sum != 0xffffffff {
+		return false
+	}
+	for _, b := range body {
+		if b != 0xff {
+			return false
+		}
+	}
+	// And the checksum has to agree with the erased body, which is what
+	// makes the record indistinguishable rather than merely erased-
+	// looking. That is true at one length only: three 0xff bytes check
+	// as 0xffffff00 and five as 0xd2fd1072, so neither could have been
+	// read out of a sector that was never written.
+	return crc32.ChecksumIEEE(body) == 0xffffffff
+}
+
 // scan walks the records in a sector image and keeps the newest one whose
 // checksum holds. It stops at the first header it cannot believe, which is
 // where the journal ends: either erased flash, or a write cut short by a
@@ -147,7 +184,7 @@ func (j *Journal) scan(buf []byte) {
 			break
 		}
 		body := buf[off+headerLen : end]
-		if crc32.ChecksumIEEE(body) != sum {
+		if crc32.ChecksumIEEE(body) != sum || erasedRecord(body, sum) {
 			// A record that does not check out is a write a reset cut
 			// short. Keep the one before it, and step over the wreckage:
 			// its bytes are written, so the next record cannot go there,
@@ -340,6 +377,12 @@ func (j *Journal) Save(p []byte) error {
 	}
 	if len(p) > MaxRecord {
 		return fmt.Errorf("%w: %d bytes, the record holds %d", ErrTooLarge, len(p), MaxRecord)
+	}
+	// The one payload that cannot be told from the sector it would go in;
+	// erasedRecord says why. Refused rather than written, because Load
+	// would not give it back.
+	if erasedRecord(p, 0xffffffff) {
+		return ErrErasedRecord
 	}
 	// The next number, which never reaches the value erased flash reads
 	// as. Refusing to read all ones and then writing it would be the

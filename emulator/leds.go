@@ -279,6 +279,10 @@ type LEDs struct {
 	dimmed     bool
 	// defaultColor is crystal_default, the colour the crystal returns to.
 	defaultColor Color
+	// crystalColor is the undimmed colour the crystal was last painted,
+	// which is what Describe names. The pixels themselves are dimmed and
+	// do not divide back onto the palette.
+	crystalColor RGB
 	// dial is where the compass points, -1 when it points at nothing.
 	dial int16
 	// dialColor is the peer's colour, which the lit pixel takes.
@@ -515,7 +519,7 @@ func (l *LEDs) Tick(now time.Time) bool {
 // draw fills the pixels for the current animation and frame.
 func (l *LEDs) draw(now time.Time) {
 	l.fillRing(Off)
-	l.fillCrystal(l.dim(l.defaultColor.RGB()))
+	l.fillCrystal(l.defaultColor.RGB())
 	switch l.anim {
 	case AnimBoot:
 		// powerup_animation: a point runs round the ring once.
@@ -545,7 +549,7 @@ func (l *LEDs) draw(now time.Time) {
 	case AnimSOS:
 		// crystal_sos_blink: the crystal blinks red, and the ring with it.
 		if now.Sub(l.start)%sosPeriod < sosPeriod/2 {
-			l.fillCrystal(l.dim(ColorRed.RGB()))
+			l.fillCrystal(ColorRed.RGB())
 			l.fillRing(l.dim(ColorRed.RGB()))
 		} else {
 			l.fillCrystal(Off)
@@ -605,7 +609,15 @@ func (l *LEDs) fillRing(c RGB) {
 	}
 }
 
+// fillCrystal paints the crystal a colour and dims it on the way, so the
+// undimmed one is kept rather than recovered. Describe needs it: the
+// palette it names colors from holds undimmed values, and dividing a
+// pixel back up does not land on them — red at a quarter brightness is
+// {63,0,0}, and 63 over 0.25 is 252, not 255. Callers pass the colour
+// they mean and this applies the brightness, so the two cannot drift.
 func (l *LEDs) fillCrystal(c RGB) {
+	l.crystalColor = c
+	c = l.dim(c)
 	for i := range l.crystal {
 		l.crystal[i] = c
 	}
@@ -648,7 +660,11 @@ func breathe(frame int) float64 {
 // colour and the lit ring pixels.
 func (l *LEDs) Describe() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s, crystal %s", l.anim, describeRGB(l.crystal[0]))
+	// The colour asked for, not the pixel: the pixels have been through
+	// dim(), and the palette describeRGB looks in holds undimmed values,
+	// so one tap of the power button turned "crystal red" into
+	// "crystal #3f0000" for as long as the strip stayed dimmed.
+	fmt.Fprintf(&b, "%s, crystal %s", l.anim, describeRGB(l.crystalColor))
 	lit := 0
 	for _, p := range l.ring {
 		if p != Off {
