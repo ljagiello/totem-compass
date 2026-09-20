@@ -116,7 +116,11 @@ func (n *Node) PowerOn(now time.Time) {
 // after the sensors have been read.
 func (n *Node) device(now time.Time) {
 	n.pollInputs(now)
-	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
+	// One reading of it for both of the passing events below: nothing
+	// between them changes what the device's state calls for, and it
+	// walks the power, OTA, alarm, pairing and fix state to work it out.
+	w := n.wantedAnimation()
+	if n.power.charging(n.sensors.Battery, now) &&
 		restful(w) && n.leds.Animation() == w {
 		n.power.takeCharger()
 		// On the charger: the ring runs the powerup animation again, which
@@ -129,19 +133,32 @@ func (n *Node) device(now time.Time) {
 		n.log.Info("charger connected", "volts", n.sensors.Battery.Volts,
 			"batt", n.sensors.Battery.Percent)
 	}
-	// The low-battery reminder, once the strip is free. Owed by
-	// applyPowerMode rather than played there, so that coming up on a
-	// low pack shows the power-up ring and then the reminder, in that
-	// order, rather than one over the other.
-	if w := n.wantedAnimation(); n.lowOwed && restful(w) && n.leds.Animation() == w {
-		n.lowOwed = false
-		n.leds.Play(AnimLowBattery, now)
-	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.
 	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.Running())
 	n.power.sleep(now, n.Next())
 	if !n.power.Off() {
+		// The low-battery reminder, once the strip is free. Owed by
+		// applyPowerMode rather than played there, so that coming up on
+		// a low pack shows the power-up ring and then the reminder, in
+		// that order rather than one over the other.
+		//
+		// Inside this block, because a strip that is dark cannot show
+		// it: Play returns without doing anything on a device that is
+		// off, so draining the flag out there spent the reminder on
+		// nothing. The charger's ring above is safe from the same thing
+		// only because charging() checks for itself whether the device
+		// is down.
+		//
+		// No test covers this, because nothing observes it today: the
+		// strip is dark exactly while the device is off, PowerOff sets
+		// the mode to off, and coming back up is therefore a change of
+		// mode that owes the reminder again. It is here so that the flag
+		// is spent where it can be paid, rather than relying on that.
+		if n.lowOwed && restful(w) && n.leds.Animation() == w {
+			n.lowOwed = false
+			n.leds.Play(AnimLowBattery, now)
+		}
 		// A device that is off has no compass and no frames to draw.
 		n.updateDial()
 		n.leds.Tick(now)
@@ -174,17 +191,29 @@ func (n *Node) applyPowerMode(now time.Time) {
 	}
 	n.log.Info("power mode", "mode", mode, "batt", n.sensors.Battery.Percent,
 		"volts", n.sensors.Battery.Volts)
+	// The reminder belongs to the mode, so it goes wherever the mode
+	// goes. One owed while the ring was busy and not cleared here
+	// flashed "battery low" at someone whose pack was full and on the
+	// charger, minutes later: the mode had gone back to normal and
+	// nothing had told the reminder.
+	n.lowOwed = false
 	switch mode {
 	case PowerOff:
 		n.log.Warn("voltages too low, powering down", "volts", n.sensors.Battery.Volts)
 		n.PowerOff(now)
 	case PowerLow:
-		// Owed rather than played here, and for the reason the charger's
-		// ring is owed: this is a reminder, and a boot animation, an
-		// alarm or a download is the picture someone is actually looking
-		// at. A device built on a low pack used to stamp the reminder
-		// over its own power-up ring, which the firmware plays to the
-		// end. It goes on as soon as the strip is resting.
+		// Owed rather than played here: this is a reminder, and a boot
+		// animation, an alarm or a download is the picture someone is
+		// actually looking at. A device built on a low pack used to
+		// stamp the reminder over its own power-up ring, which the
+		// firmware plays to the end. It goes on as soon as the strip is
+		// resting.
+		//
+		// Owed with no deadline, which is where it parts company with
+		// the charger's ring above. That one says "the charger just went
+		// in", which stops being true, so it expires; this one says the
+		// pack is low, which stays true for exactly as long as the mode
+		// does — and the line above is what ends it.
 		n.lowOwed = true
 	}
 }

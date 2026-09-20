@@ -83,15 +83,18 @@ func main() {
 
 	// The settings sector is read before the node starts, so the name and
 	// the colour it was given last are the ones it comes up with.
-	// One or the other, never both: Unread says on the console that the
-	// sector was not read, so calling it either way logged that one line
-	// above "settings restored" — and calling Open either way took the
-	// 4 KB read with the cache and interrupts off, which is the whole
-	// thing storeAtBoot exists to skip while the flash driver is being
-	// worked on.
-	saved := settings.Unread(log)
+	// One call or the other, in a branch, because each of them says what
+	// it did on the console and does the work to match. Assigning over
+	// the other one has now been wrong in both directions: first Open
+	// ran either way, taking the 4 KB read with the cache and interrupts
+	// off that storeAtBoot exists to skip; then Unread ran either way,
+	// logging "settings not read at boot" one line above "settings
+	// restored".
+	var saved *settings.Store
 	if storeAtBoot {
 		saved = settings.Open(log, settingsSector())
+	} else {
+		saved = settings.Unread(log)
 	}
 	// One copy: State() clones the peers it hands out, and this is the
 	// window in which the board is also starting the radio and the ring.

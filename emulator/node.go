@@ -273,9 +273,6 @@ func New(cfg Config, now time.Time) *Node {
 		// would be wrong as often as right.
 		msg := "name is not one a peer frame and the settings can both hold, using what is left"
 		if short == "" {
-			// Nothing survived, so the default stands in — and calling
-			// that "what is left" would tell a reader that the name made
-			// from the MAC is a remnant of the one they chose.
 			msg = "name is not text a peer frame and the settings can hold, falling back to the default"
 		}
 		cfg.Logger.Warn(msg, "name", gave, "bytes", len(gave), "using", cfg.Name)
@@ -493,6 +490,15 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 		return nil
 	}
 	n.read(now)
+	// Again, because the reading may have switched the device off: a
+	// pack that collapsed since the last poll is found here, and a
+	// device that is down does not take a frame into its peer table,
+	// adopt a clock from it or answer it. sendRaw refuses while off, so
+	// nothing would go on the air either way — this is the state that
+	// would be left behind.
+	if n.power.Off() {
+		return nil
+	}
 	n.log.Debug("rx", "src", rx.Src, "dst", rx.Dst, "rssi", rx.RSSI, "len", len(rx.Data), "frame", fmt.Sprintf("%x", rx.Data))
 	m, err := mesh.Parse(rx.Data)
 	if err != nil {
@@ -1349,6 +1355,10 @@ func (n *Node) meshTick(now time.Time) {
 	n.log.Info("asking the mesh for lost peers", "uid", req.UID)
 }
 
+// earthHalfCircumferenceM is as far apart as two devices on the planet
+// can be, which is the widest a distance passed below can honestly be.
+const earthHalfCircumferenceM = 20_100_000
+
 // meshDelivery is Parser.cal_mesh_delivery(dist, range=75).
 func meshDelivery(distM float64) time.Duration {
 	// A distance that is not one goes to the floor rather than into the
@@ -1360,6 +1370,11 @@ func meshDelivery(distM float64) time.Duration {
 	if !(distM > 0) || math.IsInf(distM, 0) {
 		distM = 0
 	}
+	// And a ceiling, because int(distM) is what overflows and a floor
+	// alone does not stop it: half the way round the world is as far
+	// apart as two devices get, so anything past it is a number rather
+	// than a distance.
+	distM = min(distM, earthHalfCircumferenceM)
 	h := int(distM) / meshHopRange
 	ms := (h/2+1)*50 + (h-h/2)*4050
 	return time.Duration(max(ms, 6000)) * time.Millisecond

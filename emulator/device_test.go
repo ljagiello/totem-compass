@@ -273,10 +273,13 @@ func TestSleepCannotExceedTheClock(t *testing.T) {
 // someone plugged it in.
 func TestChargingBeatsTheCutoff(t *testing.T) {
 	h := newHarness(t, nil)
+	// SetBattery is enough: the reading is acted on where it is taken,
+	// so the mode is already settled by the time this returns. device()
+	// here was inert once applyPowerMode moved into read(), and a call
+	// that does nothing reads like the thing under test.
 	if err := h.n.SetBattery(0, true, h.now); err != nil {
 		t.Fatal(err)
 	}
-	h.n.device(h.now)
 	if h.n.Power().Off() {
 		t.Fatal("a charging device powered itself down")
 	}

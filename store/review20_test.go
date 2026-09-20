@@ -308,3 +308,37 @@ func TestTheCounterIsNotParkedAtTheErasedValue(t *testing.T) {
 		})
 	}
 }
+
+// TestSaveNeverWritesTheErasedValue: scan refuses to read all ones as a
+// number, so a record written with it is a record whose number is
+// thrown away. A sector of them comes back with the counter at 0, and
+// the saves after that hand out numbers the sector already holds.
+func TestSaveNeverWritesTheErasedValue(t *testing.T) {
+	sec := newMemSector(4096)
+	// A whole, proven record one short of the top, which is the only way
+	// the counter gets there at all.
+	writeRaw(t, sec, 0, 0xfffffffe, []byte("the settings before the top"))
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := j.Seq(); got != 0xfffffffe {
+		t.Fatalf("the counter opened at %d", got)
+	}
+	for i := range 3 {
+		if err := j.Save([]byte{byte(i), 'x'}); err != nil {
+			t.Fatal(err)
+		}
+		if got := j.Seq(); got == 0xffffffff {
+			t.Fatalf("save %d wrote the value erased flash reads as", i)
+		}
+	}
+	// And what is on the flash still reads back as saved.
+	again, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := again.Load(); err != nil || len(got) != 2 {
+		t.Errorf("after the saves: %q, %v", got, err)
+	}
+}

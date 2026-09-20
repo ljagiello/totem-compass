@@ -93,9 +93,13 @@ func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 // formatting every node's boot lines into t.Log for nobody to read cost
 // it two thirds of its throughput.
 func node(t *testing.T, name string, bond bool) *emulator.Node {
+	t.Helper()
 	return nodeLogged(t, testLog(t), name, bond)
 }
 
+// nodeLogged is the same with a logger of the caller's choosing, and a
+// T that may be nil: the fuzzer's seed corpus is built where there is an
+// F and no T, and there is nothing there to fail.
 func nodeLogged(t *testing.T, log *slog.Logger, name string, bond bool) *emulator.Node {
 	if t != nil {
 		t.Helper()

@@ -63,9 +63,10 @@ func TestABoardBuiltOnAFlatPackComesUpOff(t *testing.T) {
 		t.Error("a node built on a pack under the cutoff came up running")
 	}
 
-	// The window is armed before the mode is applied, so powering down
-	// empties the job list rather than leaving a job behind it: a device
-	// that is off must not transmit.
+	// The reading is taken before the window is armed and acted on where
+	// it is taken, so a device that came up under the cutoff is already
+	// down by then and New does not arm one at all: a device that is off
+	// must not transmit.
 	if h.n.hasJob(jobWindow) {
 		t.Error("a device that came up switched off still has a radio window armed")
 	}

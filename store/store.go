@@ -58,6 +58,10 @@ var (
 	ErrEmptyRecord = errors.New("store: a record must carry something")
 	// ErrTooLarge means the payload does not fit a record.
 	ErrTooLarge = errors.New("store: state too large")
+	// ErrNoSector is Open without one, which is a board whose flash
+	// driver is not there. A caller may want to tell that apart from a
+	// driver that is there and failing.
+	ErrNoSector = errors.New("store: no sector")
 )
 
 // Journal is the append-only log in one sector.
@@ -79,15 +83,16 @@ type Journal struct {
 	blank int
 }
 
-// Open scans the sector and returns its journal. It fails only when the
-// sector cannot be read; a sector full of noise opens empty, because a
-// device that cannot read its settings still has to boot.
+// Open scans the sector and returns its journal. It fails when there is
+// no sector (ErrNoSector) or when the one there cannot be read; a sector
+// full of noise opens empty, because a device that cannot read its
+// settings still has to boot.
 func Open(sec Sector) (*Journal, error) {
 	// Here rather than in each caller: this is the line that would
 	// panic, so every caller present and future is covered by one check
 	// instead of each needing its own copy of it.
 	if sec == nil {
-		return nil, errors.New("store: no sector")
+		return nil, ErrNoSector
 	}
 	if sec.Size() < headerLen+align {
 		return nil, fmt.Errorf("store: sector of %d bytes is too small", sec.Size())
@@ -243,13 +248,19 @@ func (j *Journal) Save(p []byte) error {
 	if len(p) > MaxRecord {
 		return fmt.Errorf("%w: %d bytes, the record holds %d", ErrTooLarge, len(p), MaxRecord)
 	}
-	// The next number, which never wraps. Reaching the top takes four
-	// billion saves of a sector that erases every few dozen, so this is
-	// not a thing that happens — but a counter that came back round to
-	// zero would make a sector of real records read as a fresh one, and
-	// repeating the last number is the smaller lie.
+	// The next number, which neither wraps nor reaches the value erased
+	// flash reads as. Refusing to read all ones and then writing it was
+	// the worse half of the two: scan skips such a record's number, so a
+	// sector of them comes back with the counter at 0 and the save after
+	// that writes a number the sector already holds.
+	//
+	// Reaching the top takes four billion saves of a sector that erases
+	// every few dozen, so neither is a thing that happens — but a
+	// counter that came round to zero would make a sector of real
+	// records read as a fresh one, and repeating the last number is the
+	// smaller lie.
 	next := j.seq + 1
-	if next == 0 {
+	if next == 0 || next == 0xffffffff {
 		next = j.seq
 	}
 	rec := make([]byte, headerLen+len(p)+pad(len(p)))
