@@ -64,18 +64,24 @@ type Config struct {
 	// Sensors reads the GNSS receiver, magnetometer, motion sensor and
 	// power chip. Without one the node reports the fixed Position, Heading
 	// and battery below, as a board with no sensors does.
-	Sensors      SensorSource
-	Position     *Position
-	Heading      int16 // compass azimuth, degrees
-	BattVolts    float32
-	BattPct      int8
-	Version      [3]uint8
-	ReleaseID    uint16
-	ColorID      int8
-	SOS          bool
-	Orientation  mesh.Orientation
-	GNSSSource   mesh.GNSSSource
-	AutoPair     bool // start pairing when an owned Totem pairs right next to us
+	Sensors     SensorSource
+	Position    *Position
+	Heading     int16 // compass azimuth, degrees
+	BattVolts   float32
+	BattPct     int8
+	Version     [3]uint8
+	ReleaseID   uint16
+	ColorID     int8
+	SOS         bool
+	Orientation mesh.Orientation
+	GNSSSource  mesh.GNSSSource
+	AutoPair    bool // start pairing when an owned Totem pairs right next to us
+	// PhoneConnected is what a peer frame reports about a phone being
+	// attached over BLE; the power button's double tap toggles it.
+	PhoneConnected bool
+	// OTATransport reaches the update server. A board with no network
+	// leaves it nil, and an update then says so instead of hanging.
+	OTATransport OTATransport
 	Logger       *slog.Logger
 	Rand         *rand.Rand
 	BondingRSSI  int8 // default BondingRSSI
@@ -120,6 +126,9 @@ type peer struct {
 	meshCount  int
 	firstStale time.Time
 	stale      bool
+	// color is the colour this peer is shown in, drawn as
+	// shuffle_bond_colors draws one when Totems bond.
+	color Color
 }
 
 type jobKind uint8
@@ -155,6 +164,9 @@ type Node struct {
 
 	source  SensorSource
 	sensors Sensors
+	// sensorsAt is when the sensors were last read: the node's idea of
+	// now for the parts that no frame or timer drives.
+	sensorsAt time.Time
 
 	pairing  bool
 	pairEnd  time.Time
@@ -180,6 +192,16 @@ type Node struct {
 	jobs []job
 	seq  int
 	out  []Packet
+
+	// The parts of a Totem that are not the radio: the three inputs, the
+	// ring and crystal, the power state and an update in flight.
+	inputs []recogniser
+	leds   *LEDs
+	power  *Power
+	ota    *OTA
+	// sosMuted is is_sos_mute: the alarm still goes out, the device just
+	// stops blinking about it.
+	sosMuted bool
 }
 
 // New starts a node at time now.
@@ -233,6 +255,10 @@ func New(cfg Config, now time.Time) *Node {
 			Battery: Battery{Volts: cfg.BattVolts, Percent: cfg.BattPct},
 		}}
 	}
+	n.inputs = newInputs(now)
+	n.leds = newLEDs(now, Color(cfg.ColorID))
+	n.power = newPower(now)
+	n.ota = newOTA()
 	n.read(now)
 	n.scheduleWindow(now)
 	return n
@@ -252,10 +278,23 @@ func meshGroup(m mesh.MAC) int {
 
 // Next is when Poll next has work.
 func (n *Node) Next() time.Time {
-	if len(n.jobs) == 0 {
-		return time.Time{}
+	var next time.Time
+	if len(n.jobs) > 0 {
+		next = slices.MinFunc(n.jobs, cmpJob).at
 	}
-	return slices.MinFunc(n.jobs, cmpJob).at
+	// The LEDs and the inputs need polling too: a frame to draw, or a
+	// press that has lasted long enough to count as a hold. A driver
+	// that woke only for radio work would report a gesture late, or not
+	// at all on a device with nothing else scheduled.
+	if t := n.leds.Next(); !t.IsZero() && (next.IsZero() || t.Before(next)) {
+		next = t
+	}
+	for i := range n.inputs {
+		if t := n.inputs[i].next(); !t.IsZero() && (next.IsZero() || t.Before(next)) {
+			next = t
+		}
+	}
+	return next
 }
 
 func cmpJob(a, b job) int {
@@ -268,6 +307,7 @@ func cmpJob(a, b job) int {
 // Poll runs every timer due at now and returns the frames to send.
 func (n *Node) Poll(now time.Time) []Packet {
 	n.read(now)
+	n.device(now)
 	for {
 		i := -1
 		for j, jb := range n.jobs {
@@ -357,6 +397,9 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	case mesh.SmartGroupReply:
 		// Only a host acts on replies, and this node never hosts.
 	case mesh.DemiGod:
+		// The command is not acted on, but the ring says one landed, as
+		// demi_god_blink does on a Totem.
+		n.leds.Play(AnimDemiGod, now)
 		n.log.Info("demi-god command ignored", "src", rx.Src, "cmd", m.Command)
 	default:
 		n.log.Debug("unknown frame", "src", rx.Src, "frame", fmt.Sprintf("%x", rx.Data))
@@ -374,7 +417,7 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 var minClock = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func (n *Node) read(now time.Time) {
-	n.sensors = n.source.Read(now)
+	n.sensors, n.sensorsAt = n.source.Read(now), now
 	if f := n.sensors.Fix; f != nil && f.Time.After(minClock) {
 		n.clockOffset = f.Time.Sub(now)
 		if !n.gnssClock {
@@ -585,6 +628,7 @@ func (n *Node) startPairing(now time.Time) {
 	n.pairing, n.bonding = true, true
 	n.bondMAC, n.tempBond = nil, nil
 	n.pairEnd = now.Add(pairingWindow)
+	n.leds.Play(AnimPairing, now)
 	n.log.Info("pairing started", "for", pairingWindow)
 	n.pairLoop(now)
 	n.at(n.pairEnd, n.cancelPairing)
@@ -610,10 +654,10 @@ func (n *Node) cancelPairing(now time.Time) {
 	if now.Before(n.pairEnd) {
 		return // a later pairing session owns this timer
 	}
-	n.stopPairing()
+	n.stopPairing(now)
 }
 
-func (n *Node) stopPairing() {
+func (n *Node) stopPairing(now time.Time) {
 	if !n.pairing {
 		return
 	}
@@ -623,6 +667,7 @@ func (n *Node) stopPairing() {
 		n.deletePeer(*n.tempBond)
 		n.tempBond = nil
 	}
+	n.leds.Stop(AnimPairing, now)
 	n.log.Info("pairing ended", "peers", len(n.peers))
 }
 
@@ -631,6 +676,7 @@ func (n *Node) addPeer(mac mesh.MAC) *peer {
 		return p
 	}
 	p := &peer{mac: mac, meshGrp: meshGroup(mac)}
+	p.color = BondColor(len(n.order), binary.BigEndian.Uint32(n.cfg.MAC[2:6]))
 	n.peers[mac] = p
 	n.order = append(n.order, mac)
 	return p
@@ -649,6 +695,7 @@ func (n *Node) Unbond(now time.Time, mac mesh.MAC) []Packet {
 	}
 	n.outbox[mac] = mustMarshal(n.status(now, mesh.PeerUnbond, false))
 	n.deletePeer(mac)
+	n.leds.Play(AnimPeerDeleteCountdown, now)
 	n.log.Info("peer deleted", "mac", mac)
 	return nil
 }
@@ -703,6 +750,7 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	if bonded {
+		n.leds.Play(AnimBonded, now)
 		n.log.Info("bonded", "mac", p.mac, "name", m.Name, "peers", len(n.peers))
 		return
 	}
@@ -736,7 +784,7 @@ func (n *Node) onBond(now time.Time, rx Received, m mesh.Peer) (bonded, done boo
 						n.send(p.mac, n.status(t, mesh.PeerBond, true))
 					})
 				}
-				n.stopPairing()
+				n.stopPairing(now)
 				return false, true
 			}
 		}
@@ -1214,9 +1262,20 @@ func (n *Node) SetPosition(p *Position, now time.Time) error {
 	return nil
 }
 
-// SetSOS switches SOS on or off. It is the node's own flag, not a reading,
-// so it holds whatever the sensors are.
-func (n *Node) SetSOS(on bool) { n.cfg.SOS = on }
+// SetSOS switches SOS on or off. It is the node's own flag, not a
+// reading, so it holds whatever the sensors are. The crystal blinks with
+// it, unless the alarm has been muted.
+func (n *Node) SetSOS(on bool) {
+	n.cfg.SOS = on
+	switch {
+	case on && !n.sosMuted:
+		n.leds.Play(AnimSOS, n.sensorsAt)
+	case !on:
+		// Turning SOS off clears the mute too: the next alarm blinks.
+		n.sosMuted = false
+		n.leds.Stop(AnimSOS, n.sensorsAt)
+	}
+}
 
 // SetHeading changes the reported compass azimuth. While a simulation runs
 // it steers the walk, which is where the azimuth comes from.

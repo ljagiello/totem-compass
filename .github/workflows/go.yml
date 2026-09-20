@@ -87,6 +87,7 @@ jobs:
           - { package: ./cmd/totememu/ring, target: FuzzRing }
           - { package: ./store, target: FuzzScan }
           - { package: ./store, target: FuzzStateDecode }
+          - { package: ./emulator, target: FuzzOTAServer }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

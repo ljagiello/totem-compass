@@ -40,12 +40,19 @@ const (
 	// how the mesh paths that need a second Totem — a locate relay, a
 	// Smart Group invitation — get exercised on the board itself.
 	OpRX Op = "rx"
+	// The parts of a Totem that are not the radio.
+	OpTouch Op = "touch"
+	OpLEDs  Op = "leds"
+	OpColor Op = "color"
+	OpPower Op = "power"
+	OpOTA   Op = "ota"
 )
 
 // Help is the console's command summary.
 const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos off | heading <deg> | " +
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
+	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [normal|eco|low|off|on] | ota [update] | " +
 	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
@@ -65,6 +72,11 @@ type Command struct {
 	ClockMs  int64      // clock, milliseconds since the Unix epoch
 	Sub      string     // sub-command, as in "store forget"
 	RX       *Received  // rx: the frame to feed the node
+	Input    Input      // touch: which input
+	Gesture  Gesture    // touch: what it did
+	HoldMs   int64      // touch: how long a hold lasted
+	Color    Color      // color
+	Mode     PowerMode  // power
 }
 
 // defaultAccuracyM is the accuracy pos reports when none is given.
@@ -108,6 +120,35 @@ func ParseCommand(line string) (Command, error) {
 		}
 	case OpRX:
 		c.RX, err = parseRX(args)
+	case OpTouch:
+		c.Input, c.Gesture, c.HoldMs, err = parseTouch(args)
+	case OpColor:
+		if err = want(1); err == nil {
+			c.Color, err = ParseColor(args[0])
+		}
+	case OpLEDs:
+		err = want(0)
+	case OpPower:
+		// power reports the state; power <mode> sets it, and power on
+		// brings a device back from off.
+		if len(args) == 1 {
+			c.Sub = args[0]
+			if args[0] != "on" {
+				c.Mode, err = ParsePowerMode(args[0])
+			}
+		} else {
+			err = want(0)
+		}
+	case OpOTA:
+		// ota reports the last update; ota update runs one.
+		if len(args) == 1 {
+			if args[0] != "update" {
+				err = fmt.Errorf("ota takes nothing or update, got %q", args[0])
+			}
+			c.Sub = args[0]
+		} else {
+			err = want(0)
+		}
 	case OpPos:
 		c.Position, err = parsePosition(args)
 	case OpHeading:
@@ -153,6 +194,47 @@ func ParseCommand(line string) (Command, error) {
 		return Command{}, fmt.Errorf("%s: %w", c.Op, err)
 	}
 	return c, nil
+}
+
+// parseTouch reads "<crystal|power|sos> <tap|double|triple|hold> [ms]".
+// A hold takes how long the finger stays down, because that is what
+// decides which gesture the firmware reports.
+func parseTouch(args []string) (Input, Gesture, int64, error) {
+	if len(args) < 2 || len(args) > 3 {
+		return 0, 0, 0, errors.New("want crystal|power|sos tap|double|triple|hold [ms]")
+	}
+	in, err := ParseInput(args[0])
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	var g Gesture
+	switch args[1] {
+	case "tap":
+		g = SingleTap
+	case "double":
+		g = DoubleTap
+	case "triple":
+		g = TripleTap
+	case "hold":
+		g = Hold
+	default:
+		return 0, 0, 0, fmt.Errorf("%q: want tap, double, triple or hold", args[1])
+	}
+	var ms int64
+	if len(args) == 3 {
+		if g != Hold {
+			return 0, 0, 0, fmt.Errorf("only a hold takes a length, not %s", args[1])
+		}
+		ms, err = strconv.ParseInt(args[2], 10, 32)
+		if err != nil || ms <= 0 || ms > 60000 {
+			return 0, 0, 0, fmt.Errorf("hold %q: want 1 to 60000 ms", args[2])
+		}
+	}
+	if g == Hold && ms == 0 {
+		// Long enough for the longest hold any input reports.
+		ms = int64(longHold / time.Millisecond)
+	}
+	return in, g, ms, nil
 }
 
 // parseRX reads "<src mac> self|all <rssi> <hex frame>". The frame is
@@ -320,6 +402,19 @@ func (c Command) String() string {
 		return fmt.Sprintf("batt %d", c.Percent)
 	case OpClock:
 		return fmt.Sprintf("clock %d", c.ClockMs)
+	case OpTouch:
+		if c.Gesture == Hold {
+			return fmt.Sprintf("touch %s hold %d", c.Input, c.HoldMs)
+		}
+		return fmt.Sprintf("touch %s %s", c.Input,
+			map[Gesture]string{SingleTap: "tap", DoubleTap: "double", TripleTap: "triple"}[c.Gesture])
+	case OpColor:
+		return "color " + c.Color.String()
+	case OpPower, OpOTA:
+		if c.Sub != "" {
+			return string(c.Op) + " " + c.Sub
+		}
+		return string(c.Op)
 	case OpRX:
 		if c.RX == nil {
 			return "rx"
@@ -356,6 +451,27 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 		err = n.SetHeading(c.Heading, now)
 	case OpSOS:
 		n.SetSOS(c.On)
+	case OpTouch:
+		return n.touch(c, now), true, nil
+	case OpColor:
+		n.SetColor(c.Color, now)
+	case OpPower:
+		switch {
+		case c.Sub == "":
+			return nil, false, nil // the firmware prints the state
+		case c.Sub == "on":
+			n.PowerOn(now)
+		case c.Mode == PowerOff:
+			n.PowerOff(now)
+		default:
+			n.power.mode = c.Mode
+			n.log.Info("power mode", "mode", c.Mode, "set", "by hand")
+		}
+	case OpOTA:
+		if c.Sub != "update" {
+			return nil, false, nil // the firmware prints the state
+		}
+		return nil, true, n.Update(now)
 	case OpFlat:
 		err = n.SetFlat(c.On, now)
 	case OpBattery:

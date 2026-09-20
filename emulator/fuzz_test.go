@@ -3,6 +3,7 @@ package emulator
 import (
 	"math/rand/v2"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -195,5 +196,46 @@ func FuzzNode(f *testing.F) {
 			}
 		}
 		h.advance(time.Minute)
+	})
+}
+
+// FuzzOTAServer feeds the update client whatever an update server might
+// answer. The exchange is plain HTTP with no key and no signature, so
+// anything at all can arrive: it must be rejected or understood, never
+// panic, and never yield a package name that is a path.
+func FuzzOTAServer(f *testing.F) {
+	f.Add(`{"ota_url":"http://ota.example/repo","release_id":340}`, `["firmware_v5.0.4.bin"]`)
+	f.Add(`{}`, `[]`)
+	f.Add(`{"ota_url":"http://x/r","update_method":"preview"}`, `["preview_v9.tgz","firmware_v9.bin"]`)
+	f.Add("", "")
+	f.Fuzz(func(t *testing.T, release, contents string) {
+		rel, err := parseRelease([]byte(release))
+		if err == nil {
+			if rel.OTAURL == "" {
+				t.Fatal("a release with no url was accepted")
+			}
+			if !strings.HasPrefix(rel.OTAURL, "http") {
+				t.Fatalf("accepted a url that is not http: %q", rel.OTAURL)
+			}
+		}
+		names, err := parseContents([]byte(contents))
+		if err != nil {
+			return
+		}
+		for _, n := range names {
+			if strings.ContainsAny(n, "/\\") || strings.Contains(n, "..") {
+				t.Fatalf("accepted %q as a file name", n)
+			}
+		}
+		pkg, err := pickPackage(names, extFor(rel.UpdateMethod))
+		if err != nil {
+			return
+		}
+		if !strings.HasSuffix(pkg, ".bin") && !strings.HasSuffix(pkg, ".tgz") {
+			t.Fatalf("picked %q, which is not a package", pkg)
+		}
+		if v, err := versionFromName(pkg); err == nil && v == "" {
+			t.Fatalf("%q gave an empty version", pkg)
+		}
 	})
 }

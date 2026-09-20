@@ -97,6 +97,7 @@ func main() {
 		"channel", mesh.Channel, "phy", "LR 250K", "boots", saved.state.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
+	front := newPanel(log)
 	cmds := make(chan string, 4)
 	go readLines(log, cmds)
 	// bonds is what the settings on flash say. A bond gained or lost is
@@ -118,6 +119,7 @@ func main() {
 			radio.send(node.Receive(time.Now(), r))
 		}
 		now := time.Now()
+		front.poll(node, now)
 		radio.send(node.Poll(now))
 		if n := node.BondCount(); n != bonds {
 			bonds = n
@@ -256,6 +258,14 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) [
 		log.Info("self test: 802.11 frames heard on the mesh channel in 3 s", "lr_only", lr, "with_bgn", bgn, "err", err)
 	case emulator.OpHelp:
 		log.Info(emulator.Help)
+	case emulator.OpLEDs:
+		log.Info("leds", "state", n.LEDs().Describe())
+	case emulator.OpPower:
+		log.Info("power", "state", n.Power().Describe(), "batt", n.Sensors().Battery.Percent,
+			"volts", n.Sensors().Battery.Volts)
+	case emulator.OpOTA:
+		o := n.OTA()
+		log.Info("ota", "state", o.State(), "detail", o.Describe())
 	case emulator.OpFlash:
 		flashSelfTest(log)
 	case emulator.OpStore:
