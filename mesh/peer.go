@@ -47,6 +47,11 @@ const (
 	// MaxPeerName is the longest name whose trailing fields still fit the
 	// buffer; Messages.gen_peer_msg fails on a longer one.
 	MaxPeerName = PeerFrameLen - peerNameOffset - peerTailLen
+	// MaxBattVolts is the largest cell voltage the frame's half float
+	// holds. Not a plausibility limit — a pack reads what it reads, and
+	// a real Totem on a charger reports 4.48 — but the point past which
+	// the encoding stops meaning anything.
+	MaxBattVolts = 65504
 )
 
 const (
@@ -135,6 +140,17 @@ func (Peer) isMessage() {}
 func (p Peer) MarshalBinary() ([]byte, error) {
 	if len(p.Name) > MaxPeerName {
 		return nil, fmt.Errorf("mesh: peer name is %d bytes, the frame holds %d", len(p.Name), MaxPeerName)
+	}
+	// The voltage is refused for the same reason the name is: the field
+	// is a half float and the encoder is a port of MicroPython's, which
+	// has no range check of its own — past the half's limit the exponent
+	// runs off the end of its five bits and into the sign bit, so 131072
+	// goes out as -0, a million as -0.000233, and 100000 as a NaN that
+	// every receiver decodes and no JSON printer can hold. Refusing here
+	// covers every caller of the encoder rather than the one that
+	// remembered.
+	if v := p.BattVolts; v != 0 && (v != v || v < 0 || v > MaxBattVolts) {
+		return nil, fmt.Errorf("mesh: battery of %v V is not one the frame carries", v)
 	}
 	w := peerWire{
 		Category: CatPeer, Command: uint8(p.Command),

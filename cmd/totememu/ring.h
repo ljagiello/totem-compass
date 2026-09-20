@@ -21,6 +21,15 @@ typedef struct {
 	uint8_t data[TOTEM_RX_MAX];
 } totem_rx_slot;
 
+// The ring itself, and the only copy of it there may be. These are
+// static, and cgo compiles the preamble of every .go file as its own
+// translation unit — so a second file in this package that includes this
+// header gets a private ring of its own, silently: the WiFi task would
+// push into one array while the loop popped from another that is always
+// empty, the board would go deaf, and rxLost() would report nothing
+// wrong. One includer, cmd/totememu/rx.go, and the host fuzz test in
+// cmd/totememu/ring. If another consumer is ever wanted, it asks rx.go
+// rather than including this.
 static totem_rx_slot totem_rx[TOTEM_RX_SLOTS];
 static volatile uint32_t totem_rx_head, totem_rx_tail, totem_rx_dropped;
 

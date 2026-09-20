@@ -710,6 +710,13 @@ func (n *Node) read(now time.Time) {
 	if !n.power.Off() {
 		n.power.learn(n.sensors.Battery)
 	}
+	// A percentage of 0 with a voltage is read as "this source did not
+	// report one", which is also what a gauge saying the pack is empty
+	// looks like. They are not told apart, and the voltage wins — which
+	// is what the device itself does: get_batt_pct derives the
+	// percentage from the cell voltage, so a Totem holding 3.8 V says
+	// half full whatever a gauge beside it thinks. A source that means
+	// a flat pack says so with the voltage.
 	if !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
@@ -1010,7 +1017,11 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		p.Lat, p.Lon, p.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
 		p.SpeedKPH, p.AltitudeM, p.SolutionID = f.SpeedKPH, f.AltitudeM, f.SolutionID
 		p.HeadingOfMotion = f.HeadingOfMotion
-		p.OdometerM = int16(min(f.OdometerM, math.MaxInt16))
+		// Both ends, as the uptime above: the field is an int32 and
+		// int16 of anything past -32768 wraps into a large positive
+		// distance, so a device reporting a negative odometer would tell
+		// its peers it had traveled 31 km.
+		p.OdometerM = int16(min(max(f.OdometerM, 0), math.MaxInt16))
 	}
 	// usableClock again rather than gnssClock alone: the clock is a base
 	// plus however long the device has been running, so one set near the

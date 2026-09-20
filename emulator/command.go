@@ -54,7 +54,7 @@ const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
 	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
-	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
+	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -521,9 +521,16 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 }
 
 // MaxCommandLine is the longest console line the emulator runs. It holds
-// the longest frame the rx command can inject — a 108-byte peer frame is
-// 216 characters of hex — with room for the words around it.
-const MaxCommandLine = 512
+// the longest frame the rx command can inject, which is what parseRX
+// bounds: mesh.MaxFrame bytes of hex, two characters each, plus the
+// words around them — "rx", a MAC, a destination, an RSSI and their
+// spaces come to a couple of dozen.
+//
+// Sized from that rather than from the 108-byte peer frame it used to
+// name: the two disagreed, so the largest frames parseRX accepts were
+// refused first as a line too long, by a limit whose own comment
+// described a shorter frame.
+const MaxCommandLine = 2*mesh.MaxFrame + 64
 
 // ErrLineTooLong is returned for a console line over MaxCommandLine bytes.
 var ErrLineTooLong = fmt.Errorf("console line over %d bytes dropped", MaxCommandLine)

@@ -379,7 +379,12 @@ func (n *Node) Update(now time.Time) error {
 		return fail(ErrNoTransport)
 	}
 	t := n.cfg.OTATransport
-	n.leds.Play(AnimWiFi, now)
+	// at(), as every other clock in this function: an update blocks the
+	// loop, so the entry time is already behind by the time anything is
+	// drawn, and handing it to Play steps the animation's clock
+	// backwards — the reason the failure ring and the closing idle both
+	// use it.
+	n.leds.Play(AnimWiFi, at())
 
 	poll := releasePoll{
 		Version: n.versionString(), EndpointID: OTAEndpointID, DeviceTypeID: OTADeviceTypeID,
@@ -428,7 +433,7 @@ func (n *Node) Update(now time.Time) error {
 	}
 
 	o.state = OTADownloading
-	n.leds.Play(AnimOTA, now)
+	n.leds.Play(AnimOTA, at())
 	// Block Touch while the package comes down: a tap part way through an
 	// update is not a gesture anyone means.
 	blocked = n.blockTouch(now, otaTouchBlock)
