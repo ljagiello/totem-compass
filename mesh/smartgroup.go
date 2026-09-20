@@ -79,13 +79,15 @@ func (g SmartGroup) MarshalBinary() ([]byte, error) {
 		Lat: g.Lat, Lon: g.Lon, PAcc: g.PosAccuracyM, ColorID: g.ColorID, Instr: int8(g.Instruction),
 		UID: g.UID, MemberCount: int8(len(g.Members)), Reserved18: smartGroupSlots, TimeoutMs: g.TimeoutMs,
 	})
-	for _, m := range g.Members {
-		if err != nil {
-			break
-		}
-		b, err = binary.Append(b, binary.LittleEndian, m)
+	if err != nil {
+		return nil, err
 	}
-	return b, err
+	for _, m := range g.Members {
+		if b, err = binary.Append(b, binary.LittleEndian, m); err != nil {
+			return nil, err
+		}
+	}
+	return b, nil
 }
 
 func parseSmartGroup(b []byte) (Message, error) {

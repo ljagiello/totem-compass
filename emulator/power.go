@@ -191,8 +191,9 @@ func (p *Power) WatchdogFeeding() bool { return len(p.blockers) == 0 }
 func (p *Power) HoldSleep(on bool) { p.holdSleep = on }
 
 // update moves the power mode for a battery reading, and reports whether
-// it changed.
-func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
+// it changed. It takes no time: the mode is a function of the reading
+// alone, and a parameter it could not use read as though it were not.
+func (p *Power) update(b Battery) (PowerMode, bool) {
 	was := p.mode
 	switch {
 	case p.off:
@@ -219,7 +220,6 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	default:
 		p.mode = PowerNormal
 	}
-	_ = now
 	return p.mode, p.mode != was
 }
 

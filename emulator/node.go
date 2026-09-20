@@ -229,8 +229,11 @@ func New(cfg Config, now time.Time) *Node {
 		// Every status frame carries the name, so one the frame cannot
 		// hold would fail at the point of sending it, and one that is not
 		// text would travel on into whatever reads it.
-		cfg.Logger.Warn("name cut to what a peer frame holds",
-			"name", cfg.Name, "bytes", len(cfg.Name), "max", mesh.MaxPeerName, "using", short)
+		// What SanitizeName did, which is not only shortening: a name
+		// that is not text loses the bytes that are not, so saying it did
+		// not fit would be wrong as often as right.
+		cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
+			"name", cfg.Name, "bytes", len(cfg.Name), "using", short)
 		cfg.Name = short
 	}
 	if cfg.Rand == nil {
@@ -536,8 +539,12 @@ func (n *Node) adoptClock(now time.Time, src mesh.MAC, p mesh.Peer) {
 		// field never picks up a clock has nothing else to go on.
 		if !n.warnedClock[src] {
 			n.warnedClock[src] = true
+			// "name", not "src": totemctl decodes src as a MAC, and a
+			// line whose src is a name fails to parse and is dropped
+			// whole — so the one warning that explains why a Totem never
+			// picks up a clock would never reach the person watching.
 			n.log.Warn("ignoring a peer's clock from before 2020",
-				"mac", src, "src", p.Name, "wall", wall.UTC().Format(time.RFC3339))
+				"mac", src, "name", p.Name, "wall", wall.UTC().Format(time.RFC3339))
 		}
 		return
 	}
@@ -1246,6 +1253,13 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 			return
 		}
 		n.inGroup, n.smartUID = false, 0
+		// The group is the bonding: a pairing window still open would end
+		// by deleting whatever it had half-made — and tempBond may well
+		// name a Totem the group has just bonded us to, so the timer
+		// would undo the group's own work a few seconds later. Ended
+		// here, before the members are added, so nothing it holds
+		// survives into the list below.
+		n.stopPairing(now)
 		// peer_management.auto_bond_to_peers deletes every peer first.
 		for _, mac := range slices.Clone(n.order) {
 			n.deletePeer(mac)
@@ -1462,7 +1476,7 @@ func (n *Node) SetPosition(p *Position, now time.Time) error {
 	// something impossible should be told, not left thinking the device
 	// is standing somewhere it is not. The console range-checks its own
 	// arguments; this is the same rule for everyone else.
-	if p != nil && !livePosition(p.Lat, p.Lon) {
+	if p != nil && !usablePosition(p.Lat, p.Lon) {
 		return fmt.Errorf("no device could be at %v, %v", p.Lat, p.Lon)
 	}
 	if err := n.set(now, func(c Controls) { c.SetFix(p) }); err != nil {

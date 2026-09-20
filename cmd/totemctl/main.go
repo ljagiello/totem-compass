@@ -121,6 +121,8 @@ func realMain() int {
 	g.connect = g.connectBLE
 	g.scan = client.Scan
 	g.openPort = openSerial
+	// Wrapped, not assigned: GetDetailedPortsList is variadic, so its type
+	// is func(...func(string, string) bool) and does not match this field.
 	g.ports = func() ([]*enumerator.PortDetails, error) { return enumerator.GetDetailedPortsList() }
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {

@@ -107,9 +107,10 @@ func (f flashSector) ReadAt(p []byte, off int) error {
 }
 
 func (f flashSector) WriteAt(p []byte, off int) error {
-	if err := flashUnlock(); err != nil {
-		return err
-	}
+	// Checked before the unlock, as ReadAt checks before the read: the
+	// unlock clears the chip's block protection for the rest of the boot,
+	// and a request this driver is going to refuse should leave the chip
+	// exactly as it found it.
 	if off < 0 || off+len(p) > flashSectorSize {
 		return fmt.Errorf("flash: write of %d bytes at %d is outside the sector", len(p), off)
 	}
@@ -118,6 +119,9 @@ func (f flashSector) WriteAt(p []byte, off int) error {
 	}
 	if off%4 != 0 {
 		return fmt.Errorf("flash: write at %d is not word aligned", off)
+	}
+	if err := flashUnlock(); err != nil {
+		return err
 	}
 	// Pad with 0xff, the erased value, so the bytes past the record stay
 	// writable.

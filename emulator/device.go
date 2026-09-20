@@ -94,7 +94,7 @@ func (n *Node) PowerOn(now time.Time) {
 // after the sensors have been read.
 func (n *Node) device(now time.Time) {
 	n.pollInputs(now)
-	if mode, changed := n.power.update(n.sensors.Battery, now); changed {
+	if mode, changed := n.power.update(n.sensors.Battery); changed {
 		n.log.Info("power mode", "mode", mode, "batt", n.sensors.Battery.Percent,
 			"volts", n.sensors.Battery.Volts)
 		switch mode {

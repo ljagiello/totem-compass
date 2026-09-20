@@ -106,6 +106,15 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if st.Brightness > 0 {
 		n.leds.SetBrightness(float64(st.Brightness) / 255)
 	}
+	// The name comes back too. State saves it, so a Restore that ignored
+	// it left the `store open` path reading the saved name off the flash
+	// and then writing the default one straight back over it — the name
+	// gone for good, on the one path that exists to recover it. The boot
+	// path only worked because the driver reads it into Config before
+	// New ever runs.
+	if name := store.SanitizeName(st.Name); name != "" {
+		n.cfg.Name = name
+	}
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted

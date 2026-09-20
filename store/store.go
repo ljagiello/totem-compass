@@ -170,13 +170,22 @@ func (j *Journal) Save(p []byte) error {
 	// a previous firmware's data, or noise, in which case appending would
 	// write the AND of the two and lose both.
 	room := j.next+len(rec) <= j.sec.Size()
+	erased := false
 	if !room || !j.erased(j.next, len(rec)) {
 		if err := j.sec.Erase(); err != nil {
 			return fmt.Errorf("store: erasing the sector: %w", err)
 		}
-		j.next, j.torn = 0, 0
+		j.next, j.torn, erased = 0, 0, true
 	}
 	if err := j.sec.WriteAt(rec, j.next); err != nil {
+		if erased {
+			// The sector was cleared and the record that should have
+			// replaced its contents did not land, so what this journal
+			// held is gone from the flash. Saying otherwise would hand
+			// the caller settings the device no longer has, and the next
+			// save would compare against a record that is not there.
+			j.last = nil
+		}
 		return fmt.Errorf("store: writing %d bytes at %d: %w", len(rec), j.next, err)
 	}
 	j.next += len(rec)

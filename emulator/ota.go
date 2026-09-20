@@ -302,7 +302,12 @@ func (n *Node) Update(now time.Time) error {
 	if o.Running() {
 		return errors.New("ota: an update is already running")
 	}
+	// The release and the package go with the counters: leaving them is
+	// how a run that failed at the first request still reported the
+	// version and the file the last one installed — and that report is
+	// posted back to the server as what this device is running.
 	o.state, o.err, o.done, o.total = OTAChecking, nil, 0, 0
+	o.release, o.pkg = Release{}, ""
 	// The touch blocks this update takes, so they can be given back
 	// exactly as they were found.
 	var blocked []time.Time

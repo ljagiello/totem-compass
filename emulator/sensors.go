@@ -291,7 +291,26 @@ func (s *Sim) move(distanceM, bearing float64) {
 	const meterPerDegree = 111320
 	rad := bearing * math.Pi / 180
 	s.lat += distanceM * math.Cos(rad) / meterPerDegree
+	// Over the pole and down the other side, which is what walking north
+	// past 90 actually is. Without it the latitude runs off the globe and
+	// stops being a position at all — a long enough drive north silently
+	// ended the simulation, with the ring back to searching for a fix and
+	// nothing in the log to say why. The longitude step divides by
+	// cos(lat), which reaches zero at the pole, so the order matters:
+	// fold first, then step east.
+	if s.lat > 90 || s.lat < -90 {
+		if s.lat > 90 {
+			s.lat = 180 - s.lat
+		} else {
+			s.lat = -180 - s.lat
+		}
+		// The far side of the world, since the track has crossed it.
+		s.lon += 180
+	}
 	s.lon += distanceM * math.Sin(rad) / (meterPerDegree * math.Cos(s.lat*math.Pi/180))
+	// And a longitude that has wrapped the meridian folds back, rather
+	// than growing until it is no longer a longitude.
+	s.lon = math.Mod(s.lon+540, 360) - 180
 	s.odometerM += distanceM
 	// get_heading_mot: the course of the last 10 m traveled.
 	if s.odometerM-s.headingOdoM >= 10 {
