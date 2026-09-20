@@ -290,6 +290,13 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	// did, back when a release inside the lockout was dropped and left
 	// the input latched down — turned "hold for 10 ms" into a counted tap
 	// and, on the power button, a brightness toggle.
+	//
+	// It is said out loud, because doing nothing quietly looks the same
+	// as the console having missed the line.
+	if d <= edgeLockout {
+		n.log.Info("hold too short to register, as on the device",
+			"input", in, "held", d, "shortest", edgeLockout)
+	}
 	end := now.Add(d)
 	r.press(now)
 	// Walk the press forward, firing what each moment brings, rather than
@@ -337,6 +344,20 @@ func (n *Node) input(in Input) *recogniser {
 }
 
 // newInputs builds the three recognisers with the firmware's timings.
+// clearPending drops whatever a finger had started — a press still down,
+// a tap still inside its window — without re-arming the post-boot wait.
+// A device powering down forgets them: none of it means anything after
+// the power goes, and a pending tap would keep asking to be woken on a
+// device whose only answer is to throw the gesture away. The power
+// button has to keep working, so the block is left alone.
+func clearPending(rs []recogniser) {
+	for i := range rs {
+		rs[i].down, rs[i].held, rs[i].longHeld = false, false, false
+		rs[i].taps = 0
+		rs[i].lastRelease = time.Time{}
+	}
+}
+
 func newInputs(now time.Time) []recogniser {
 	rs := []recogniser{
 		{in: Crystal, holdFor: crystalPairHold},

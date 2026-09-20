@@ -253,8 +253,16 @@ func (p *Power) charging(b Battery, now time.Time) bool {
 	if p.chargeSince.IsZero() || now.Before(p.chargeSince) {
 		p.chargeSince = now
 	}
-	return !p.chargeShown && now.Sub(p.chargeSince) >= chargeDebounce
+	held := now.Sub(p.chargeSince)
+	// Not for ever: the ring says "the charger just went in", and if
+	// something else owned it at the time the announcement is owed, not
+	// stored indefinitely. Ten minutes into an alarm it would be a lie.
+	return !p.chargeShown && held >= chargeDebounce && held <= chargeAnnounce
 }
+
+// chargeAnnounce is how long after the charger settles the ring may still
+// announce it, if something else held the ring in the meantime.
+const chargeAnnounce = 30 * time.Second
 
 // takeCharger spends this connection's one showing of the ring. It is
 // separate from charging so that the decision to draw and the record of

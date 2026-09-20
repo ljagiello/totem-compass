@@ -411,7 +411,13 @@ func (f *staticSensors) SetFlat(flat bool) {
 // SetBattery sets the charge level and whether it is charging. A board
 // with no power chip holds it there.
 func (f *staticSensors) SetBattery(percent int8, charging bool, _ time.Time) {
-	f.s.Battery = Battery{Volts: voltsFor(percent), Percent: percent, Charging: charging, Low: percent <= 10}
+	// NoPowerChip describes the board, not the reading, so it survives a
+	// new one: rebuilding the struct without it silently re-armed the OTA
+	// battery gate on a board that has no battery to gate on.
+	f.s.Battery = Battery{
+		Volts: voltsFor(percent), Percent: percent, Charging: charging,
+		Low: percent <= 10, NoPowerChip: f.s.Battery.NoPowerChip,
+	}
 }
 
 // SetClock hands the fixed receiver the wall time, which then runs on.

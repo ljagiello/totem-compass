@@ -123,8 +123,9 @@ func ParseColor(s string) (Color, error) {
 // ColorNames lists the palette, for a console message.
 func ColorNames() string {
 	names := make([]string, 0, len(palette))
-	for _, p := range palette {
-		names = append(names, p.name)
+	// Indexed, for the reason in ParseColor.
+	for i := range palette {
+		names = append(names, palette[i].name)
 	}
 	return strings.Join(names, ", ")
 }
@@ -296,6 +297,15 @@ func openEnded(a Animation) bool {
 // calls for — an alarm, a pairing, a search for a fix — rather than the
 // strip trying to remember.
 func (l *LEDs) Play(a Animation, now time.Time) {
+	if l.off {
+		// A device that has powered down shows nothing, so there is
+		// nothing to play and nothing to remember having played. Without
+		// this the strip reported the animation for ever: device() does
+		// not tick a dark strip, so nothing ever cleared it, and a
+		// refusal that flashes the ring left `leds` and `status` saying a
+		// powered-down board was showing an update failure.
+		return
+	}
 	l.anim, l.start, l.frame, l.next, l.resting = a, now, 0, now, false
 	switch a {
 	case AnimBoot:
@@ -331,15 +341,19 @@ func (l *LEDs) Stop(a Animation, now time.Time) {
 // powered down: nothing is drawn and no frame is ever due until it comes
 // back on.
 func (l *LEDs) Dark(off bool, now time.Time) {
-	l.off = off
 	if off {
+		// Idle first, then dark: after l.off is set, Play is a no-op by
+		// design, and the strip would otherwise keep reporting whatever
+		// was on it when the device went down.
 		l.Play(AnimIdle, now)
+		l.off = true
 		l.fillRing(Off)
 		l.fillCrystal(Off)
 		l.next, l.resting = time.Time{}, true
 		return
 	}
-	l.next, l.resting = now, false
+	l.off = false
+	l.redraw()
 }
 
 // Animation is what is playing.
@@ -362,7 +376,14 @@ func (l *LEDs) DefaultColor() Color { return l.defaultColor }
 // looks like has to call it: a resting strip is paced by next and woken
 // by nothing, so without this the change waits for whatever happens to
 // tick next, or for ever.
-func (l *LEDs) redraw() { l.next, l.resting = l.start, false }
+func (l *LEDs) redraw() {
+	if l.off {
+		// Nothing is due on a strip that is not lit. This is the one
+		// place pacing is armed, so it is the one place that has to know.
+		return
+	}
+	l.next, l.resting = l.start, false
+}
 
 // SetDial points the compass at a bearing in degrees, in a peer's colour.
 // A negative bearing points at nothing.
@@ -408,12 +429,7 @@ func (l *LEDs) SetBrightness(f float64) {
 
 // Next is when Tick next has a frame to draw.
 func (l *LEDs) Next() time.Time {
-	// A powered-down strip draws nothing, whatever was last played on it:
-	// a refusal that flashes the ring is still a Play, and device() does
-	// not tick while the device is off, so nothing would ever clear it.
-	// A driver that waits for this would sit on a deadline that never
-	// moves, which is a busy loop on a device that is supposed to be off.
-	if l.off || l.resting {
+	if l.resting {
 		return time.Time{}
 	}
 	return l.next

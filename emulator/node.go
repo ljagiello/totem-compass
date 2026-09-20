@@ -252,6 +252,15 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.GNSSSource == 0 {
 		cfg.GNSSSource = mesh.GNSSDevice
 	}
+	if c := Color(cfg.ColorID); !c.InPalette() {
+		// The board reads this off a flash sector and hands it straight
+		// here, so an id outside the thirteen arrives before Restore ever
+		// runs — and Restore keeping "the default" would be keeping the
+		// corrupt one. An unlit crystal for good, from one bad byte.
+		cfg.Logger.Warn("crystal colour is not one of the thirteen, using red",
+			"id", cfg.ColorID)
+		cfg.ColorID = int8(ColorRed)
+	}
 	n := &Node{
 		cfg: cfg, log: cfg.Logger, rng: cfg.Rand, boot: now,
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
@@ -447,6 +456,15 @@ var minClock = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func (n *Node) read(now time.Time) {
 	n.sensors, n.sensorsAt = n.source.Read(now), now
+	// Whether the board has a battery monitor is a fact about the board,
+	// so the configuration has the last word on it: a source of its own —
+	// a driver, or a simulation swapped in at runtime — has no way to
+	// know, and the OTA gate must not turn on a board that has nothing to
+	// gate. Only ever set here, never cleared: the safe answer is the one
+	// that keeps the gate on.
+	if n.cfg.NoPowerChip {
+		n.sensors.Battery.NoPowerChip = true
+	}
 	if f := n.sensors.Fix; f != nil && f.Time.After(minClock) {
 		n.clockOffset = f.Time.Sub(now)
 		if !n.gnssClock {
@@ -459,7 +477,24 @@ func (n *Node) read(now time.Time) {
 }
 
 // fix is the current GNSS solution, or nil.
-func (n *Node) fix() *Fix { return n.sensors.Fix }
+// fix is this device's own GNSS solution, or nil when it has none.
+//
+// A position that no device could be at is no position: nil is what a
+// Totem indoors reports, and that is the honest answer for a garbled one
+// too. This is the same guard every position off the air gets, and it
+// belongs here as much as there — a board's own receiver driver is code
+// like any other, the console can be told anything, and this is the one
+// position this device puts on the air. Left unchecked, a NaN reached the
+// compass (where the conversion to a bearing is implementation-defined,
+// so it pointed confidently north), the distance to every peer, and every
+// status frame this node broadcast.
+func (n *Node) fix() *Fix {
+	f := n.sensors.Fix
+	if f == nil || !livePosition(f.Lat, f.Lon) {
+		return nil
+	}
+	return f
+}
 
 func (n *Node) wall(now time.Time) time.Time { return now.Add(n.clockOffset) }
 
@@ -647,7 +682,11 @@ func (n *Node) status(now time.Time, cmd mesh.PeerCommand, ack bool) mesh.Peer {
 		// ever saw the flag change.
 		PhoneConnected: c.PhoneConnected,
 	}
-	if f := sense.Fix; f != nil {
+	// fix(), not sense.Fix: this is the frame that puts our position on
+	// the air, so it is the last place a position no device could be at
+	// should get through. A peer receiving one would refuse it anyway —
+	// there is no reason to make it.
+	if f := n.fix(); f != nil {
 		p.Lat, p.Lon, p.PosAccuracyM = f.Lat, f.Lon, f.AccuracyM
 		p.SpeedKPH, p.AltitudeM, p.SolutionID = f.SpeedKPH, f.AltitudeM, f.SolutionID
 		p.HeadingOfMotion = f.HeadingOfMotion
@@ -1209,8 +1248,18 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 				// The group assigns this device a colour, and the crystal
 				// is what shows it: setting only the config would leave
 				// the two saying different things.
-				n.cfg.ColorID = m.ColorID
-				n.leds.SetDefaultColor(Color(m.ColorID))
+				//
+				// It is one byte off the air from the host, and an id
+				// outside the thirteen renders unlit — so one garbled
+				// frame would blank the crystal, and State would write it
+				// to flash for the next boot to find.
+				if c := Color(m.ColorID); c.InPalette() {
+					n.cfg.ColorID = m.ColorID
+					n.leds.SetDefaultColor(c)
+				} else {
+					n.log.Warn("smart group assigned a colour that is not one of the thirteen, keeping ours",
+						"id", m.ColorID)
+				}
 				continue
 			}
 			if !slices.Contains(n.cfg.Owned, m.MAC) {
@@ -1406,6 +1455,13 @@ func (n *Node) SetBattery(percent int8, charging bool, now time.Time) error {
 
 // SetPosition changes the reported fix; nil means none.
 func (n *Node) SetPosition(p *Position, now time.Time) error {
+	// Refused here as well as ignored by fix(): a caller that asked for
+	// something impossible should be told, not left thinking the device
+	// is standing somewhere it is not. The console range-checks its own
+	// arguments; this is the same rule for everyone else.
+	if p != nil && !livePosition(p.Lat, p.Lon) {
+		return fmt.Errorf("no device could be at %v, %v", p.Lat, p.Lon)
+	}
 	if err := n.set(now, func(c Controls) { c.SetFix(p) }); err != nil {
 		return err
 	}

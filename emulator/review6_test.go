@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ljagiello/totem-compass/mesh"
 	"github.com/ljagiello/totem-compass/store"
 )
 
@@ -276,5 +275,4 @@ func TestUsablePositionIsOneRule(t *testing.T) {
 	if p := h.n.peers[totem]; p.hasCoords {
 		t.Errorf("a frame reporting no fix gave the peer a position of %v, %v", p.lat, p.lon)
 	}
-	_ = mesh.Broadcast
 }

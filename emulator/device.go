@@ -64,6 +64,7 @@ func (n *Node) PowerOff(now time.Time) {
 	n.stopPairing(now)
 	n.power.off, n.power.mode = true, PowerOff
 	n.jobs = nil
+	clearPending(n.inputs)
 	n.leds.Dark(true, now)
 	n.log.Info("powered down: the radio windows stop here")
 }
