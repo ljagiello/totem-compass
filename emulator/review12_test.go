@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
-	"github.com/ljagiello/totem-compass/store"
 )
 
 // TestAnExpiredLocateIsNotImmortal: relay() reads an expiry of zero as
@@ -105,39 +104,6 @@ func TestNewTakesItsOwnCopies(t *testing.T) {
 	}
 	if got := h.n.Config().Position; got == nil || math.IsNaN(float64(got.Lat)) {
 		t.Error("the node's own configured position was written from outside")
-	}
-}
-
-// TestAStaleSavedMaximumDoesNotUnstretchTheCurve: `store open` on a
-// running device reads a record written before this run measured a
-// higher voltage. Taking it as it stands would throw away what the
-// device learned an hour ago.
-func TestAStaleSavedMaximumDoesNotUnstretchTheCurve(t *testing.T) {
-	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.25, 100 })
-	h.collect(h.n.Poll(h.now))
-	learned := h.n.Power().LearnedMaxVolts()
-	if learned < 4.24 {
-		t.Fatalf("this run learned %v, want 4.25", learned)
-	}
-	h.n.Restore(store.State{LearnedMaxVolts: 4.15}, h.now)
-	if got := h.n.Power().LearnedMaxVolts(); got != learned {
-		t.Errorf("a stale saved value moved the learned maximum to %v, want %v", got, learned)
-	}
-}
-
-// TestRestoreTakesAFreshReading: the learned maximum changes what a
-// voltage means, so a restore that installs one and leaves the last
-// reading alone leaves `status`, the next status frame and the OTA gate
-// all looking at a percentage worked out without it.
-func TestRestoreTakesAFreshReading(t *testing.T) {
-	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.15, 0 })
-	h.collect(h.n.Poll(h.now))
-	if got := h.n.Sensors().Battery.Percent; got != 100 {
-		t.Fatalf("4.15 V with no learned maximum reads %d%%, want 100%%", got)
-	}
-	h.n.Restore(store.State{LearnedMaxVolts: 4.3}, h.now)
-	if got := h.n.Sensors().Battery.Percent; got == 100 {
-		t.Error("the battery still reads 100% after a restore that stretched the curve")
 	}
 }
 

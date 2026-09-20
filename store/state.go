@@ -28,6 +28,13 @@ type State struct {
 	SOSMuted bool
 	// BootCount counts power-ups, as the OTA report's boot_count does.
 	BootCount uint32
+	// SleepMs and LearnedMaxVolts are a snapshot of what the device last
+	// reported, not state it comes back with: the firmware keeps both in
+	// modes, whose constructor sets them to 0, so they start again at
+	// every boot. They are here so that whoever reads the sector can see
+	// what the device was doing, and because a record that carried them
+	// once has to keep carrying them.
+	//
 	// SleepMs is the device's total light sleep, the firmware's
 	// dev_total_lightsleep_ms.
 	SleepMs uint64

@@ -68,6 +68,12 @@ func (n *Node) PowerOff(now time.Time) {
 	n.stopPairing(now)
 	n.power.off, n.power.mode = true, PowerOff
 	n.jobs = nil
+	// And whatever was waiting for the next radio window. A notice
+	// queued a moment before the power went would otherwise go out on
+	// the next power-up, telling a peer about something that happened on
+	// the far side of a power cycle it never saw. Refusing to queue it
+	// afterwards is only half of that; this is the state that survives.
+	clear(n.outbox)
 	clearPending(n.inputs)
 	n.leds.Dark(true, now)
 	n.log.Info("powered down: the radio windows stop here")

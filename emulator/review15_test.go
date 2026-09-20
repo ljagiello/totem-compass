@@ -5,8 +5,6 @@ package emulator
 import (
 	"testing"
 	"time"
-
-	"github.com/ljagiello/totem-compass/store"
 )
 
 // TestAPoweredDownDeviceSendsNothing: a device that has switched itself
@@ -74,21 +72,6 @@ func TestTheFirstWindowAfterAFixIsAligned(t *testing.T) {
 	off := (h.n.wall(next).UnixMilli() - windowTXDelay.Milliseconds()) % period
 	if off != 0 {
 		t.Errorf("the first window after a fix is %d ms off its %d ms slot", off, period)
-	}
-}
-
-// TestTheSleepTotalSurvivesAReboot: the settings save it, the boot count
-// beside it is restored, and this was not — so a device reported a
-// lifetime sleep of one run next to a boot count of hundreds.
-func TestTheSleepTotalSurvivesAReboot(t *testing.T) {
-	h := newHarness(t, nil)
-	h.n.Restore(store.State{SleepMs: 9_000_000}, h.now)
-	if got := h.n.Power().SleptMs(); got < 9_000_000 {
-		t.Errorf("the restored sleep total is %d ms, want at least 9000000", got)
-	}
-	// And it is still there to save again.
-	if got := h.n.State(1).SleepMs; got < 9_000_000 {
-		t.Errorf("the state saves %d ms", got)
 	}
 }
 

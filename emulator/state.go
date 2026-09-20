@@ -8,7 +8,6 @@ package emulator
 // anything looked at the settings, and a mute that never survived.
 
 import (
-	"math"
 	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
@@ -133,20 +132,12 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	if name := store.SanitizeName(st.Name); name != "" {
 		n.cfg.Name = name
 	}
-	// The lifetime sleep total, like the boot count: saved every time and
-	// meaningless if it restarts at zero on each boot.
-	if !n.power.SetSleptMs(int64(min(st.SleepMs, math.MaxInt64))) {
-		n.log.Warn("saved sleep total is longer than any device has run, ignoring it",
-			"ms", st.SleepMs)
-	}
-	if !n.power.SetLearnedMaxVolts(st.LearnedMaxVolts) {
-		// Said out loud, like every other field off this sector that does
-		// not survive its check: a successful `store open` with a damaged
-		// record and no word about it is how the damage stays hidden
-		// until the next save writes over the evidence.
-		n.log.Warn("saved maximum voltage is not one a cell reaches, keeping what this run learned",
-			"volts", st.LearnedMaxVolts)
-	}
+	// Neither the sleep total nor the learned maximum is put back. Both
+	// are counters the firmware keeps in modes and starts at 0 on every
+	// boot, so a device that restored them would be reporting something
+	// its own firmware never does. They are saved so that whoever reads
+	// the sector can see what the device last said, and the pack is
+	// measured again on the first poll.
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted

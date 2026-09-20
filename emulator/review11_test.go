@@ -61,63 +61,6 @@ func manyOwned() []mesh.MAC {
 	return out
 }
 
-// TestALearnedVoltageIsChecked: the learned maximum comes off a flash
-// sector as four raw bytes. An infinity pinned the curve for the life of
-// the boot and was written straight back out, and nothing could ever
-// lower it — so a factory reset could not clear it either.
-func TestALearnedVoltageIsChecked(t *testing.T) {
-	// A bare power model: a node's has already measured the pack its
-	// configuration describes, and the rule under test is about one that
-	// has only ever been restored.
-	p := newPower(t0)
-	if ok := p.SetLearnedMaxVolts(float32(math.Inf(1))); ok {
-		t.Error("an infinite maximum was accepted without complaint")
-	}
-	if got := p.LearnedMaxVolts(); math.IsInf(float64(got), 0) {
-		t.Errorf("the power model took a learned maximum of %v", got)
-	}
-	if ok := p.SetLearnedMaxVolts(99); ok {
-		t.Error("a voltage no cell reaches was accepted without complaint")
-	}
-	if got := p.LearnedMaxVolts(); got == 99 {
-		t.Error("the power model took a voltage no cell reaches")
-	}
-
-	// A real one is taken.
-	if ok := p.SetLearnedMaxVolts(4.2); !ok {
-		t.Fatal("a plausible maximum was refused")
-	}
-	if got := p.LearnedMaxVolts(); got != 4.2 {
-		t.Fatalf("a plausible maximum came back as %v", got)
-	}
-	// A saved value may replace one that was only restored: a pack
-	// swapped for one that peaks lower needs a way down that is not a
-	// factory reset.
-	if ok := p.SetLearnedMaxVolts(4.15); !ok {
-		t.Error("a lower saved value was reported as implausible")
-	}
-	if got := p.LearnedMaxVolts(); got != 4.15 {
-		t.Errorf("a restored maximum was not replaced: %v", got)
-	}
-	// But not one this run measured for itself: `store open` on a running
-	// device must not un-stretch a curve it learned an hour ago.
-	p.learn(Battery{Volts: 4.3})
-	p.SetLearnedMaxVolts(4.15)
-	if got := p.LearnedMaxVolts(); got != 4.3 {
-		t.Errorf("a stale saved value lowered a measured maximum to %v", got)
-	}
-	// Nothing saved is not a bad value, and must not be reported as one:
-	// it is what every first boot passes.
-	if ok := p.SetLearnedMaxVolts(0); !ok {
-		t.Error("an empty saved maximum was reported as implausible")
-	}
-	// A factory reset forgets the pack.
-	p.ClearLearnedMaxVolts()
-	if got := p.LearnedMaxVolts(); got != 0 {
-		t.Errorf("a reset left the learned maximum at %v", got)
-	}
-}
-
 // TestTheLearnedMaximumStretchesTheCurve: a pack that charges above the
 // curve's own top read 100% all the way down to 4.12 V, so the first
 // tenth of a volt of discharge looked like none at all. That is what

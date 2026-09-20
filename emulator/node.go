@@ -518,8 +518,13 @@ func (n *Node) read(now time.Time) {
 	// inventing a number.
 	// Learned before the percentage is worked out, so a pack that has
 	// just been seen higher than the curve's top is read against its own
-	// maximum rather than the previous one.
-	n.power.learn(n.sensors.Battery)
+	// maximum rather than the previous one. Not while the device is off:
+	// the driver keeps polling so the power button still works, and a
+	// device left switched off on a charger would otherwise go on
+	// stretching its curve.
+	if !n.power.Off() {
+		n.power.learn(n.sensors.Battery)
+	}
 	if b := &n.sensors.Battery; !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}

@@ -141,10 +141,10 @@ func (s *settings) forget(n *emulator.Node, now time.Time) error {
 	}
 	n.FactoryReset(now)
 	empty := n.State(0)
-	// The record is what a reset has to leave empty. The node itself has
-	// already measured the pack in front of it again, which is a reading
-	// and not a memory, but writing it here would have the next boot
-	// restore a maximum the device was told to forget.
+	// The record a reset writes says nothing about the pack or the run
+	// that is ending. Neither is read back at boot, so this is only about
+	// what someone finds in the sector afterwards — but a record labelled
+	// empty should be.
 	empty.LearnedMaxVolts = 0
 	empty.SleepMs = 0
 	b, err := empty.MarshalBinary()

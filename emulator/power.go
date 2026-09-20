@@ -166,13 +166,7 @@ type Power struct {
 	// sleptMs is dev_total_lightsleep_ms, and awakeMs its counterpart, so
 	// the duty cycle the firmware logs can be reported.
 	sleptMs, awakeMs int64
-	// priorSleptMs is what previous boots slept, restored from the
-	// settings. Kept apart from sleptMs because the duty cycle is a ratio
-	// of this run's two halves: adding a lifetime total to one side of it
-	// and not the other reported 99% sleep on a device that had been
-	// awake the whole time.
-	priorSleptMs int64
-	lastTick     time.Time
+	lastTick         time.Time
 	// blockers are the watchdog blockers currently held. The feed loop
 	// runs only when there are none, as _should_enable says.
 	blockers map[WdtBlocker]bool
@@ -186,17 +180,11 @@ type Power struct {
 	// bounces on the way into the socket does not set it off.
 	chargeSince time.Time
 	chargeShown bool
-	// maxVolts is the highest cell voltage this pack has been seen at,
-	// which device_power learns and logs as "Max volts updated". It is
-	// kept across reboots, so a pack that charges above the curve's top
-	// is not read as 100% for ever after.
+	// maxVolts is the highest cell voltage this pack has been seen at
+	// during this run, which device_power learns and logs as "Max volts
+	// updated". It stretches the top of the curve, so a pack that charges
+	// above it is not read as 100% all the way down.
 	maxVolts float32
-	// measured says maxVolts came from a reading this run took, rather
-	// than from a saved record. A saved one may replace what was only
-	// restored — a pack swapped for one that peaks lower has to be able
-	// to bring the curve back down — but never what this run has seen
-	// with its own eyes.
-	measured bool
 }
 
 func newPower(now time.Time) *Power {
@@ -210,60 +198,19 @@ func newPower(now time.Time) *Power {
 // calibration twice to work around it.
 func (p *Power) learn(b Battery) {
 	if b.Volts > p.maxVolts && plausibleVolts(b.Volts) {
-		p.maxVolts, p.measured = b.Volts, true
+		p.maxVolts = b.Volts
 	}
 }
 
-// SetSleptMs puts back the lifetime light-sleep total a previous boot
-// saved, which the settings carry like the boot count. Without it the
-// figure a device reports is only this run's, next to a boot count that
-// is every run's.
-func (p *Power) SetSleptMs(ms int64) bool {
-	// A length of time no device has been through: this is eight bytes
-	// off a flash sector, and the all-ones an erased or torn record gives
-	// would come back as a negative duration and a duty of -100%.
-	const maxLifetimeMs = 100 * 365 * 24 * 60 * 60 * 1000
-	if ms < 0 || ms > maxLifetimeMs {
-		return false
-	}
-	if ms > p.priorSleptMs {
-		// Never downwards: a lifetime counter that goes backwards is not
-		// one, and `store open` on a running device reads a record older
-		// than what this run has already added.
-		p.priorSleptMs = ms
-	}
-	return true
-}
-
-// LearnedMaxVolts is the highest cell voltage seen, which the settings
-// carry across reboots.
+// LearnedMaxVolts is the highest cell voltage seen this run. Like the
+// sleep total, the firmware keeps it in modes and starts it at 0 on
+// every boot (project_data sets batt_volts_max to 0 in the constructor),
+// so it is saved as a snapshot and learned again from the pack rather
+// than remembered across a reboot.
 func (p *Power) LearnedMaxVolts() float32 { return p.maxVolts }
 
-// SetLearnedMaxVolts puts back what a previous boot learned, and reports
-// whether it was a voltage a cell could reach — it comes off a flash
-// sector as four raw bytes, and an infinity would pin the curve for the
-// life of the boot and be written straight back out.
-//
-// It will not lower a maximum this run measured for itself: `store open`
-// on a running device would otherwise un-stretch a curve the device
-// learned an hour ago. It will lower one that was only restored, because
-// a pack swapped for one that peaks lower has to have a way down that is
-// not a factory reset.
-func (p *Power) SetLearnedMaxVolts(v float32) bool {
-	if v == 0 {
-		return true // nothing was saved, which is not a bad value
-	}
-	if !plausibleVolts(v) {
-		return false
-	}
-	if v > p.maxVolts || !p.measured {
-		p.maxVolts = v
-	}
-	return true
-}
-
 // ClearLearnedMaxVolts forgets the pack, as a factory reset does.
-func (p *Power) ClearLearnedMaxVolts() { p.maxVolts, p.measured = 0, false }
+func (p *Power) ClearLearnedMaxVolts() { p.maxVolts = 0 }
 
 // plausibleVolts reports whether a reading is one a single lithium cell
 // could give: above the curve's own floor and not past what a charger
@@ -423,14 +370,11 @@ func (p *Power) Duty() float64 {
 	return float64(p.sleptMs) / float64(total)
 }
 
-// SleptMs is dev_total_lightsleep_ms: this run plus every run the
-// settings carried over. It is what the settings save; the duty cycle
-// uses RunSleptMs, because a ratio needs both halves of the same span.
-func (p *Power) SleptMs() int64 { return p.sleptMs + p.priorSleptMs }
-
-// RunSleptMs is what this run has slept, which is the half of the duty
-// cycle that pairs with the time it has been awake.
-func (p *Power) RunSleptMs() int64 { return p.sleptMs }
+// SleptMs is dev_total_lightsleep_ms, which is this run's total: the
+// firmware keeps it in modes, whose constructor sets it to 0, so it
+// starts again at every boot. The settings save it as a snapshot of what
+// the device last reported, not as something to carry over.
+func (p *Power) SleptMs() int64 { return p.sleptMs }
 
 // Describe is the power state for a console line.
 func (p *Power) Describe() string {

@@ -262,7 +262,8 @@ func (n *Node) Press(in Input, now time.Time) {
 		n.log.Debug("input pressed", "input", in)
 		return
 	}
-	n.log.Debug("input press ignored", "input", in)
+	n.log.Info("input press ignored: too soon after the last edge, or touch is blocked",
+		"input", in)
 }
 
 // Release reports an input released.
@@ -296,8 +297,10 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 		// started — and releasing that would end someone else's press
 		// before it matured into a hold.
 		if !r.press(at) {
+			// Which one, because the ones before it did land and the
+			// recogniser will report the count it actually saw.
 			n.log.Info("tap ignored: the input is already down or blocked",
-				"input", in, "of", count)
+				"input", in, "tap", i+1, "of", count, "taken", i)
 			return
 		}
 		r.release(at.Add(tapHold))
@@ -322,10 +325,6 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	//
 	// It is said out loud, because doing nothing quietly looks the same
 	// as the console having missed the line.
-	if d < edgeLockout {
-		n.log.Info("hold too short to register, as on the device",
-			"input", in, "held", dur(d), "shortest", dur(edgeLockout))
-	}
 	end := now.Add(d)
 	if !r.press(now) {
 		// A finger is already on it — a real one on the board, or a hold
@@ -334,6 +333,15 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 		// fixed for; this is the same path.
 		n.log.Info("hold ignored: the input is already down or blocked", "input", in)
 		return n.flush()
+	}
+	// Said after the press was taken, so it names the reason that
+	// actually applies: a hold refused for being too short and one
+	// refused because a finger is already there are different answers,
+	// and printing both sends someone chasing a timing problem that is
+	// not there.
+	if d < edgeLockout {
+		n.log.Info("hold too short to register, as on the device",
+			"input", in, "held", dur(d), "shortest", dur(edgeLockout))
 	}
 	// Walk the press forward, firing what each moment brings, rather than
 	// jumping to the end: one poll at the end reports the long hold

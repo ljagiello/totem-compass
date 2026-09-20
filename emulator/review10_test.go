@@ -161,28 +161,6 @@ func TestVoltsAloneGiveAPercentage(t *testing.T) {
 	}
 }
 
-// TestTheLearnedMaxVoltsSurvivesAReboot: device_power learns the highest
-// voltage this pack reaches, and that is a fact about the battery rather
-// than about the run. It was encoded in every saved record and never set
-// by anything.
-func TestTheLearnedMaxVoltsSurvivesAReboot(t *testing.T) {
-	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 4.19, 100 })
-	h.collect(h.n.Poll(h.now))
-	if got := h.n.Power().LearnedMaxVolts(); got < 4.18 {
-		t.Fatalf("the power model learned %v, want the 4.19 it was shown", got)
-	}
-	st := h.n.State(1)
-	if st.LearnedMaxVolts < 4.18 {
-		t.Errorf("the state saved %v", st.LearnedMaxVolts)
-	}
-
-	fresh := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.8, 50 })
-	fresh.n.Restore(st, fresh.now)
-	if got := fresh.n.Power().LearnedMaxVolts(); got < 4.18 {
-		t.Errorf("after a reboot the power model has %v, want what it learned", got)
-	}
-}
-
 // TestConfigCannotWidenTheOwnedScope: Config() looks like a read, and the
 // owned list is the one invariant this package promises to keep. Handing
 // out the same backing array let a caller add a Totem its owner never
