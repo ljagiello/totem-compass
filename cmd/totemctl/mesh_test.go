@@ -132,7 +132,7 @@ func TestMeshStatus(t *testing.T) {
 		return []string{
 			`{"up":1,"level":"INFO","msg":"self","mac":"209ba970abb0","name":"emu_totem_abb0","pairing":false,"sos":false,"heading":0,"color":0}`,
 			`{"up":1,"level":"DEBUG","msg":"rx","src":"8c94df7b0478","dst":"209ba970abb0","rssi":-13,"len":108,"frame":"` + capturedStatus + `"}`,
-			`{"up":1,"level":"INFO","msg":"peer","mac":"8c94df7b0478","name":"LCFs totem","rssi":-13,"heard_ms":700,"mesh":false,"lat":37.586754,"lon":-122.007301,"distance_m":-1,"batt":52}`,
+			`{"up":1,"level":"INFO","msg":"peer","mac":"8c94df7b0478","name":"LCFs totem","rssi":-13,"heard_ms":700,"mesh":false,"lat":37.586754,"lon":-122.007301,"has_position":true,"distance_m":-1,"batt":52}`,
 		}
 	}}
 	h := meshHarness(f)
@@ -146,6 +146,31 @@ func TestMeshStatus(t *testing.T) {
 		}
 	}
 	f.waitFor(t, []string{"", "format json", "status", "format text"})
+}
+
+// TestMeshStatusPeerWithoutAFix: a bond restored from flash and not
+// heard from since has no position, and the board now says which it is.
+// Printing its zeroes put the peer on Null Island, a thousand kilometers
+// off the coast of Ghana, in the same row that says it has never been
+// heard from.
+func TestMeshStatusPeerWithoutAFix(t *testing.T) {
+	f := &fakeEmulator{reply: func(cmd string) []string {
+		if cmd != "status" {
+			return nil
+		}
+		return []string{
+			`{"up":1,"level":"INFO","msg":"self","mac":"209ba970abb0","name":"emu_totem_abb0","pairing":false,"sos":false,"heading":0,"color":0}`,
+			`{"up":1,"level":"INFO","msg":"peer","mac":"8c94df7b0478","name":"LCFs totem","rssi":0,"heard_ms":-1,"mesh":false,"lat":0,"lon":0,"has_position":false,"distance_m":-1,"batt":0}`,
+		}
+	}}
+	h := meshHarness(f)
+	h.mustRun(t, "mesh", "status")
+	if got := h.out.String(); strings.Contains(got, "0.000000,0.000000") {
+		t.Errorf("a peer with no position was put on Null Island:\n%s", got)
+	}
+	if got := h.out.String(); !strings.Contains(got, `"LCFs totem"  rssi 0  heard never  no fix`) {
+		t.Errorf("a peer with no position did not say so:\n%s", got)
+	}
 }
 
 func TestMeshStatusNoPeers(t *testing.T) {

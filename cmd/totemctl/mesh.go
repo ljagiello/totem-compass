@@ -339,6 +339,12 @@ func openEmulator(ctx context.Context, g *globals, debug bool) (*emulator, error
 // partial line the board holds, and the command is repeated each second, so
 // a byte lost while the port opened costs a retry, not the session.
 func (e *emulator) handshake(ctx context.Context) error {
+	// The caller's deadline as well as this one: --for is how long the
+	// whole command may take and the handshake is part of it. Which of
+	// the two ran out decides what to say — the caller's means the
+	// person asked for less time than this takes, and blaming the board
+	// for that sent them to reflash a board that was answering.
+	outer := ctx
 	ctx, cancel := context.WithTimeout(ctx, e.g.wait(consoleReply))
 	defer cancel()
 	if err := e.send(""); err != nil {
@@ -354,6 +360,8 @@ func (e *emulator) handshake(ctx context.Context) error {
 			return nil
 		case !errors.Is(err, errTimeout):
 			return err
+		case outer.Err() != nil:
+			return fmt.Errorf("gave up waiting for %s: %w", e.name, outer.Err())
 		case ctx.Err() != nil:
 			return fmt.Errorf("%w on %s: is cmd/totememu flashed on this board? (tinygo flash -target esp32-generic ./cmd/totememu)", errNoEmulator, e.name)
 		}
@@ -739,6 +747,17 @@ func (p *printer) meshStatus(self consoleLine, peers []consoleLine) {
 		if a["mesh"] == true {
 			via = " via mesh"
 		}
-		p.printf("peer     %v %q  rssi %v  heard %s%s  %.6f,%.6f  batt %v%%\n", a["mac"], a["name"], a["rssi"], heard, via, a["lat"], a["lon"], a["batt"])
+		// The same "no fix" the emulator row above uses, and for the
+		// same reason: a bond restored from flash and not heard from
+		// since has no position, and printing its zeroes puts the peer
+		// on Null Island. The board says which it is.
+		where := "no fix"
+		if a["has_position"] == true {
+			if lat, ok := a["lat"].(float64); ok {
+				where = fmt.Sprintf("%.6f,%.6f", lat, a["lon"])
+			}
+		}
+		p.printf("peer     %v %q  rssi %v  heard %s%s  %s  batt %v%%\n",
+			a["mac"], a["name"], a["rssi"], heard, via, where, a["batt"])
 	}
 }

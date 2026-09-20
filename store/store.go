@@ -131,7 +131,19 @@ func (j *Journal) scan(buf []byte) {
 		sum := binary.LittleEndian.Uint32(h[12:16])
 		end := off + headerLen + n
 		if n > MaxRecord || end > len(buf) {
-			break // a length the sector cannot hold: the write was cut short
+			// A length the sector cannot hold, which is a write cut
+			// short between its magic word and its length word — or
+			// noise. Either way this is not a record, and by the same
+			// argument as the checksum failure below, its header says
+			// nothing about where the next one starts: stopping here
+			// would hide every record beyond it.
+			j.torn++
+			if next := resync(buf, off+headerLen); next >= 0 {
+				off = next
+				continue
+			}
+			off = writeHead(buf, off+headerLen)
+			break
 		}
 		body := buf[off+headerLen : end]
 		if crc32.ChecksumIEEE(body) != sum {
@@ -157,8 +169,20 @@ func (j *Journal) scan(buf []byte) {
 			// records resume.
 			j.torn++
 			j.keepSeq(seq, false)
-			off = resync(buf, off+align)
-			continue
+			if next := resync(buf, off+headerLen); next >= 0 {
+				off = next
+				continue
+			}
+			// Nothing further in the sector, which is the ordinary torn
+			// write: a reset caught the last save. The next record goes
+			// after what is actually written rather than where this
+			// header said the record ended — believing the length here
+			// is the thing this branch exists not to do, and taking the
+			// end of the sector instead threw the rest of it away, so
+			// every save after a reset cost a full erase and a second
+			// reset in that window wiped the settings entirely.
+			off = writeHead(buf, off+headerLen)
+			break
 		}
 		// A record with nothing in it is stepped over rather than taken.
 		// Load reads a nil payload as "nothing saved", so letting one
@@ -226,17 +250,46 @@ func (j *Journal) keepSeq(seq uint32, proven bool) {
 	}
 }
 
-// resync finds where the next record starts, at or after off. Records
-// are written on the flash's word granularity, so only those offsets are
-// looked at; the end of the buffer means there is nothing further, which
-// is what the scan's own loop condition then sees.
+// resync finds where the next record starts, at or after off, or -1 when
+// nothing further looks like one. Records are written on the flash's
+// word granularity, so only those offsets are looked at.
+//
+// Callers start it past the header they have given up on: a record
+// cannot begin inside another record's header, and the four bytes of a
+// half-written payload can hold anything — peer names come off the air,
+// so a Totem called TTM1 is a magic word sitting in the wreckage.
 func resync(buf []byte, off int) int {
-	for o := off + (align-off%align)%align; o+headerLen <= len(buf); o += align {
+	for o := off + pad(off); o+headerLen <= len(buf); o += align {
 		if [4]byte(buf[o:o+4]) == magic {
 			return o
 		}
 	}
-	return len(buf)
+	return -1
+}
+
+// writeHead is where the next record may go when the scan has run out of
+// records to read: after everything that is written, rounded up to the
+// granularity a write lands on.
+//
+// Flash only clears bits, so what is written is what is not 0xff, and
+// that is a fact about the sector rather than a claim by a header — the
+// distinction this whole function exists for. A torn write leaves its
+// header and however much of its payload landed; the next save appends
+// after that and costs no erase, which is what it cost before any of
+// this and what the erase budget in the package comment assumes.
+func writeHead(buf []byte, from int) int {
+	// from is past the header the scan gave up on, because that is where
+	// a later scan will start looking: resync skips a bad header, so a
+	// record written inside one would never be found again. The fuzzer
+	// found exactly that — four bytes of magic in an otherwise erased
+	// sector, a save at offset 4, and a reopen that could not see it.
+	last := from
+	for i := from; i < len(buf); i++ {
+		if buf[i] != 0xff {
+			last = i + 1
+		}
+	}
+	return last + pad(last)
 }
 
 // pad is the bytes that round a record up to the flash write granularity.

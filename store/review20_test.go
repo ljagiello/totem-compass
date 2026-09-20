@@ -385,8 +385,64 @@ func TestABogusLengthHidesNothing(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("loaded %q, and the newest record says %q", got, want)
 	}
-	// And the next save does not land beyond what it skipped.
-	if again.Used() > off+headerLen+align+headerLen+len(want)+64 {
-		t.Errorf("the scan left the next save at %d, far past the last record", again.Used())
+	// And the write head is exactly after that record, not somewhere
+	// within a slack of it: every term here is known, since writeRaw
+	// built the record two lines up.
+	end := off + headerLen + align + headerLen + len(want)
+	if got := again.Used(); got != end+pad(len(want)) {
+		t.Errorf("the write head is at %d, and the last record ends at %d", got, end+pad(len(want)))
+	}
+}
+
+// TestATornWriteCostsNoErase: a reset caught mid-save is this journal's
+// ordinary failure, and the save after it has to append past the
+// wreckage as any other save would. Sending the write head to the end of
+// the sector instead made every such save erase the whole thing — which
+// is the one operation this package is built to avoid, and which a
+// second reset in that window turns into the loss of every setting.
+func TestATornWriteCostsNoErase(t *testing.T) {
+	sec := newMemSector(4096)
+	j, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("the settings before the reset")); err != nil {
+		t.Fatal(err)
+	}
+	used := j.Used()
+
+	// The save the reset cut short.
+	sec.failWriteAfter = 20
+	_ = j.Save([]byte("a save that never finished"))
+	sec.failWriteAfter = -1
+
+	again, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Torn() == 0 {
+		t.Error("the torn write was not noticed")
+	}
+	if got := again.Used(); got <= used || got > used+128 {
+		t.Errorf("the write head is at %d, and the last good record ended at %d", got, used)
+	}
+	if got := again.Free(); got < 3000 {
+		t.Errorf("a torn write left %d bytes free in a 4096-byte sector", got)
+	}
+
+	erases := sec.erases
+	if err := again.Save([]byte("the settings after it")); err != nil {
+		t.Fatal(err)
+	}
+	if sec.erases != erases {
+		t.Errorf("the save after a torn write erased the sector %d times", sec.erases-erases)
+	}
+	// And what was there before is still there to fall back on.
+	third, err := Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := third.Load(); err != nil || string(got) != "the settings after it" {
+		t.Errorf("after the save: %q, %v", got, err)
 	}
 }

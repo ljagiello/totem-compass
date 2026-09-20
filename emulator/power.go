@@ -224,9 +224,16 @@ func plausibleVolts(v float32) bool {
 	return v >= battCurve[0].volts && v <= maxPlausibleVolts
 }
 
-// maxPlausibleVolts is the highest a single cell is charged to, with room
-// for a pack that reads a little high. Past it the reading is wrong.
-const maxPlausibleVolts = 4.4
+// maxPlausibleVolts is the highest a cell reads, with room above it.
+// Past this the number is wrong rather than high.
+//
+// Measured, not assumed: a Totem on firmware 5.0.3 sitting on its
+// charger reports 4.48 V, which the 4.4 that used to be here called
+// implausible — so learn() would have refused to learn a real pack's own
+// peak, and the battery curve would have been stretched against a
+// maximum the device never reaches. The headroom above 4.48 is for a
+// pack that reads a little higher still.
+const maxPlausibleVolts = 4.6
 
 // startRun begins a new run: the counters the firmware keeps in modes,
 // whose constructor sets them to zero. A power cycle is a boot, so what

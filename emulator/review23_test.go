@@ -183,3 +183,28 @@ func TestTheRecordHoldsEveryNameAFrameCan(t *testing.T) {
 		t.Errorf("the status frame refused this device's own name: %v", err)
 	}
 }
+
+// TestARealTotemsChargingVoltageIsPlausible: the plausibility band was a
+// guess, and it was too low. A Totem on firmware 5.0.3 sitting on its
+// charger reports 4.48 V, which the old ceiling of 4.4 called wrong — so
+// learn() would refuse a real pack's own peak, the battery curve would
+// be stretched against a maximum the device never reaches, and the peer
+// line printed volts=0 for a device plainly reporting volts.
+func TestARealTotemsChargingVoltageIsPlausible(t *testing.T) {
+	// Measured on the bench, in a log full of frames from a real Totem.
+	const observed = 4.48
+	if !plausibleVolts(observed) {
+		t.Errorf("a real Totem reads %v V on its charger, and this build calls that implausible", observed)
+	}
+	// And such a reading reaches the peer line rather than being zeroed.
+	if got := loggableVolts(observed); got != observed {
+		t.Errorf("a peer reporting %v V is logged as %v", observed, got)
+	}
+	// What cannot be logged is still kept out: slog's JSON handler takes
+	// neither, and one frame carrying one takes the whole line with it.
+	for _, v := range []float32{float32(math.NaN()), float32(math.Inf(1)), float32(math.Inf(-1))} {
+		if got := loggableVolts(v); got != 0 {
+			t.Errorf("loggableVolts(%v) = %v", v, got)
+		}
+	}
+}

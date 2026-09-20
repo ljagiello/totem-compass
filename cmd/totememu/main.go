@@ -191,12 +191,17 @@ type radio struct {
 	peers map[mesh.MAC]bool
 	// failed counts unicasts the radio did not see acknowledged. Against
 	// a real Totem that is a burst while the two are pairing and then
-	// nothing at all: 250 during the pairing window, and flat across the
-	// ten minutes of steady traffic afterwards while rx climbed by sixty
-	// a minute. A rising count means the link is unhappy now, not that
-	// frames are being lost — the peer acts on what it is sent either
-	// way — so it is worth watching rather than worth alarm.
-	failed   int
+	// nothing at all: zero across twenty-five minutes of steady traffic
+	// from a boot that restored its bond, against a couple of hundred
+	// while pairing windows were being opened over and over. A rising
+	// count means the link is unhappy now, not that frames are being
+	// lost — the peer acts on what it is sent either way.
+	//
+	// Atomic because espradio calls the send handler from the WiFi task
+	// and the report below is read from the main loop: on a dual-core
+	// ESP32 that is two cores at the same counter, and a number offered
+	// as a signal about the link should not be a torn read.
+	failed   atomic.Int32
 	received int
 }
 
@@ -204,7 +209,7 @@ func newRadio(log *slog.Logger) *radio {
 	r := &radio{log: log, peers: map[mesh.MAC]bool{}}
 	espradio.ESPNowSetSendHandler(func(s espradio.ESPNowSendReport) {
 		if s.Status != espradio.ESPNowSendSuccess && s.DestinationAddress != mesh.Broadcast {
-			r.failed++
+			r.failed.Add(1)
 		}
 	})
 	return r
@@ -241,7 +246,7 @@ func (r *radio) send(ps []emulator.Packet) {
 }
 
 func (r *radio) report() {
-	r.log.Info("radio", "rx", r.received, "rx_lost", rxLost(), "unacked_unicasts", r.failed)
+	r.log.Info("radio", "rx", r.received, "rx_lost", rxLost(), "unacked_unicasts", r.failed.Load())
 }
 
 // command runs one console line.
