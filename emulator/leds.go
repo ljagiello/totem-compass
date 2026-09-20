@@ -318,6 +318,13 @@ func (l *LEDs) ToggleBrightness() float64 {
 // Brightness is the global scale, 0 to 1.
 func (l *LEDs) Brightness() float64 { return l.brightness }
 
+// SetBrightness puts the scale back to a level the device was left at,
+// which is what a saved setting restores after a reboot.
+func (l *LEDs) SetBrightness(f float64) {
+	l.brightness = min(max(f, 0), 1)
+	l.dimmed = l.brightness < fullBrightness
+}
+
 // Next is when Tick next has a frame to draw.
 func (l *LEDs) Next() time.Time { return l.next }
 

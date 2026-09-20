@@ -77,10 +77,18 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 // still bonded, the way a Totem does.
 func (s *settings) restore(n *emulator.Node, now time.Time) {
 	for _, p := range s.state.Peers {
-		n.AddBond(mesh.MAC(p.MAC), p.Name, now)
+		// A saved peer that is no longer in the owned list is refused, and
+		// that is worth saying: it means the board was reflashed for a
+		// different Totem and the old bond is being dropped.
+		if err := n.AddBond(mesh.MAC(p.MAC), p.Name, now); err != nil {
+			s.log.Warn("saved bond not restored", "mac", mesh.MAC(p.MAC), "err", err)
+		}
 	}
 	if len(s.state.Peers) > 0 {
 		s.log.Info("bonds restored", "peers", len(s.state.Peers))
+	}
+	if b := s.state.Brightness; b > 0 {
+		n.LEDs().SetBrightness(float64(b) / 255)
 	}
 }
 
@@ -92,9 +100,15 @@ func (s *settings) save(n *emulator.Node) {
 	}
 	cfg := n.Config()
 	st := store.State{
-		Name: cfg.Name, ColorID: cfg.ColorID, Brightness: s.state.Brightness,
-		SOSMuted: s.state.SOSMuted, BootCount: s.state.BootCount,
-		SleepMs: s.state.SleepMs, LearnedMaxVolts: s.state.LearnedMaxVolts,
+		Name: cfg.Name, ColorID: cfg.ColorID,
+		// The brightness a tap of the power button chose, and the sleep
+		// the device has taken, both belong to the device rather than to
+		// this boot.
+		Brightness:      uint8(n.LEDs().Brightness() * 255),
+		SOSMuted:        s.state.SOSMuted,
+		BootCount:       s.state.BootCount,
+		SleepMs:         uint64(n.Power().SleptMs()),
+		LearnedMaxVolts: s.state.LearnedMaxVolts,
 	}
 	for _, p := range n.Peers() {
 		if len(st.Peers) == store.MaxPeers {

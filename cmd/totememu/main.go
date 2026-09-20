@@ -89,7 +89,12 @@ func main() {
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
 		ColorID: saved.state.ColorID,
-		Logger:  log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
+		// The update client runs the firmware's exchange against a
+		// transport that answers from memory: this board has no
+		// credentials for a network, and nothing it does should depend on
+		// having one.
+		OTATransport: newLocalOTA(),
+		Logger:       log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
 	}, boot)
 	saved.restore(node, boot)
 	saved.save(node) // records this boot, and writes nothing if nothing changed
