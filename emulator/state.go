@@ -26,6 +26,8 @@ func (n *Node) State(boots uint32) store.State {
 		SOSMuted:   n.sosMuted,
 		BootCount:  boots,
 		SleepMs:    uint64(n.power.SleptMs()),
+		// LearnedMaxVolts belongs to the battery rather than to the node,
+		// so whoever holds the saved state carries it over.
 	}
 	for _, mac := range n.order {
 		if len(st.Peers) == store.MaxPeers {
@@ -64,10 +66,10 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted
-	if st.ColorID != 0 || st.Name != "" {
-		n.cfg.ColorID = st.ColorID
-		n.leds.SetDefaultColor(Color(st.ColorID))
-	}
+	// The colour is applied whatever it is: 0 is red, which is also the
+	// default, so there is nothing to tell apart.
+	n.cfg.ColorID = st.ColorID
+	n.leds.SetDefaultColor(Color(st.ColorID))
 	return errs
 }
 
