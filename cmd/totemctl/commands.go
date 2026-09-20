@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -872,8 +873,20 @@ func newRawCmd(g *globals) *cobra.Command {
 // parseRawFrame decodes hex typed as one or more arguments, with optional
 // spaces or colons between bytes, into a frame for the data (or, with conn,
 // the conn-status) characteristic.
+// cleanHex drops the separators hex is usually written with: ":" and any
+// space, including the non-breaking and thin spaces that come with text
+// pasted from a document.
+func cleanHex(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ':' || unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 func parseRawFrame(args []string, conn bool) (protocol.Frame, error) {
-	b, err := hex.DecodeString(strings.NewReplacer(" ", "", ":", "").Replace(strings.Join(args, "")))
+	b, err := hex.DecodeString(cleanHex(strings.Join(args, "")))
 	if err != nil {
 		return protocol.Frame{}, err
 	}
