@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ljagiello/totem-compass/mesh"
 )
 
 // TestCrystalHoldStartsPairing: the gesture a person uses to pair is a
@@ -196,19 +198,66 @@ func TestWatchdogBlockers(t *testing.T) {
 // not sleep at all while something holds it awake.
 func TestSleepStopsShortOfAWindow(t *testing.T) {
 	p := newPower(t0)
-	if d := p.sleep(t0, t0.Add(time.Second)); d != time.Second-wakeBeforeWindow {
-		t.Errorf("slept %v before a window a second away", d)
+	now := t0
+	if d := p.sleep(now, now.Add(time.Second)); d != time.Second-wakeBeforeWindow {
+		t.Errorf("reported %v of sleep before a window a second away", d)
 	}
-	if d := p.sleep(t0, t0.Add(wakeBeforeWindow/2)); d != 0 {
-		t.Errorf("slept %v into a window that was about to open", d)
+	now = now.Add(time.Second)
+	if d := p.sleep(now, now.Add(wakeBeforeWindow/2)); d != 0 {
+		t.Errorf("reported %v of sleep into a window that was about to open", d)
 	}
+	now = now.Add(time.Second)
 	p.HoldSleep(true)
-	if d := p.sleep(t0, t0.Add(time.Minute)); d != 0 {
-		t.Errorf("slept %v while sleep was held off", d)
+	if d := p.sleep(now, now.Add(time.Minute)); d != 0 {
+		t.Errorf("reported %v of sleep while sleep was held off", d)
 	}
-	p.HoldSleep(false)
-	if p.Duty() <= 0 || p.Duty() > 1 {
-		t.Errorf("duty = %v", p.Duty())
+	// Nothing here could be counted as slept: the only interval that
+	// might have been is the first, and no time had passed by then. What
+	// the duty cycle does over a run is the next test's job.
+	if p.SleptMs() != 0 {
+		t.Errorf("slept %d ms across three calls that could not sleep", p.SleptMs())
+	}
+}
+
+// TestSleepCannotExceedTheClock: the counter is what the firmware logs as
+// dev_total_lightsleep_ms, and since it is saved to flash it has to be a
+// real number. Counting the sleep still ahead on every call multiplied it
+// by however often the driver polled: ten seconds of node time reported
+// hundreds of hours.
+func TestSleepCannotExceedTheClock(t *testing.T) {
+	p := newPower(t0)
+	now := t0
+	// A driver polling every 5 ms with the next event four seconds away.
+	for i := 0; i < 2000; i++ {
+		now = now.Add(5 * time.Millisecond)
+		p.sleep(now, now.Add(4*time.Second))
+	}
+	elapsed := now.Sub(t0).Milliseconds()
+	if p.SleptMs() > elapsed {
+		t.Errorf("slept %d ms in %d ms of clock", p.SleptMs(), elapsed)
+	}
+	if p.SleptMs() < elapsed/2 {
+		t.Errorf("slept only %d ms of an idle %d ms", p.SleptMs(), elapsed)
+	}
+	if d := p.Duty(); d <= 0 || d > 1 {
+		t.Errorf("duty = %v", d)
+	}
+}
+
+// TestChargingBeatsTheCutoff: a pack that reads flat while it charges is
+// filling up. Powering down there would kill the radio at the moment
+// someone plugged it in.
+func TestChargingBeatsTheCutoff(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetBattery(0, true, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.n.device(h.now)
+	if h.n.Power().Off() {
+		t.Fatal("a charging device powered itself down")
+	}
+	if got := h.n.Power().Mode(); got != PowerNormal {
+		t.Errorf("mode on the charger = %s", got)
 	}
 }
 
@@ -582,5 +631,212 @@ func TestPoweredDownIgnoresEveryGestureButOne(t *testing.T) {
 	h.advance(time.Second)
 	if h.n.Power().Off() {
 		t.Error("holding the power button did not turn it back on")
+	}
+}
+
+// TestRingSearchesForAFix: a Totem with no fix sweeps its ring while the
+// receiver looks for one, and stops once it has one. It is the first
+// thing someone sees after a boot indoors.
+func TestRingSearchesForAFix(t *testing.T) {
+	h := newHarness(t, nil) // no position
+	// Past the power-up animation, and past the first radio window: the
+	// search starts on the poll after the strip goes idle.
+	h.advance(bootAnim + 10*time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimGNSSSearch {
+		t.Fatalf("animation without a fix = %s, want the search", got)
+	}
+	// The sweep moves: two frames apart the ring is not the same picture.
+	first := append([]RGB(nil), h.n.LEDs().Ring()...)
+	h.advance(10 * ledFrame)
+	same := true
+	for i, p := range h.n.LEDs().Ring() {
+		if p != first[i] {
+			same = false
+			break
+		}
+	}
+	if same {
+		t.Error("the search animation is not moving")
+	}
+
+	if err := h.n.SetPosition(&Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3}, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(time.Second)
+	if got := h.n.LEDs().Animation(); got == AnimGNSSSearch {
+		t.Error("it is still searching with a fix in hand")
+	}
+
+	// An alarm outranks the search.
+	if err := h.n.SetPosition(nil, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(time.Second)
+	h.n.SetSOS(true)
+	h.advance(time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimSOS {
+		t.Errorf("animation with SOS on and no fix = %s, want the alarm", got)
+	}
+}
+
+// TestTapCountsArrive: a double tap has to arrive as a double tap. The
+// synthetic taps were spaced 60 ms apart while each release was 31 ms in,
+// so every press after the first landed 29 ms after the last edge and the
+// 30 ms lockout swallowed it: a requested triple tap reached the node as
+// a double, and the triple tap is what starts an update.
+func TestTapCountsArrive(t *testing.T) {
+	for count, want := range map[int]Gesture{1: SingleTap, 2: DoubleTap, 3: TripleTap} {
+		h := newHarness(t, nil)
+		h.advance(bootDebounce)
+		h.n.Tap(SOSButton, count, h.now)
+		r := h.n.input(SOSButton)
+		if r.taps != count {
+			t.Errorf("%d taps registered as %d", count, r.taps)
+		}
+		got := r.poll(h.now.Add(tapStep*time.Duration(count) + multiTapWindow + time.Second))
+		if len(got) != 1 || got[0] != want {
+			t.Errorf("%d taps gave %v, want %v", count, got, want)
+		}
+	}
+}
+
+// TestOneWindowPerNode: a sensor source that arrives with a clock takes
+// the GNSS path in read(), which schedules the windows itself. Scheduling
+// another on top left two jobs rescheduling each other, and every peer
+// saw every status frame twice.
+func TestOneWindowPerNode(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{
+			Fix:         &Fix{Lat: 37.775, Lon: -122.42, AccuracyM: 3, Time: t0},
+			Orientation: mesh.OrientationVertical,
+		})
+	})
+	windows := 0
+	for _, j := range h.n.jobs {
+		if j.kind == jobWindow {
+			windows++
+		}
+	}
+	if windows != 1 {
+		t.Fatalf("%d window jobs at boot, want 1", windows)
+	}
+	h.bond()
+	h.take()
+	h.advance(20 * time.Second)
+	var status int
+	for _, s := range h.take() {
+		if p, ok := s.msg.(mesh.Peer); ok && p.Command == mesh.PeerStatus {
+			status++
+		}
+	}
+	// Four-second windows: about five in twenty seconds, not ten.
+	if status > 7 {
+		t.Errorf("%d status frames in 20 s, which is about twice the windows", status)
+	}
+}
+
+// TestPowerOffEndsPairing: powering down cleared the job list, which took
+// the timer that ends pairing with it. The device came back still
+// pairing, and a node that is pairing holds back every status frame.
+func TestPowerOffEndsPairing(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.collect(h.n.Pair(h.now))
+	if !h.n.Pairing() {
+		t.Fatal("pairing did not start")
+	}
+	h.n.PowerOff(h.now)
+	if h.n.Pairing() {
+		t.Fatal("a powered-down device is still pairing")
+	}
+	h.n.PowerOn(h.now)
+	h.bond()
+	h.take()
+	h.advance(20 * time.Second)
+	if len(h.take()) == 0 {
+		t.Error("the device sent nothing after being powered back on")
+	}
+}
+
+// TestEveryAnimationEnds: an animation that never ends pins the strip at
+// a frame every 25 ms, which keeps the modeled device awake for a
+// picture nobody is watching.
+func TestEveryAnimationEnds(t *testing.T) {
+	// The ones that run until something stops them, and what stops them.
+	openEnded := map[Animation]bool{AnimIdle: true, AnimPairing: true, AnimSOS: true,
+		AnimOTA: true, AnimWiFi: true, AnimGNSSSearch: true}
+	for a := AnimIdle; a <= AnimLowBattery; a++ {
+		if openEnded[a] {
+			continue
+		}
+		l := newLEDs(t0, ColorTeal)
+		l.Play(a, t0)
+		l.Tick(t0.Add(time.Minute))
+		if got := l.Animation(); got == a {
+			t.Errorf("%s is still playing a minute later", a)
+		}
+		if next := l.Next(); !next.IsZero() && next.After(t0.Add(time.Minute+time.Second)) {
+			t.Errorf("%s left the strip wanting a frame at %s", a, next)
+		}
+	}
+}
+
+// TestUpdateRefusesAtZeroPercent: 0% is the flattest reading there is, so
+// it belongs inside the battery gate. It used to fall outside it.
+func TestUpdateRefusesAtZeroPercent(t *testing.T) {
+	srv := newFakeOTA()
+	h := newHarness(t, func(c *Config) { c.OTATransport = srv })
+	if err := h.n.SetBattery(0, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Fatalf("update on an empty battery: %v", err)
+	}
+	if len(srv.posts) != 0 {
+		t.Error("it asked the server anyway")
+	}
+}
+
+// TestPairingFromTheCrystalSendsItsFrames: Pair flushes what it queued,
+// so a gesture that called it and then flushed again found nothing, and
+// the first bond broadcast never went out.
+func TestPairingFromTheCrystalSendsItsFrames(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	out := h.n.HoldFor(Crystal, crystalPairHold+100*time.Millisecond, h.now)
+	if !h.n.Pairing() {
+		t.Fatal("the hold did not start pairing")
+	}
+	if len(out) == 0 {
+		t.Fatal("the hold sent no frames: the first bond request was dropped")
+	}
+	h.collect(out)
+}
+
+// TestGroupColorReachesTheCrystal: a Smart Group assigns this device a
+// colour, and the crystal is what shows it. Setting only the config left
+// the two saying different things.
+func TestGroupColorReachesTheCrystal(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.ColorID = int8(ColorBlue) })
+	if got := h.n.LEDs().DefaultColor(); got != ColorBlue {
+		t.Fatalf("crystal starts %s", got)
+	}
+	// Join first: a finalize only counts for the group this device is in.
+	h.collect(h.n.Pair(h.now))
+	h.take()
+	beacon := mesh.SmartGroup{Instruction: mesh.SmartGroupAdvertise, UID: 55, TimeoutMs: 30000}
+	h.rx(totem, mesh.Broadcast, -20, beacon)
+	beacon.Members = []mesh.SmartGroupMember{{MAC: self}}
+	h.rx(totem, mesh.Broadcast, -20, beacon)
+	h.take()
+
+	h.rx(totem, mesh.Broadcast, -20, mesh.SmartGroup{
+		UID: 55, Instruction: mesh.SmartGroupFinalize, ColorID: int8(ColorRed),
+		Members: []mesh.SmartGroupMember{{MAC: self, ColorID: int8(ColorRed)}},
+	})
+	if got := h.n.Config().ColorID; got != int8(ColorRed) {
+		t.Fatalf("config colour = %d", got)
+	}
+	if got := h.n.LEDs().DefaultColor(); got != ColorRed {
+		t.Errorf("crystal colour = %s, want the one the group gave", got)
 	}
 }

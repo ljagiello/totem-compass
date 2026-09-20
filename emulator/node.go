@@ -260,8 +260,19 @@ func New(cfg Config, now time.Time) *Node {
 	n.power = newPower(now)
 	n.ota = newOTA()
 	n.read(now)
-	n.scheduleWindow(now)
+	// read may already have scheduled one: a sensor source that arrives
+	// with a clock takes the GNSS path, which aligns the windows itself.
+	// A second one here would leave two window jobs rescheduling each
+	// other, and every peer would see every status twice.
+	if !n.hasJob(jobWindow) {
+		n.scheduleWindow(now)
+	}
 	return n
+}
+
+// hasJob reports whether a job of this kind is already scheduled.
+func (n *Node) hasJob(k jobKind) bool {
+	return slices.ContainsFunc(n.jobs, func(j job) bool { return j.kind == k })
 }
 
 // DefaultName is "emu_totem_" and the last four hex digits of the MAC.
@@ -1083,7 +1094,11 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 		}
 		for _, m := range g.Members {
 			if m.MAC == n.cfg.MAC {
+				// The group assigns this device a colour, and the crystal
+				// is what shows it: setting only the config would leave
+				// the two saying different things.
 				n.cfg.ColorID = m.ColorID
+				n.leds.SetDefaultColor(Color(m.ColorID))
 				continue
 			}
 			if !slices.Contains(n.cfg.Owned, m.MAC) {
@@ -1125,6 +1140,14 @@ func (n *Node) AddBond(mac mesh.MAC, name string, now time.Time) error {
 	n.log.Info("bond restored", "mac", mac, "name", name)
 	return nil
 }
+
+// SOSMuted reports whether the alarm's blinking is muted. It survives a
+// reboot on a device that saves its settings.
+func (n *Node) SOSMuted() bool { return n.sosMuted }
+
+// SetSOSMuted puts the mute back to a saved value, without the toggle a
+// button press makes.
+func (n *Node) SetSOSMuted(muted bool) { n.sosMuted = muted }
 
 // BondCount is how many peers are bonded. A driver polls it to notice a
 // bond gained or lost without building the whole list every pass.

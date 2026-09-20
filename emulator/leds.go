@@ -198,6 +198,8 @@ const (
 	disconnAnim  = 2 * time.Second
 	demiGodBlink = 3 * time.Second
 	otaFailAnim  = 4 * time.Second
+	peerDelAnim  = 2 * time.Second
+	lowBattAnim  = 4 * time.Second
 	// sosPeriod is one blink of the crystal in SOS: on for half of it.
 	sosPeriod = 700 * time.Millisecond
 )
@@ -266,6 +268,13 @@ func (l *LEDs) Play(a Animation, now time.Time) {
 		l.until = now.Add(demiGodBlink)
 	case AnimOTAFailed:
 		l.until = now.Add(otaFailAnim)
+	case AnimPeerDeleteCountdown:
+		l.until = now.Add(peerDelAnim)
+	case AnimLowBattery:
+		// A reminder, not a state: it plays when the mode drops and then
+		// gives the ring back. Left running it would hold the device
+		// awake for a single red pixel.
+		l.until = now.Add(lowBattAnim)
 	default:
 		// Pairing, SOS, OTA and the searches run until something stops
 		// them.

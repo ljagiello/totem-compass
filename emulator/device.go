@@ -58,6 +58,10 @@ func (n *Node) PowerOff(now time.Time) {
 	if n.power.off {
 		return
 	}
+	// Stop pairing first: clearing the job list would take the timer that
+	// ends it with it, and the node would come back still pairing — which
+	// holds back every status frame it would otherwise send.
+	n.stopPairing(now)
 	n.power.off, n.power.mode = true, PowerOff
 	n.jobs = nil
 	n.leds.Play(AnimIdle, now)
@@ -96,6 +100,15 @@ func (n *Node) device(now time.Time) {
 		case PowerLow:
 			n.leds.Play(AnimLowBattery, now)
 		}
+	}
+	// A device with no fix sweeps the ring while its receiver looks for
+	// one (anim_gnss_search), and stops when it has one. Only from idle:
+	// a pairing or an alarm is worth more than a search.
+	switch {
+	case n.leds.Animation() == AnimIdle && n.fix() == nil && !n.power.Off():
+		n.leds.Play(AnimGNSSSearch, now)
+	case n.leds.Animation() == AnimGNSSSearch && n.fix() != nil:
+		n.leds.Stop(AnimGNSSSearch, now)
 	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.

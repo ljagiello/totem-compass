@@ -90,6 +90,9 @@ func (s *settings) restore(n *emulator.Node, now time.Time) {
 	if b := s.state.Brightness; b > 0 {
 		n.LEDs().SetBrightness(float64(b) / 255)
 	}
+	// A muted alarm stays muted: someone silenced it, and a power cut is
+	// not them changing their mind.
+	n.SetSOSMuted(s.state.SOSMuted)
 }
 
 // save writes the node's bonds and settings, and does nothing when they
@@ -105,7 +108,7 @@ func (s *settings) save(n *emulator.Node) {
 		// the device has taken, both belong to the device rather than to
 		// this boot.
 		Brightness:      uint8(n.LEDs().Brightness() * 255),
-		SOSMuted:        s.state.SOSMuted,
+		SOSMuted:        n.SOSMuted(),
 		BootCount:       s.state.BootCount,
 		SleepMs:         uint64(n.Power().SleptMs()),
 		LearnedMaxVolts: s.state.LearnedMaxVolts,

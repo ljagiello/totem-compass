@@ -149,6 +149,9 @@ type OTA struct {
 	err         error
 	started     time.Time
 	finished    time.Time
+	// took is how long the exchange actually ran, by the wall clock: the
+	// node's own clock is frozen for the length of a blocking update.
+	took time.Duration
 }
 
 func newOTA() *OTA { return &OTA{} }
@@ -179,10 +182,10 @@ func (o *OTA) Describe() string {
 	case OTADownloading:
 		return fmt.Sprintf("downloading %s: %d of %d bytes, %.0f%%", o.pkg, o.done, o.total, o.Progress()*100)
 	case OTAFailed:
-		return fmt.Sprintf("failed after %s: %v", o.finished.Sub(o.started).Round(time.Millisecond), o.err)
+		return fmt.Sprintf("failed after %s: %v", o.took.Round(time.Millisecond), o.err)
 	case OTADone:
 		return fmt.Sprintf("installed %s (release %d) in %s", o.release.Version, o.release.ReleaseID,
-			o.finished.Sub(o.started).Round(time.Millisecond))
+			o.took.Round(time.Millisecond))
 	case OTAIdle:
 		return "idle"
 	}
@@ -283,8 +286,12 @@ func (n *Node) Update(now time.Time) error {
 		return errors.New("ota: an update is already running")
 	}
 	o.state, o.started, o.err, o.done, o.total = OTAChecking, now, nil, 0, 0
+	// The exchange blocks, and the node's clock does not move while it
+	// does, so the time it took is measured against the wall. It is only
+	// ever reported, never used to decide anything.
+	began := time.Now()
 	fail := func(err error) error {
-		o.state, o.err, o.finished = OTAFailed, err, now
+		o.state, o.err, o.finished, o.took = OTAFailed, err, now, time.Since(began)
 		n.log.Warn("ota failed", "err", err)
 		n.leds.Play(AnimOTAFailed, now)
 		n.unblockTouch()
@@ -292,7 +299,9 @@ func (n *Node) Update(now time.Time) error {
 	}
 	// The battery gate comes first: an update that reboots a device with
 	// a flat battery is how a device does not come back.
-	if b := n.sensors.Battery; b.Percent > 0 && b.Percent < otaMinPct && !b.Charging {
+	// 0% is the flattest reading there is, so it belongs inside the gate,
+	// not outside it.
+	if b := n.sensors.Battery; b.Percent < otaMinPct && !b.Charging {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
 	}
 	if n.cfg.OTATransport == nil {
@@ -357,6 +366,10 @@ func (n *Node) Update(now time.Time) error {
 		if total > 0 {
 			n.leds.SetProgress(float64(done) / float64(total))
 		}
+		// Draw here: an update blocks whichever loop called it, so this
+		// is the only chance the progress ring gets to move while the
+		// package comes down.
+		n.leds.Tick(now.Add(time.Since(began)))
 	})
 	if err != nil {
 		return fail(fmt.Errorf("ota: downloading %s: %w", pkg, err))
@@ -371,7 +384,7 @@ func (n *Node) Update(now time.Time) error {
 	// with the bootloader's own hash check deciding whether it stays. The
 	// emulator stops here: it has one image, and losing it would take the
 	// board off the mesh.
-	o.state, o.finished = OTADone, now
+	o.state, o.finished, o.took = OTADone, now, time.Since(began)
 	n.leds.Play(AnimIdle, now)
 	n.unblockTouch()
 	n.log.Info("ota complete", "installed", false,

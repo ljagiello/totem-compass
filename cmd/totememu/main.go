@@ -146,8 +146,15 @@ func main() {
 		select {
 		case line := <-cmds:
 			radio.send(command(log, node, saved, line))
+			// A command is the usual way a setting changes — the colour,
+			// the brightness, the name — so look for something to save
+			// right after one. save writes nothing when nothing changed.
+			saved.save(node)
 		case <-stats.C:
 			radio.report()
+			// And once a minute, for the settings a gesture changed: a
+			// tap of the power button goes through no command at all.
+			saved.save(node)
 		case <-timer.C:
 		}
 	}

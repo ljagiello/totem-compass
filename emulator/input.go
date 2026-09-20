@@ -216,6 +216,16 @@ func (n *Node) Release(in Input, now time.Time) {
 	}
 }
 
+// tapHold is how long a synthetic tap holds the input down, and tapStep
+// how far apart two of them start. Both clear the edge lockout on the
+// edge before them: a press inside that window is noise, so taps made
+// any closer together are not counted at all and a double tap arrives as
+// a single one.
+const (
+	tapHold = edgeLockout + time.Millisecond
+	tapStep = tapHold + edgeLockout + time.Millisecond
+)
+
 // Tap is a press and a release, for a console that has no pin to watch.
 // It is a tap of the shortest length the recogniser counts.
 func (n *Node) Tap(in Input, count int, now time.Time) {
@@ -224,9 +234,9 @@ func (n *Node) Tap(in Input, count int, now time.Time) {
 		return
 	}
 	for i := 0; i < count; i++ {
-		at := now.Add(time.Duration(i) * 2 * edgeLockout)
+		at := now.Add(time.Duration(i) * tapStep)
 		r.press(at)
-		r.release(at.Add(edgeLockout + time.Millisecond))
+		r.release(at.Add(tapHold))
 	}
 }
 
@@ -313,8 +323,10 @@ func (n *Node) onGesture(in Input, g Gesture, now time.Time) {
 	switch {
 	case in == Crystal && g == Hold:
 		// The gesture a person uses to pair: hold the crystal until the
-		// animation starts.
-		n.Pair(now)
+		// animation starts. Pair flushes what it queued, so keep it: the
+		// caller's own flush would otherwise find nothing and the first
+		// bond broadcast would be dropped.
+		n.out = append(n.out, n.Pair(now)...)
 	case in == PowerButton && g == SingleTap:
 		n.ToggleBrightness(now)
 	case in == PowerButton && g == DoubleTap:

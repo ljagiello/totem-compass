@@ -186,12 +186,15 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	switch {
 	case p.off:
 		return p.mode, false
+	case b.Charging:
+		// On the charger first: a pack that reads flat while it charges is
+		// filling up, and powering it down there would kill the radio at
+		// the moment someone plugged it in to fix exactly that.
+		p.mode = PowerNormal
 	case b.Volts > 0 && b.Volts <= cutoffVolts:
 		// Report the cutoff; the node does the powering down, which is
 		// more than setting a flag — the radio windows have to stop.
 		p.mode = PowerOff
-	case b.Charging:
-		p.mode = PowerNormal
 	case b.Low || (b.Volts > 0 && b.Volts <= lowBattVolts):
 		p.mode = PowerLow
 	case b.Percent > 0 && b.Percent <= ecoBattPct:
@@ -221,7 +224,12 @@ func (p *Power) sleep(now, next time.Time) time.Duration {
 		p.awakeMs += elapsed.Milliseconds()
 		return 0
 	}
-	p.sleptMs += d.Milliseconds()
+	// What is counted is the time that has passed since the last look,
+	// not the sleep still ahead: nothing was due in it, so the device
+	// could have spent it asleep. Counting the interval ahead on every
+	// call would multiply it by however often the driver polls, and the
+	// total would run away from the wall clock.
+	p.sleptMs += elapsed.Milliseconds()
 	return d
 }
 

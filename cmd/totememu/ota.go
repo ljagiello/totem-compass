@@ -48,12 +48,14 @@ func (o *localOTA) Get(string) ([]byte, error) {
 }
 
 func (o *localOTA) Download(_ string, progress func(done, total int64)) (int64, string, error) {
-	// Paced like a download over a slow link, so the progress ring is
-	// worth watching and the console shows it moving.
-	const steps = 20
+	// Paced, but only just. The update runs on the main loop, so every
+	// millisecond spent here is a millisecond in which no frame is drawn
+	// and the receive ring is not drained — a peer transmitting every
+	// second would start losing frames.
+	const steps = 10
 	for i := 0; i <= steps; i++ {
 		progress(o.size*int64(i)/steps, o.size)
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	return o.size, "0000000000000000000000000000000000000000000000000000000000000000", nil
 }
