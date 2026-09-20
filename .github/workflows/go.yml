@@ -85,6 +85,8 @@ jobs:
           - { package: ./emulator, target: FuzzParseCommand }
           - { package: ./emulator, target: FuzzLineReader }
           - { package: ./cmd/totememu/ring, target: FuzzRing }
+          - { package: ./store, target: FuzzScan }
+          - { package: ./store, target: FuzzStateDecode }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

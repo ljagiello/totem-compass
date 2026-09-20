@@ -36,6 +36,11 @@ const (
 	// Duration in milliseconds overflows, and a board that has been up
 	// for 292 million years is not the likelier explanation.
 	maxHeardMs = float64(math.MaxInt64 / int64(time.Millisecond))
+	// consoleChunk and consoleChunkGap pace a line onto the wire: 64 bytes
+	// is half the board's receive FIFO, and 5 ms is longer than it takes
+	// to drain at 115200 baud.
+	consoleChunk    = 64
+	consoleChunkGap = 5 * time.Millisecond
 )
 
 // esp32BridgeVIDs are the USB vendor ids of the serial bridges on ESP32
@@ -397,8 +402,21 @@ func (e *emulator) read() {
 
 func (e *emulator) send(line string) error {
 	e.g.log.Debug("console", "send", line)
-	if _, err := io.WriteString(e.port, line+"\r\n"); err != nil {
-		return fmt.Errorf("write to %s: %w", e.name, err)
+	// In chunks, with a pause between them. The board has no flow control
+	// and a 128-byte receive FIFO, and it stops reading for tens of
+	// milliseconds while it erases a flash sector; a long line — an
+	// injected frame runs to a couple of hundred characters — would lose
+	// its middle and run as a different command.
+	b := []byte(line + "\r\n")
+	for len(b) > 0 {
+		n := min(len(b), consoleChunk)
+		if _, err := e.port.Write(b[:n]); err != nil {
+			return fmt.Errorf("write to %s: %w", e.name, err)
+		}
+		b = b[n:]
+		if len(b) > 0 {
+			time.Sleep(consoleChunkGap)
+		}
 	}
 	return nil
 }

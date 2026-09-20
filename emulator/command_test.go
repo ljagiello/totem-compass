@@ -2,11 +2,13 @@ package emulator
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
 )
@@ -170,4 +172,86 @@ func FuzzLineReader(f *testing.F) {
 			typed = typed[:0]
 		}
 	})
+}
+
+// TestInjectedFrameFollowsTheSameRules: rx feeds the node a frame as the
+// radio would. It is how the paths that need a second Totem get tested on
+// the board, so it must not be a way around the scope rules: a frame from
+// a stranger is dropped exactly as an overheard one is.
+func TestInjectedFrameFollowsTheSameRules(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	if err := h.n.SetClock(t0, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(61 * time.Second)
+	h.take()
+
+	req := mesh.Locate{
+		Origin: totem, Lat: 37.7749, Lon: -122.4194, UID: 909, ReplyRequested: true,
+		MinRSSI: -127, MaxHops: 99, Expiry: int32(h.n.wall(h.now).Unix()) + 120, RelayMinDistM: 10,
+	}
+	frame, err := req.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := fmt.Sprintf("rx %s all -70 %x", totem, frame)
+	c, err := ParseCommand(line)
+	if err != nil {
+		t.Fatalf("%s: %v", line, err)
+	}
+	if got := c.String(); got != line {
+		t.Errorf("round trip gave %q, want %q", got, line)
+	}
+	out, handled, err := h.n.Apply(c, h.now)
+	if !handled || err != nil {
+		t.Fatalf("apply: handled=%v err=%v", handled, err)
+	}
+	h.collect(out)
+	got := h.take()
+	if len(got) != 2 {
+		t.Fatalf("an injected locate request sent %d frames, want a reply and a relay", len(got))
+	}
+
+	// The same frame from a Totem this node does not own goes nowhere.
+	req.UID = 910
+	frame, err = req.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err = ParseCommand(fmt.Sprintf("rx %s all -70 %x", stranger, frame))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _, err = h.n.Apply(c, h.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.collect(out)
+	if s := h.take(); len(s) != 0 {
+		t.Fatalf("an injected frame from a stranger sent %d frames", len(s))
+	}
+}
+
+func TestParseRXRejects(t *testing.T) {
+	for _, line := range []string{
+		"rx",
+		"rx 8c94df7b0478 all -70",
+		"rx nothex all -70 a774",
+		"rx 8c94df7b0478 somewhere -70 a774",
+		"rx 8c94df7b0478 all 12 a774",   // a positive RSSI
+		"rx 8c94df7b0478 all -200 a774", // below the floor
+		"rx 8c94df7b0478 all -70 zz",    // not hex
+		"rx 8c94df7b0478 all -70 a7740", // an odd number of hex digits
+		"rx 8c94df7b0478 all -70 ",      // no frame
+	} {
+		if c, err := ParseCommand(line); err == nil {
+			t.Errorf("%q parsed to %+v", line, c)
+		}
+	}
+	// A frame longer than an ESP-NOW payload is refused rather than sent.
+	long := fmt.Sprintf("rx %s all -70 %x", totem, make([]byte, mesh.MaxFrame+1))
+	if _, err := ParseCommand(long); err == nil {
+		t.Error("a frame over the ESP-NOW limit parsed")
+	}
 }

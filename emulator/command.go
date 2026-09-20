@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -35,13 +36,17 @@ const (
 	// firmware answers them. On the host the node leaves them unhandled.
 	OpFlash Op = "flash"
 	OpStore Op = "store"
+	// OpRX feeds the node a frame as though the radio had heard it. It is
+	// how the mesh paths that need a second Totem — a locate relay, a
+	// Smart Group invitation — get exercised on the board itself.
+	OpRX Op = "rx"
 )
 
 // Help is the console's command summary.
 const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos off | heading <deg> | " +
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
-	"status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
+	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -59,6 +64,7 @@ type Command struct {
 	Percent  int8       // batt
 	ClockMs  int64      // clock, milliseconds since the Unix epoch
 	Sub      string     // sub-command, as in "store forget"
+	RX       *Received  // rx: the frame to feed the node
 }
 
 // defaultAccuracyM is the accuracy pos reports when none is given.
@@ -100,6 +106,8 @@ func ParseCommand(line string) (Command, error) {
 		if err = want(1); err == nil {
 			c.MAC, err = mesh.ParseMAC(args[0])
 		}
+	case OpRX:
+		c.RX, err = parseRX(args)
 	case OpPos:
 		c.Position, err = parsePosition(args)
 	case OpHeading:
@@ -145,6 +153,41 @@ func ParseCommand(line string) (Command, error) {
 		return Command{}, fmt.Errorf("%s: %w", c.Op, err)
 	}
 	return c, nil
+}
+
+// parseRX reads "<src mac> self|all <rssi> <hex frame>". The frame is
+// untrusted in the same way an on-air one is: it goes to the same parser,
+// and the node drops what it does not like.
+func parseRX(args []string) (*Received, error) {
+	if len(args) != 4 {
+		return nil, errors.New("want <src mac> self|all <rssi dBm> <hex frame>")
+	}
+	src, err := mesh.ParseMAC(args[0])
+	if err != nil {
+		return nil, fmt.Errorf("source: %w", err)
+	}
+	var dst mesh.MAC
+	switch args[1] {
+	case "all":
+		dst = mesh.Broadcast
+	case "self":
+		// The node fills its own address in; leaving it zero would look
+		// like a frame addressed to nobody.
+	default:
+		return nil, fmt.Errorf("%q: want self or all", args[1])
+	}
+	rssi, err := strconv.ParseInt(args[2], 10, 8)
+	if err != nil || rssi > 0 || rssi < -127 {
+		return nil, fmt.Errorf("rssi %q: want 0 to -127 dBm", args[2])
+	}
+	data, err := hex.DecodeString(args[3])
+	if err != nil {
+		return nil, fmt.Errorf("frame: %w", err)
+	}
+	if len(data) == 0 || len(data) > mesh.MaxFrame {
+		return nil, fmt.Errorf("frame of %d bytes: want 1 to %d", len(data), mesh.MaxFrame)
+	}
+	return &Received{Src: src, Dst: dst, RSSI: int8(rssi), Data: data}, nil
 }
 
 // parseSim reads "still|walk|drive [bearing]" or "off"; on reports whether
@@ -277,6 +320,15 @@ func (c Command) String() string {
 		return fmt.Sprintf("batt %d", c.Percent)
 	case OpClock:
 		return fmt.Sprintf("clock %d", c.ClockMs)
+	case OpRX:
+		if c.RX == nil {
+			return "rx"
+		}
+		to := "self"
+		if c.RX.Dst == mesh.Broadcast {
+			to = "all"
+		}
+		return fmt.Sprintf("rx %s %s %d %x", c.RX.Src, to, c.RX.RSSI, c.RX.Data)
 	case OpStore:
 		if c.Sub != "" {
 			return "store " + c.Sub
@@ -316,6 +368,15 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 		}
 	case OpClock:
 		return nil, true, n.SetClock(time.UnixMilli(c.ClockMs), now)
+	case OpRX:
+		// The frame goes in where the radio's would, so the scope rules,
+		// the duplicate check and the relay decision all still apply: an
+		// injected frame is treated exactly as an overheard one.
+		rx := *c.RX
+		if rx.Dst != mesh.Broadcast {
+			rx.Dst = n.cfg.MAC
+		}
+		return n.Receive(now, rx), true, nil
 	default:
 		return nil, false, nil
 	}
@@ -325,8 +386,10 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 	return n.flush(), true, nil
 }
 
-// MaxCommandLine is the longest console line the emulator runs.
-const MaxCommandLine = 128
+// MaxCommandLine is the longest console line the emulator runs. It holds
+// the longest frame the rx command can inject — a 108-byte peer frame is
+// 216 characters of hex — with room for the words around it.
+const MaxCommandLine = 512
 
 // ErrLineTooLong is returned for a console line over MaxCommandLine bytes.
 var ErrLineTooLong = fmt.Errorf("console line over %d bytes dropped", MaxCommandLine)

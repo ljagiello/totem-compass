@@ -281,7 +281,10 @@ func readLines(log *slog.Logger, out chan<- string) {
 	for {
 		b, ok := consoleByte()
 		if !ok {
-			time.Sleep(20 * time.Millisecond)
+			// The UART FIFO holds 128 bytes, which is 11 ms of traffic at
+			// 115200 baud. Sleeping longer than that loses the middle of a
+			// long line — an injected frame is 200-odd characters.
+			time.Sleep(2 * time.Millisecond)
 			continue
 		}
 		switch line, err := r.Feed(b); {

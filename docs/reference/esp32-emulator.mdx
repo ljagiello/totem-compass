@@ -23,6 +23,15 @@ drivers replace the model.
   peer is more than 30 m away;
 - the bond came back by itself after the board rebooted.
 
+On 2026-09-20, with the settings store and the `rx` command:
+
+- the settings sector survived a power cycle: the name, the boot count and the bond came
+  back, and the bonded peer was in the node before the radio heard anything;
+- an injected locate request was answered, and relayed with the hop count stepped and the
+  last-hop position replaced by the board's own;
+- an injected Smart Group invitation was joined while pairing was open, and the board never
+  transmitted a `(7,0)` host beacon.
+
 ## Layout
 
 | Package | Role |
@@ -32,6 +41,8 @@ drivers replace the model.
 | `emulator` (sensors) | `SensorSource`, and a `Sim` that walks or drives a track, keeps an odometer, drains a battery and points a compass. |
 | `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && esp32` build tags). |
 | `cmd/totememu/ring` | the receive ring's C (`ring.h`) compiled for the host, so it can be tested and fuzzed. |
+| `store` | the settings a reboot keeps — the name, the crystal colour and the bonds, as a Totem keeps `config.json` — as an append-only journal in one flash sector. Pure Go, so it is tested and fuzzed on the host. |
+| `cmd/totememu` (flash) | that journal's backend: the ESP32's own SPI flash, driven from IRAM with the cache off. |
 
 ## Build and flash
 
@@ -47,8 +58,8 @@ the MAC that `totemctl info` shows. `main.name` sets the name other Totems displ
 To pair, put the Totem next to the board and hold its Touch Crystal until the pairing
 animation starts (about 1.2 s). The emulator notices the Totem's bond request and pairs
 back. Bonding needs **RSSI ≥ −25 dBm** on both sides, so the two must nearly touch. The board
-has no flash storage for peers. After a reboot it takes the bond back as soon as the Totem,
-which kept it in `config.json`, sends it a status frame.
+keeps the bond in flash, so a reboot comes up still bonded; it also takes a bond back when a
+Totem that kept it in `config.json` sends a status frame.
 
 ## Watching the mesh
 
@@ -99,6 +110,9 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
 | `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |
 | `format text\|json` | log lines as slog text or as JSON (what `totemctl mesh` uses) |
+| `rx <src mac> self\|all <rssi> <hex frame>` | feed the node a frame as though the radio had heard it, for the paths that need a second Totem |
+| `store`, `store forget` | the saved settings and bonds, or wipe them as a factory reset does |
+| `flash` | check the flash driver on its scratch sector: erase, write, read back |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
 | `help` | list the commands |
 
@@ -141,6 +155,50 @@ and the fixed reading take them, so the same console command works whichever is 
 a source that reports real hardware and takes no settings says so instead of accepting the
 command and changing nothing.
 
+## Settings that survive a reboot
+
+A Totem keeps its name, its crystal colour and every bond in `config.json` on its
+filesystem. The board has no filesystem, so the `store` package keeps the same things in one
+4 KB flash sector as an append-only journal: a save appends a record, and only a full sector
+costs an erase. Bonds go back into the node before the radio starts, so the emulator comes up
+already bonded.
+
+```text
+settings restored name=emu_totem_abb0 peers=1 boots=3 seq=4 free=3816
+bond restored mac=8c94df7b0478 name="LCFs totem"
+```
+
+Everything read back is untrusted — a write cut short by a reset, a previous firmware, or
+noise — so a record is believed only if its header and checksum agree, and a sector that
+makes no sense boots with defaults rather than failing. `FuzzScan` covers exactly that.
+
+The driver underneath is the fiddly part, because on the ESP32 the code itself runs from
+flash through the MMU cache. Touching flash means turning that cache off, and while it is off
+the CPU cannot fetch an instruction or a constant from flash — so the operations live in
+IRAM, take every address they need as data, and each is its own function (a branch on an
+operation number compiled into a jump table, which lives in flash, and the board jumped into
+`0xbad00bad`). An erase takes about 51 ms with interrupts off, so the settings are written
+only when a bond or a setting actually changed.
+
+Two things about this board are worth knowing if you port it: its flash ships without block
+protection but the ROM's erase still refuses anything past the `chip_size` in the ROM's own
+descriptor, and the bootloader leaves that at 2 MB on a 4 MB part — so the sector sits just
+under 2 MB rather than at the end of the chip.
+
+## Injecting frames
+
+Some paths need a second Totem: a locate relay, a Smart Group invitation. `rx` feeds the node
+a frame as though the radio had heard it, so they can be exercised on the board itself:
+
+```bash
+totemctl mesh send rx 8c94df7b0478 all -70 a7740200...   # a locate request from your Totem
+totemctl mesh send rx 8c94df7b0478 self -20 a7740000...  # a status frame, unicast to the board
+```
+
+An injected frame is not a way around the rules. It goes to the same parser, the same
+duplicate check and the same scope test as one off the air: a frame whose source is not one
+of your Totems is dropped, and what the board sends in answer still has to pass `allowedTX`.
+
 ## Radio setup
 
 `espradio` starts the WiFi station, and the firmware then applies the Totem's settings from
@@ -172,6 +230,8 @@ Everything that reaches the emulator from outside is fuzzed, and the fuzz target
 | Raw serial bytes | `emulator.LineReader` | `FuzzLineReader` |
 | The board's own output, read by the CLI | `totemctl mesh` | `FuzzConsoleLine` |
 | Frames arriving in the C receive ring | `cmd/totememu/ring.h` | `FuzzRing`, which compiles the same header for the host |
+| What a flash sector holds after a reset, a previous firmware or a wild write | `store.Open` | `FuzzScan` |
+| A saved settings record | `store.State` | `FuzzStateDecode` |
 
 ## Scope
 
