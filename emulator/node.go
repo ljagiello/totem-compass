@@ -748,14 +748,20 @@ func (n *Node) read(now time.Time) {
 }
 
 // maxSendableVolts is the largest cell voltage a peer frame carries: the
-// field is a half float, and the encoder this package ports has no range
-// check, so a number past the half's own limit runs off the end of the
+// field is a half float, and the encoder mesh ports has no range check,
+// so a number past the half's own limit runs off the end of the
 // five-bit exponent and into the sign bit.
 //
 // Not a plausibility band. A board whose divider reads a little high is
 // still telling the truth about its cell, and refusing it would be this
 // device lying about its own battery over a tenth of a volt.
-const maxSendableVolts = 65504
+//
+// Taken from mesh rather than written again: it is the same number for
+// the same reason, and two copies that must agree are one copy and a
+// bug waiting. This catches a reading here, where the sensor is read
+// and there is a log line to say so; mesh refuses it at the encoder,
+// which is the last exit and has no idea where the number came from.
+const maxSendableVolts = mesh.MaxBattVolts
 
 // loggableVolts is a peer's reported cell voltage, or zero when the
 // frame did not carry a number at all. The field is a half float and

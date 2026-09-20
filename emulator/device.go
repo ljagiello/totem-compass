@@ -136,16 +136,21 @@ func (n *Node) device(now time.Time) {
 	// moving any code shifts what lands where. Until that is understood,
 	// the shape that boots is the shape that stays. No host test can see
 	// any of this.
-	// Asked first and on its own, because asking is what keeps the
-	// charger's debounce running: charging() is the only writer of when
-	// the cable went in, and as the first operand of an && chain it
-	// stayed correct only by the order the operands happened to be in.
-	// Put the two cheap tests first — the natural tidy-up — and a
-	// connection made while an alarm or a download held the ring would
-	// never start its debounce at all, so plugging in during one would
-	// never be announced.
-	wantsRing := n.power.charging(n.sensors.Battery, now)
-	if w := n.wantedAnimation(); wantsRing && restful(w) && n.leds.Animation() == w {
+	// charging() stays the first operand, and the order is load bearing:
+	// it is the only writer of when the cable went in, so asking it is
+	// what keeps the debounce running. Put the two cheap tests first —
+	// the natural tidy-up, and what the && reads like it invites — and a
+	// connection made while an alarm or a download holds the ring never
+	// starts its debounce at all, so plugging in during one is never
+	// announced. TestTheChargerDebounceRunsWhileTheRingIsBusy fails if
+	// the operands are swapped.
+	//
+	// Said here rather than fixed by lifting the call into a variable
+	// above the if: that is the hoist the paragraph above is about, and
+	// it is not worth a board that will not boot to be rid of an operand
+	// order that a test already holds in place.
+	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
+		restful(w) && n.leds.Animation() == w {
 		n.power.takeCharger()
 		// On the charger: the ring runs the powerup animation again, which
 		// is what power_conn_new does once v_in has settled. It is a timed

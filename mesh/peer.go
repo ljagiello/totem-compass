@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // PeerCommand is the command byte of a category 0 frame.
@@ -47,10 +48,12 @@ const (
 	// MaxPeerName is the longest name whose trailing fields still fit the
 	// buffer; Messages.gen_peer_msg fails on a longer one.
 	MaxPeerName = PeerFrameLen - peerNameOffset - peerTailLen
-	// MaxBattVolts is the largest cell voltage the frame's half float
-	// holds. Not a plausibility limit — a pack reads what it reads, and
-	// a real Totem on a charger reports 4.48 — but the point past which
-	// the encoding stops meaning anything.
+	// MaxBattVolts is the largest finite cell voltage the frame's half
+	// float holds. Not a plausibility limit — a pack reads what it
+	// reads, and a real Totem on a charger reports 4.48 — but the point
+	// past which a finite value stops encoding as itself. The half's
+	// other patterns (NaN, either infinity, a negative) are carried, so
+	// this bounds magnitude, not sign.
 	MaxBattVolts = 65504
 )
 
@@ -147,9 +150,18 @@ func (p Peer) MarshalBinary() ([]byte, error) {
 	// runs off the end of its five bits and into the sign bit, so 131072
 	// goes out as -0, a million as -0.000233, and 100000 as a NaN that
 	// every receiver decodes and no JSON printer can hold. Refusing here
-	// covers every caller of the encoder rather than the one that
-	// remembered.
-	if v := p.BattVolts; v != 0 && (v != v || v < 0 || v > MaxBattVolts) {
+	// catches that for every caller of the encoder rather than the one
+	// that remembered.
+	//
+	// Only a finite magnitude is refused. NaN, either infinity and the
+	// sign bit are all patterns the half holds and decodeHalf hands
+	// back, so refusing those would make a frame we can read one we
+	// cannot write back — which is the round trip FuzzParse pins, and
+	// how the first version of this check was caught. So this stops a
+	// value from being silently changed on its way out; it does not stop
+	// a caller originating a battery no cell ever reads. What a Totem
+	// may put on the air is the emulator's rule, and node.go keeps it.
+	if v := float64(p.BattVolts); !math.IsNaN(v) && !math.IsInf(v, 0) && (v > MaxBattVolts || v < -MaxBattVolts) {
 		return nil, fmt.Errorf("mesh: battery of %v V is not one the frame carries", v)
 	}
 	w := peerWire{

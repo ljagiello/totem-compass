@@ -522,15 +522,22 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 
 // MaxCommandLine is the longest console line the emulator runs. It holds
 // the longest frame the rx command can inject, which is what parseRX
-// bounds: mesh.MaxFrame bytes of hex, two characters each, plus the
-// words around them — "rx", a MAC, a destination, an RSSI and their
-// spaces come to a couple of dozen.
+// bounds: mesh.MaxFrame bytes of hex, plus the words around them — "rx",
+// a MAC, a destination, an RSSI and their spaces come to a couple of
+// dozen.
+//
+// Three characters a byte, not two, because parseRX runs what it is
+// given through protocol.CleanHex: a frame is pasted out of a log or a
+// chat window as "ab:cd:ef" at least as often as it is typed bare, and
+// the separated form is the long one. Sizing this for bare hex left the
+// same mismatch one step further on — a limit that refuses lines the
+// validator behind it would have taken.
 //
 // Sized from that rather than from the 108-byte peer frame it used to
 // name: the two disagreed, so the largest frames parseRX accepts were
 // refused first as a line too long, by a limit whose own comment
 // described a shorter frame.
-const MaxCommandLine = 2*mesh.MaxFrame + 64
+const MaxCommandLine = 3*mesh.MaxFrame + 64
 
 // ErrLineTooLong is returned for a console line over MaxCommandLine bytes.
 var ErrLineTooLong = fmt.Errorf("console line over %d bytes dropped", MaxCommandLine)
