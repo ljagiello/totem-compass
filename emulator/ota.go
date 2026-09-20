@@ -368,6 +368,18 @@ func (n *Node) Update(now time.Time) error {
 	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
 	}
+	// Acting on the reading can also switch the device off, under a
+	// cutoff measured in volts where the gate above reads a percentage:
+	// a pack at 3.2 V that still reports 80% passes that gate and is
+	// switched off by this one. The gate at the top of this function was
+	// passed by a device that was still on, so ask again rather than run
+	// an update — blocking the touch inputs, holding the radio, ending
+	// in "ota complete" — on a board whose ring, jobs and outbox have
+	// just been cleared. Second, so that a flat pack is reported as one
+	// rather than as its consequence.
+	if n.power.Off() {
+		return fail(ErrPoweredDown)
+	}
 	if n.cfg.OTATransport == nil {
 		return fail(ErrNoTransport)
 	}

@@ -233,15 +233,6 @@ type Node struct {
 
 // New starts a node at time now.
 func New(cfg Config, now time.Time) *Node {
-	// Whether anyone chose this name, recorded here because here is
-	// where it is known. Restore used to ask whether the name still
-	// equalled DefaultName, which is a guess at this fact: it also says
-	// yes to a board deliberately flashed with the name it would have
-	// had anyway.
-	named := cfg.Name != ""
-	if cfg.Name == "" {
-		cfg.Name = DefaultName(cfg.MAC)
-	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -255,6 +246,20 @@ func New(cfg Config, now time.Time) *Node {
 		cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
 			"name", cfg.Name, "bytes", len(cfg.Name), "using", short)
 		cfg.Name = short
+	}
+	// Whether anyone chose this name, recorded here because here is
+	// where it is known: Restore used to ask whether the name still
+	// equalled DefaultName, which is a guess at this fact, and one that
+	// says yes to a board deliberately flashed with the name it would
+	// have been given anyway.
+	//
+	// After sanitizing, not before. A name that is not text at all comes
+	// out of it empty, and asking first left such a device both nameless
+	// and marked as named — so it ran with "", and refused the saved
+	// name at every boot afterwards.
+	named := cfg.Name != ""
+	if cfg.Name == "" {
+		cfg.Name = DefaultName(cfg.MAC)
 	}
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), binary.BigEndian.Uint64(append([]byte{0, 0}, cfg.MAC[:]...))))
@@ -1402,17 +1407,22 @@ func distance(lat1, lon1, lat2, lon2 float32) float64 {
 	// into the mesh delay (where int(NaN) is implementation-defined) and
 	// into furthestPeer, where the builtin max carries it to every peer.
 	//
-	// The clamp is for that rounding and nothing else: Go's min returns
-	// NaN if either argument is one, so a coordinate that arrives as NaN
-	// goes straight through it. Every caller checks its coordinates
-	// first — peerDistance through fix() and hasCoords, relay() through
+	// Go's min returns NaN if either argument is one, so the clamp does
+	// not stand in for this: a coordinate that arrives as NaN goes
+	// straight through it. Every caller checks its coordinates first —
+	// peerDistance through fix() and hasCoords, relay() through
 	// usablePosition — and -1 is what the rest of this file already
 	// means by "no distance", so a caller that forgets is answered with
 	// that rather than with a number that poisons the arithmetic.
+	//
+	// The clamp is both ways round. Above 1 is the rounding at the far
+	// side of the world; below 0 is the same rounding with a latitude
+	// outside ±90, where the two terms cancel and the sign is left to
+	// the last bit — and Sqrt of a negative is NaN just as surely.
 	if math.IsNaN(a) {
 		return -1
 	}
-	return 2 * r * math.Asin(math.Sqrt(min(a, 1)))
+	return 2 * r * math.Asin(math.Sqrt(min(max(a, 0), 1)))
 }
 
 // ---- Smart Group client ------------------------------------------------------

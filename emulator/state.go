@@ -37,19 +37,14 @@ func (n *Node) State(boots uint32) store.State {
 		// the sector, which is what `store` prints.
 		LearnedMaxVolts: n.power.LearnedMaxVolts(),
 	}
-	// n.order cannot hold more than maxBonds, which is half of
-	// store.MaxPeers, so this never binds. It is here because the only
-	// thing between a breach of that and a device that silently stops
-	// saving is MarshalBinary's error, which reaches a log line at best:
-	// a bond limit raised past the record's without anyone noticing the
-	// two are related would cost every setting on the device, so it
-	// stops at the record's limit and says so.
+	// No cap here: n.order cannot hold more than maxBonds, which is half
+	// of store.MaxPeers, so one could never bind and would only send a
+	// reader looking for a truncation that never happens. What stands
+	// between a breach of that and a device that silently stops saving —
+	// MarshalBinary's error reaches a log line at best — is
+	// TestTheRecordHoldsEveryBondTheNodeCan, which pins the two limits
+	// against each other and fails the moment they cross.
 	for _, mac := range n.order {
-		if len(st.Peers) == store.MaxPeers {
-			n.log.Warn("more bonds than a saved record holds; the rest are not saved",
-				"saved", len(st.Peers), "bonds", len(n.order))
-			break
-		}
 		p := n.peers[mac]
 		ps := store.PeerState{
 			MAC:     [6]byte(mac),
@@ -92,11 +87,29 @@ func (n *Node) Restore(st *store.State, now time.Time) []error {
 	// a device that has only ever been switched on would write.
 	if st == nil {
 		n.log.Info("nothing saved to restore; keeping what the device is running with")
-		// The reading still happens: see the end of this function.
-		n.read(now)
-		n.applyPowerMode(now)
-		return nil
+	} else {
+		errs = n.restoreRecord(st, now)
 	}
+	// A reading, and the mode that follows from it, whatever the record
+	// said: this is the node coming into step with its own sensors
+	// rather than a setting, so it happens even when there is no record
+	// at all. A device restoring its settings at boot has not polled
+	// yet, so without this it reports power mode normal until the first
+	// poll — and one coming up on a pack below the cutoff has to power
+	// down rather than report that it has.
+	n.read(now)
+	n.applyPowerMode(now)
+	return errs
+}
+
+// restoreRecord puts back what a saved record decided: the bonds and
+// where they were last seen, the brightness, the name, the alarm's mute
+// and the crystal's colour. It is separate from Restore so that the
+// reading and the power mode that close that function happen once,
+// whether or not there was a record — they are the node coming into step
+// with its own sensors rather than anything the record said.
+func (n *Node) restoreRecord(st *store.State, now time.Time) []error {
+	var errs []error
 	for _, p := range st.Peers {
 		if err := n.AddBond(p.MAC, p.Name, now); err != nil {
 			errs = append(errs, err)
@@ -180,15 +193,6 @@ func (n *Node) Restore(st *store.State, now time.Time) []error {
 	c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
 	n.cfg.ColorID = int8(c)
 	n.leds.SetDefaultColor(c)
-	// A reading, and the mode that follows from it, whatever the record
-	// said: this is the node coming into step with its own sensors
-	// rather than a setting, so it happens even when there is no record
-	// at all. A device restoring its settings at boot has not polled
-	// yet, so without this it reports power mode normal until the first
-	// poll — and one coming up on a pack below the cutoff has to power
-	// down rather than report that it has.
-	n.read(now)
-	n.applyPowerMode(now)
 	return errs
 }
 

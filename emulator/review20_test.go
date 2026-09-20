@@ -29,16 +29,7 @@ func TestARecordThatSaysNothingIsStillARecord(t *testing.T) {
 	if !h.n.SOSMuted() {
 		t.Error("a saved mute was read as an empty record and dropped")
 	}
-
-	// And no record at all is still no record.
-	h = newHarness(t, nil)
-	h.advance(bootDebounce)
-	h.n.SetSOS(true)
-	h.n.MuteSOS(h.now)
-	h.n.Restore(nil, h.now)
-	if !h.n.SOSMuted() {
-		t.Error("restoring nothing un-muted the alarm")
-	}
+	// No record at all is TestABlankRecordIsNotSettings, in review19.
 }
 
 // TestABuiltInNameThatLooksLikeTheDefault: the guard was `n.cfg.Name ==

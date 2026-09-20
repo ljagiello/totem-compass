@@ -58,6 +58,11 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 	if n := j.Torn(); n > 0 {
 		log.Warn("a save did not finish before a reset", "records", n)
 	}
+	if n := j.Blank(); n > 0 {
+		// Not a torn write: these are whole records that say nothing,
+		// which this build refuses to write and an earlier one did not.
+		log.Warn("the sector holds records with nothing in them", "records", n)
+	}
 	b, err := j.Load()
 	if errors.Is(err, store.ErrEmpty) {
 		log.Info("no saved settings: first boot on this board")
@@ -141,7 +146,10 @@ func (s *settings) save(n *emulator.Node) {
 		s.log.Warn("settings could not be saved", "err", err)
 		return
 	}
-	s.key, s.state = key, st
+	// found with them: a save means the sector holds a record from here
+	// on, whatever it held at boot, so the field goes on saying what is
+	// on the flash rather than what was found on it once.
+	s.key, s.state, s.found = key, st, true
 	s.log.Info("settings saved", "peers", len(st.Peers), "bytes", len(b),
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
 }
@@ -169,7 +177,10 @@ func (s *settings) forget(n *emulator.Node, now time.Time) error {
 	if err := s.j.Save(b); err != nil {
 		return err
 	}
-	s.key, s.state = emulator.SettingsKey(empty), empty
+	// found with them: the sector holds a record from here on, whatever
+	// it held at boot, and the field says what is on the flash rather
+	// than what was found on it once.
+	s.key, s.state, s.found = emulator.SettingsKey(empty), empty, true
 	return nil
 }
 
@@ -181,7 +192,12 @@ func (s *settings) open(n *emulator.Node, now time.Time) {
 		return
 	}
 	fresh := openSettings(s.log, true)
-	s.j, s.key, s.state = fresh.j, fresh.key, fresh.state
+	// found as well as the rest. Leaving it behind made this path restore
+	// nothing — Restore reads no record where there was one — and then
+	// save the running defaults over the record it had just read, which
+	// on a board brought up with storeAtBoot off is every bond and
+	// setting the device had.
+	s.j, s.key, s.state, s.found = fresh.j, fresh.key, fresh.state, fresh.found
 	if s.j == nil {
 		return
 	}

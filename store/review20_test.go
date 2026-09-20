@@ -53,10 +53,19 @@ func TestARecordWithNothingInItHidesNothing(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("loaded %q, want %q", got, want)
 	}
-	// It is counted as damage, because that is what it is: something
-	// wrote a record that says nothing, and the console says so.
-	if again.Torn() == 0 {
+	// Counted, and counted apart from a torn write: its magic, length
+	// and checksum all hold, so nothing was cut short, and a console
+	// reporting flash trouble should not describe the wrong trouble.
+	if again.Blank() == 0 {
 		t.Error("the empty record was passed over in silence")
+	}
+	if got := again.Torn(); got != 0 {
+		t.Errorf("a whole record with nothing in it was reported as %d torn writes", got)
+	}
+	// Its sequence number is taken even though its payload is not, or
+	// the next save writes a number the sector already holds.
+	if got := again.Seq(); got < 2 {
+		t.Errorf("the sequence number went back to %d", got)
 	}
 	// And the next save lands past it rather than on top of it.
 	next := []byte("and the ones they chose after that")

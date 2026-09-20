@@ -45,15 +45,21 @@ func TestTheDistanceToTheOtherSideOfTheWorld(t *testing.T) {
 			t.Error("a peer on the other side of the world is NaN away")
 		}
 	}
-	// And the node keeps running on it: the distance reaches the mesh
-	// delay, where int(NaN) is implementation-defined and the arithmetic
-	// that follows overflows, so a minute of timers is what says the
-	// peer is still being asked about rather than scheduled past the end
-	// of time.
-	h.take()
-	h.advance(2 * time.Minute)
-	if len(h.take()) == 0 {
-		t.Error("nothing was sent in two minutes: the mesh tick stopped")
+	// And the schedule the distance feeds is a time this node will
+	// actually reach. peerDistance goes into meshDelivery and out into
+	// meshNext, where int(NaN) is implementation-defined and the
+	// arithmetic that follows overflows — a peer put off until the year
+	// 292277026596 is one the mesh never asks about again. Asserting on
+	// what was sent would not show this: the radio window broadcasts a
+	// status frame either way, whatever meshNext says.
+	for mac, p := range h.n.peers {
+		if p.meshNext.IsZero() {
+			continue
+		}
+		if p.meshNext.After(h.now.Add(24 * time.Hour)) {
+			t.Errorf("peer %s is next asked about at %v, which is not a time this device reaches",
+				mac, p.meshNext)
+		}
 	}
 }
 

@@ -72,6 +72,11 @@ type Journal struct {
 	// torn counts records that did not survive their checksum: a torn
 	// write, which the caller may want to log.
 	torn int
+	// blank counts well-formed records carrying nothing, which an
+	// earlier build could write and this one refuses. They are not torn
+	// writes and are counted apart from them so that a console reporting
+	// flash trouble does not describe the wrong trouble.
+	blank int
 }
 
 // Open scans the sector and returns its journal. It fails only when the
@@ -128,8 +133,18 @@ func (j *Journal) scan(buf []byte) {
 		// become j.last would report an empty sector and hide every good
 		// record written before it. Save refuses to write one now, but a
 		// sector from an earlier build can already hold one.
+		//
+		// Its sequence number is taken even though its payload is not:
+		// the number is what a reader sees, and leaving it behind would
+		// have the next save write a number already in the sector, so a
+		// counter that only ever climbs would repeat and appear to stall
+		// across a reboot. Not counted as torn: its magic, length and
+		// checksum all hold, nothing was cut short, and calling it a
+		// torn write sends whoever reads the console after a flash
+		// problem looking for one that did not happen.
 		if len(body) == 0 {
-			j.torn++
+			j.blank++
+			j.seq = seq
 			off = end + pad(n)
 			continue
 		}
@@ -159,6 +174,11 @@ func (j *Journal) Load() ([]byte, error) {
 // Torn is how many records failed their checksum, which is a reset caught
 // mid-save.
 func (j *Journal) Torn() int { return j.torn }
+
+// Blank is how many well-formed records carrying nothing were stepped
+// over. A save cannot write one now, so any of these come from an
+// earlier build.
+func (j *Journal) Blank() int { return j.blank }
 
 // Save appends the state. When the sector has no room it erases and starts
 // again, so a save costs an erase only once a sector's worth of them.
@@ -210,7 +230,7 @@ func (j *Journal) Save(p []byte) error {
 		if err := j.sec.Erase(); err != nil {
 			return fmt.Errorf("store: erasing the sector: %w", err)
 		}
-		j.next, j.torn, erased = 0, 0, true
+		j.next, j.torn, j.blank, erased = 0, 0, 0, true
 	}
 	if err := j.sec.WriteAt(rec, j.next); err != nil {
 		if erased {
