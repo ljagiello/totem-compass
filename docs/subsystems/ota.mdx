@@ -9,6 +9,9 @@ delivery transports (BLE and WiFi) feeding one install path. On current firmware
 station WiFi — `OTA Hotspot has been sunset` — with the hotspot join kept only as a legacy
 path for older firmware.
 
+The [ESP32 emulator](/reference/esp32-emulator#wifi-ota) runs this exchange, checks
+everything the server says, and stops before writing a slot.
+
 ## Delivery paths
 
 <CardGroup cols={2}>

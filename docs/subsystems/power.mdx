@@ -3,6 +3,10 @@ title: "Power, input & sensors"
 description: "Battery/sleep management, the Touch Crystal, the power and SOS buttons, Vibe Mode, and the temperature sensor."
 ---
 
+The [ESP32 emulator](/reference/esp32-emulator#power) models the battery curve, the power
+modes, the sleep accounting and the watchdog's blocker rule; its
+[touch section](/reference/esp32-emulator#touch-and-the-buttons) models the gestures below.
+
 ## Power & battery
 
 `device_power.py` owns the power state machine; `wdt_manager.py` the watchdogs.
