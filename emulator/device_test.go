@@ -555,3 +555,32 @@ func TestIdleStripStopsAskingForFrames(t *testing.T) {
 		t.Error("the strip did not wake up for the compass dial")
 	}
 }
+
+// TestPoweredDownIgnoresEveryGestureButOne: a Totem that is off does not
+// pair, does not raise an alarm and does not start an update. Holding
+// the power button is the one thing that reaches it.
+func TestPoweredDownIgnoresEveryGestureButOne(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	h.n.PowerOff(h.now)
+
+	h.collect(h.n.HoldFor(Crystal, crystalPairHold+100*time.Millisecond, h.now))
+	h.advance(time.Second)
+	if h.n.Pairing() {
+		t.Error("a powered-down device started pairing")
+	}
+	h.collect(h.n.HoldFor(SOSButton, holdTime+100*time.Millisecond, h.now))
+	h.advance(time.Second)
+	if h.n.Config().SOS {
+		t.Error("a powered-down device raised the alarm")
+	}
+	if !h.n.Power().Off() {
+		t.Fatal("it came back on by itself")
+	}
+
+	h.collect(h.n.HoldFor(PowerButton, holdTime+100*time.Millisecond, h.now))
+	h.advance(time.Second)
+	if h.n.Power().Off() {
+		t.Error("holding the power button did not turn it back on")
+	}
+}

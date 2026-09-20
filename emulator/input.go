@@ -301,6 +301,15 @@ func (n *Node) pollInputs(now time.Time) {
 // hardware and logs the rest.
 func (n *Node) onGesture(in Input, g Gesture, now time.Time) {
 	n.log.Info("input", "input", in, "gesture", g)
+	if n.power.Off() {
+		// A device that has powered down answers one gesture: the power
+		// button held, which turns it back on. The crystal is not even
+		// powered.
+		if in == PowerButton && g == Hold {
+			n.PowerOn(now)
+		}
+		return
+	}
 	switch {
 	case in == Crystal && g == Hold:
 		// The gesture a person uses to pair: hold the crystal until the
