@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -592,7 +593,9 @@ func TestPoweredDownDeviceIsDeaf(t *testing.T) {
 // TestIdleStripStopsAskingForFrames: with nothing to show, the LED model
 // must not keep the device awake for a picture that does not change.
 func TestIdleStripStopsAskingForFrames(t *testing.T) {
-	h := newHarness(t, nil)
+	// With a fix: a device still looking for one sweeps its ring, which
+	// is not idle.
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
 	h.advance(bootAnim + time.Second) // past the power-up animation
 	if got := h.n.LEDs().Animation(); got != AnimIdle {
 		t.Fatalf("animation = %s, want idle", got)
@@ -995,5 +998,148 @@ func TestPairingWindowStartsWhenTheHoldMatures(t *testing.T) {
 	h.advance(2 * time.Second)
 	if h.n.Pairing() {
 		t.Error("the pairing window did not end")
+	}
+}
+
+// TestHoldAfterATapReturns: a tap and then a hold inside the multi-tap
+// window used to wedge the board. next() offered the tap deadline while
+// the finger was down, poll() did nothing at it because a tap cannot be
+// counted until the finger lifts, and the walk-forward loop in HoldFor
+// asked for the same instant for ever — no radio, no frames, no console.
+func TestHoldAfterATapReturns(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	h.n.Tap(Crystal, 1, h.now)
+
+	done := make(chan []Packet, 1)
+	go func() { done <- h.n.HoldFor(Crystal, 2*time.Second, h.now.Add(100*time.Millisecond)) }()
+	select {
+	case out := <-done:
+		h.collect(out)
+	case <-time.After(5 * time.Second):
+		t.Fatal("HoldFor did not return: a tap before a hold hangs the device")
+	}
+	if !h.n.Pairing() {
+		t.Error("the hold did not start pairing")
+	}
+}
+
+// TestHoldOrderFromTheDriver: the driver polls whenever it can, and one
+// poll can land past both thresholds — a blocking update or a flash
+// erase stalls the loop. The gestures still have to come out in the
+// order a finger makes them.
+func TestHoldOrderFromTheDriver(t *testing.T) {
+	r := &recogniser{in: SOSButton, holdFor: holdTime, longFor: longHold}
+	r.press(t0)
+	got := r.poll(t0.Add(12 * time.Second))
+	if len(got) != 2 || got[0] != Hold || got[1] != LongHold {
+		t.Errorf("one late poll gave %v, want [hold, long hold]", got)
+	}
+}
+
+// TestPeerPositionSurvivesAReboot: where a peer was last seen is saved
+// so the compass can point at it before it has been heard from again.
+// It was written to flash and never read back, and the first save of the
+// next boot then overwrote it with zeros.
+func TestPeerPositionSurvivesAReboot(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	north := statusFrame(t0)
+	north.Lat, north.Lon = 37.785, -122.42
+	h.rx(totem, self, -40, north)
+
+	st := h.n.State(1)
+	if len(st.Peers) != 1 || st.Peers[0].Lat == 0 {
+		t.Fatalf("the peer was saved without its position: %+v", st.Peers)
+	}
+
+	fresh := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	if errs := fresh.n.Restore(st, fresh.now); len(errs) != 0 {
+		t.Fatalf("restore: %v", errs)
+	}
+	fresh.advance(bootAnim + time.Second) // past the power-up animation
+	if desc := fresh.n.LEDs().Describe(); !strings.Contains(desc, "pointing") {
+		t.Errorf("the compass has nothing to point at after a reboot: %s", desc)
+	}
+	// And saving again keeps it, rather than writing zeros over it.
+	again := fresh.n.State(2)
+	if len(again.Peers) != 1 || again.Peers[0].Lat == 0 {
+		t.Errorf("the position was lost on the next save: %+v", again.Peers)
+	}
+}
+
+// TestPeerTrafficDoesNotDriveFlashWrites: a bonded Totem sends its
+// position every few seconds. If that counted as a change, the board
+// would write a record a minute for the rest of its life, and a full
+// sector costs an erase with the radio stalled.
+func TestPeerTrafficDoesNotDriveFlashWrites(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.rx(totem, self, -40, statusFrame(t0))
+	key := SettingsKey(h.n.State(1))
+
+	// The peer moves and keeps talking.
+	h.advance(time.Minute)
+	moved := statusFrame(t0)
+	moved.Lat, moved.Lon = 37.99, -122.99
+	h.rx(totem, self, -40, moved)
+	if got := SettingsKey(h.n.State(1)); !bytes.Equal(got, key) {
+		t.Error("a peer moving changed the key, so the board would write to flash for it")
+	}
+	// Losing the bond is a change.
+	h.collect(h.n.Unbond(h.now, totem))
+	if got := SettingsKey(h.n.State(1)); bytes.Equal(got, key) {
+		t.Error("losing a bond did not change the key")
+	}
+}
+
+// TestForgetIsNotUndoneBySaving: the save that follows a console command
+// used to write the live bonds straight back, so a device told to forget
+// came up still bonded.
+func TestForgetIsNotUndoneBySaving(t *testing.T) {
+	h := newHarness(t, nil)
+	h.bond()
+	if h.n.BondCount() == 0 {
+		t.Fatal("no bond to forget")
+	}
+	h.n.ForgetPeers(h.now)
+	if h.n.BondCount() != 0 {
+		t.Fatal("the bonds are still there")
+	}
+	if peers := h.n.State(0).Peers; len(peers) != 0 {
+		t.Errorf("a save right after forgetting would write %d peers back", len(peers))
+	}
+}
+
+// TestBondLimitHoldsOnEveryPath: a Totem bonds to eight. Every way in
+// has to respect that, or the ones past it are lost at the next reboot,
+// when the saved list is read back through the same limit.
+func TestBondLimitHoldsOnEveryPath(t *testing.T) {
+	var owned []mesh.MAC
+	for i := 0; i < 12; i++ {
+		owned = append(owned, mesh.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, byte(i)})
+	}
+	h := newHarness(t, func(c *Config) { c.Owned = owned })
+	// The path a peer takes when it still holds this board in its own
+	// config: a status frame unicast to us.
+	for _, mac := range owned {
+		h.rx(mac, self, -30, statusFrame(t0))
+	}
+	if got := h.n.BondCount(); got > maxBonds {
+		t.Errorf("%d peers restored themselves, over the limit of %d", got, maxBonds)
+	}
+}
+
+// TestSimKeepsAFlatBattery: a simulation started on a device reporting
+// 0% used to report 95% to its peers, because zero was read as "not
+// set".
+func TestSimKeepsAFlatBattery(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetBattery(0, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.n.StartSim(Walk, 90, h.now)
+	if got := h.n.Sensors().Battery.Percent; got != 0 {
+		t.Errorf("a simulation on a flat device reports %d%%", got)
 	}
 }

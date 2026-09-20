@@ -133,15 +133,24 @@ func (s *settings) save(n *emulator.Node) {
 		"took_ms", time.Since(start).Milliseconds(), "free", s.j.Free())
 }
 
-// forget wipes the sector, as a factory reset does.
-func (s *settings) forget() error {
+// forget wipes the sector and the node's bonds, as a factory reset does.
+// Wiping only the flash would not last a second: the save that follows
+// the command writes the live bonds straight back, and the board would
+// come up still bonded after being told to forget them.
+func (s *settings) forget(n *emulator.Node, now time.Time) error {
 	if s.j == nil {
 		return errors.New("no settings sector")
 	}
-	if err := s.j.Save(nil); err != nil {
+	n.ForgetPeers(now)
+	empty := n.State(0)
+	b, err := empty.MarshalBinary()
+	if err != nil {
 		return err
 	}
-	s.held, s.key, s.state = nil, nil, store.State{}
+	if err := s.j.Save(b); err != nil {
+		return err
+	}
+	s.held, s.key, s.state = b, emulator.SettingsKey(empty), empty
 	return nil
 }
 

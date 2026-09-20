@@ -108,7 +108,10 @@ type SimConfig struct {
 	// NoFix leaves the simulated receiver without a solution, as indoors.
 	NoFix bool
 	// Percent starts the battery; it drains to empty over Life. The
-	// voltage follows the charge level, as voltsFor maps it.
+	// voltage follows the charge level, as voltsFor maps it. A negative
+	// value asks for the default, because 0 is a real reading: a flat
+	// device reporting a full battery to its peers is worse than a
+	// simulation that has to say what it wants.
 	Percent int8
 	Life    time.Duration
 	// Charging holds the battery level and marks it charging.
@@ -160,7 +163,7 @@ func NewSim(cfg SimConfig, now time.Time) *Sim {
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), 0x70712e))
 	}
-	if cfg.Percent == 0 {
+	if cfg.Percent < 0 {
 		cfg.Percent = 95
 	}
 	if cfg.Life == 0 {

@@ -100,15 +100,6 @@ func (n *Node) device(now time.Time) {
 			n.leds.Play(AnimLowBattery, now)
 		}
 	}
-	// A device with no fix sweeps the ring while its receiver looks for
-	// one (anim_gnss_search), and stops when it has one. Only from idle:
-	// a pairing or an alarm is worth more than a search.
-	switch {
-	case n.leds.Animation() == AnimIdle && n.fix() == nil && !n.power.Off():
-		n.leds.Play(AnimGNSSSearch, now)
-	case n.leds.Animation() == AnimGNSSSearch && n.fix() != nil:
-		n.leds.Stop(AnimGNSSSearch, now)
-	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.
 	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.State() == OTADownloading)
@@ -117,7 +108,35 @@ func (n *Node) device(now time.Time) {
 		// A device that is off has no compass and no frames to draw.
 		n.updateDial()
 		n.leds.Tick(now)
+		// What the device's own state calls for, put back whenever the
+		// strip is resting or showing something that no longer applies.
+		// The strip keeps no memory of what was playing underneath a
+		// flash: the node knows whether the alarm is still on, and this
+		// is where it says so. After the tick, so an animation that has
+		// just ended is replaced in the same pass.
+		if want := n.wantedAnimation(); openEnded(n.leds.Animation()) && n.leds.Animation() != want {
+			n.leds.Play(want, now)
+			n.leds.Tick(now)
+		}
 	}
+}
+
+// wantedAnimation is what the device's state calls for when nothing
+// timed is playing: the alarm first, then a pairing window, then the
+// search for a fix, then rest. An update drives the ring itself while it
+// runs, and blocks the loop, so it is not decided here.
+func (n *Node) wantedAnimation() Animation {
+	switch {
+	case n.power.Off():
+		return AnimIdle
+	case n.cfg.SOS && !n.sosMuted:
+		return AnimSOS
+	case n.pairing:
+		return AnimPairing
+	case n.fix() == nil:
+		return AnimGNSSSearch
+	}
+	return AnimIdle
 }
 
 // updateDial points the compass at the first bonded peer whose position

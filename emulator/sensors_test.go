@@ -49,7 +49,7 @@ func TestSimWalks(t *testing.T) {
 // TestSimWanderIsPerSecond: the driver reads the sensors every few
 // milliseconds, so a per-reading wander would spin the compass.
 func TestSimWanderIsPerSecond(t *testing.T) {
-	s := NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Motion: Walk, Bearing: 90}, t0)
+	s := NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Motion: Walk, Bearing: 90, Percent: -1}, t0)
 	var last Sensors
 	for ms := 5; ms <= 60_000; ms += 5 { // a minute of 5 ms polls
 		last = s.Read(t0.Add(time.Duration(ms) * time.Millisecond))
@@ -90,7 +90,7 @@ func TestSimStillAndFlat(t *testing.T) {
 func TestSimWithoutAClockStaysQuiet(t *testing.T) {
 	// A Sim with no Clock is a receiver that has not given the time yet.
 	h := newHarness(t, func(c *Config) {
-		c.Sensors = NewSim(SimConfig{Lat: 37.775, Lon: -122.42}, t0)
+		c.Sensors = NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Percent: -1}, t0)
 	})
 	h.bond()
 	h.advance(10 * time.Second)
@@ -214,7 +214,7 @@ func TestSetFlatAndBattery(t *testing.T) {
 // every second (speed 8) instead of every four.
 func TestFlatShortensTheWindow(t *testing.T) {
 	h := newHarness(t, func(c *Config) {
-		c.Sensors = NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Clock: t0}, t0)
+		c.Sensors = NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Clock: t0, Percent: -1}, t0)
 	})
 	if got := h.n.period(); got != 4*time.Second {
 		t.Errorf("upright period = %v, want 4s", got)
@@ -300,7 +300,7 @@ func TestHostClockKeepsRunning(t *testing.T) {
 // zero sooner or later. math.Mod keeps the sign, so the compass reported
 // negative degrees in the status frames.
 func TestSimAzimuthStaysPositive(t *testing.T) {
-	s := NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Motion: Walk, Clock: t0, Rand: rand.New(rand.NewPCG(7, 9))}, t0)
+	s := NewSim(SimConfig{Lat: 37.775, Lon: -122.42, Motion: Walk, Clock: t0, Rand: rand.New(rand.NewPCG(7, 9)), Percent: -1}, t0)
 	s.bearing = -725.5 // a walk that has turned left twice round
 	if got := s.Read(t0.Add(time.Second)); got.Azimuth < 0 || got.Azimuth > 359 {
 		t.Errorf("azimuth = %d, want 0-359", got.Azimuth)

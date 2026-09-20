@@ -283,7 +283,7 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings, line string) [
 	case emulator.OpStore:
 		switch c.Sub {
 		case "forget":
-			if err := saved.forget(); err != nil {
+			if err := saved.forget(n, now); err != nil {
 				log.Warn("settings could not be forgotten", "err", err)
 			} else {
 				log.Info("settings forgotten: the bonds are gone at the next boot")

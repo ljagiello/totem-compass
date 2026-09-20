@@ -10,6 +10,7 @@ package emulator
 import (
 	"time"
 
+	"github.com/ljagiello/totem-compass/mesh"
 	"github.com/ljagiello/totem-compass/store"
 )
 
@@ -41,6 +42,7 @@ func (n *Node) State(boots uint32) store.State {
 		}
 		if p.hasCoords {
 			ps.Lat, ps.Lon = p.lat, p.lon
+			ps.LastSeenUnix = p.coordsAt.Unix()
 		}
 		if !p.lastHeard.IsZero() {
 			ps.LastSeenUnix = p.lastHeard.Unix()
@@ -58,6 +60,20 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	for _, p := range st.Peers {
 		if err := n.AddBond(p.MAC, p.Name, now); err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		// Where the peer was last seen comes back with it, so the compass
+		// can point at it before it has been heard from again — which is
+		// what it was saved for.
+		peer := n.peers[mesh.MAC(p.MAC)]
+		if p.Lat != 0 || p.Lon != 0 {
+			peer.hasCoords, peer.lat, peer.lon = true, p.Lat, p.Lon
+			if p.LastSeenUnix != 0 {
+				peer.coordsAt = time.Unix(p.LastSeenUnix, 0)
+			}
+		}
+		if p.ColorID != 0 {
+			peer.color = Color(p.ColorID)
 		}
 	}
 	if st.Brightness > 0 {
@@ -81,6 +97,16 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 // is a boot that is never recorded.
 func SettingsKey(st store.State) []byte {
 	st.SleepMs = 0
+	// The same goes for where and when each peer was last heard: a bonded
+	// Totem sends its position every few seconds, and letting that drive
+	// a write would put a record on the flash every minute for the life
+	// of the board. What counts is which peers are bonded, and as what.
+	peers := make([]store.PeerState, len(st.Peers))
+	for i, p := range st.Peers {
+		p.Lat, p.Lon, p.LastSeenUnix = 0, 0, 0
+		peers[i] = p
+	}
+	st.Peers = peers
 	b, err := st.MarshalBinary()
 	if err != nil {
 		return nil

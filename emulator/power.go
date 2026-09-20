@@ -260,18 +260,3 @@ func (p *Power) Describe() string {
 	}
 	return s
 }
-
-// ParsePowerMode reads the console's name for a mode.
-func ParsePowerMode(s string) (PowerMode, error) {
-	switch s {
-	case "normal":
-		return PowerNormal, nil
-	case "eco":
-		return PowerEco, nil
-	case "low":
-		return PowerLow, nil
-	case "off":
-		return PowerOff, nil
-	}
-	return 0, fmt.Errorf("%q: want normal, eco, low or off", s)
-}

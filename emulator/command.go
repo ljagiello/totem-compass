@@ -52,7 +52,7 @@ const (
 const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos off | heading <deg> | " +
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
-	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [normal|eco|low|off|on] | ota [update] | " +
+	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
 	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget] | flash | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
@@ -76,7 +76,6 @@ type Command struct {
 	Gesture  Gesture    // touch: what it did
 	HoldMs   int64      // touch: how long a hold lasted
 	Color    Color      // color
-	Mode     PowerMode  // power
 }
 
 // defaultAccuracyM is the accuracy pos reports when none is given.
@@ -129,13 +128,16 @@ func ParseCommand(line string) (Command, error) {
 	case OpLEDs:
 		err = want(0)
 	case OpPower:
-		// power reports the state; power <mode> sets it, and power on
-		// brings a device back from off.
+		// power reports the state; power off and power on are what the
+		// button held does. The modes in between follow the battery —
+		// setting one by hand would last until the next reading, 5 ms
+		// later — so the way to reach them is to set the battery.
 		if len(args) == 1 {
-			c.Sub = args[0]
-			if args[0] != "on" {
-				c.Mode, err = ParsePowerMode(args[0])
+			if args[0] != "on" && args[0] != "off" {
+				err = fmt.Errorf("power takes nothing, on or off, got %q "+
+					"(the mode follows the battery: change that with batt)", args[0])
 			}
+			c.Sub = args[0]
 		} else {
 			err = want(0)
 		}
@@ -456,16 +458,13 @@ func (n *Node) Apply(c Command, now time.Time) (out []Packet, handled bool, err 
 	case OpColor:
 		n.SetColor(c.Color, now)
 	case OpPower:
-		switch {
-		case c.Sub == "":
+		switch c.Sub {
+		case "":
 			return nil, false, nil // the firmware prints the state
-		case c.Sub == "on":
+		case "on":
 			n.PowerOn(now)
-		case c.Mode == PowerOff:
+		case "off":
 			n.PowerOff(now)
-		default:
-			n.power.mode = c.Mode
-			n.log.Info("power mode", "mode", c.Mode, "set", "by hand")
 		}
 	case OpOTA:
 		if c.Sub != "update" {

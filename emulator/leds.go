@@ -246,12 +246,6 @@ type LEDs struct {
 	// off is a device that has powered down: the strip is dark and stays
 	// dark, however often it is ticked.
 	off bool
-	// under is what to fall back to when a timed animation ends: the
-	// alarm, the pairing or the download that was playing beneath it.
-	// Without it a three-second bonded animation would cancel an SOS for
-	// good, and the crystal would stop blinking while the alarm still
-	// went out on the air.
-	under Animation
 }
 
 // fullBrightness and dimBrightness are the two levels toggle_brightness
@@ -280,18 +274,11 @@ func openEnded(a Animation) bool {
 }
 
 // Play starts an animation. A shorter one over a longer one wins: the
-// firmware's LED task plays the newest event, and what was playing
-// underneath comes back when the newer one ends.
+// firmware's LED task plays the newest event. When a timed one ends the
+// strip goes idle, and the node puts back whatever its own state still
+// calls for — an alarm, a pairing, a search for a fix — rather than the
+// strip trying to remember.
 func (l *LEDs) Play(a Animation, now time.Time) {
-	switch {
-	case openEnded(a):
-		l.under = a
-	case openEnded(l.anim) && l.anim != AnimIdle:
-		// A timed animation is starting over one that runs until it is
-		// told to stop. Remember it, or a three-second flash would cancel
-		// an alarm that is still going out on the air.
-		l.under = l.anim
-	}
 	l.anim, l.start, l.frame, l.next = a, now, 0, now
 	switch a {
 	case AnimBoot:
@@ -319,12 +306,7 @@ func (l *LEDs) Play(a Animation, now time.Time) {
 }
 
 // Stop ends an animation that runs until told, and falls back to idle.
-// It also clears it from underneath a timed one, so it does not come
-// back when that ends.
 func (l *LEDs) Stop(a Animation, now time.Time) {
-	if l.under == a {
-		l.under = AnimIdle
-	}
 	if l.anim == a {
 		l.Play(AnimIdle, now)
 	}
@@ -336,7 +318,6 @@ func (l *LEDs) Stop(a Animation, now time.Time) {
 func (l *LEDs) Dark(off bool, now time.Time) {
 	l.off = off
 	if off {
-		l.under = AnimIdle
 		l.Play(AnimIdle, now)
 		l.fillRing(Off)
 		l.fillCrystal(Off)
@@ -407,9 +388,9 @@ func (l *LEDs) Tick(now time.Time) bool {
 		return false
 	}
 	if !l.until.IsZero() && !now.Before(l.until) {
-		// Back to whatever was underneath, which is idle unless an alarm,
-		// a pairing or a download is still running.
-		l.Play(l.under, now)
+		// Idle, and the node decides on its next poll what should be
+		// showing instead.
+		l.Play(AnimIdle, now)
 	}
 	// A frame number indexes the ring, so it must never go negative: a
 	// caller whose clock has stepped back would otherwise index out of

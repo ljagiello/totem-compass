@@ -24,9 +24,9 @@ import (
 	"math/rand/v2"
 	"slices"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/store"
 )
 
 // Firmware constants (project_data, compass, espnow_conn_v2).
@@ -212,7 +212,7 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	if short := fitName(cfg.Name); short != cfg.Name {
+	if short := store.SanitizeName(cfg.Name); short != cfg.Name {
 		// Every status frame carries the name, so one the frame cannot
 		// hold would fail at the point of sending it, and one that is not
 		// text would travel on into whatever reads it.
@@ -269,28 +269,6 @@ func New(cfg Config, now time.Time) *Node {
 // hasJob reports whether a job of this kind is already scheduled.
 func (n *Node) hasJob(k jobKind) bool {
 	return slices.ContainsFunc(n.jobs, func(j job) bool { return j.kind == k })
-}
-
-// fitName makes a name a peer frame can carry: at most MaxPeerName bytes
-// of valid UTF-8, cut on rune boundaries.
-func fitName(s string) string {
-	if utf8.ValidString(s) && len(s) <= mesh.MaxPeerName {
-		return s
-	}
-	if !utf8.ValidString(s) {
-		out := make([]rune, 0, len(s))
-		for _, r := range s {
-			if r != utf8.RuneError {
-				out = append(out, r)
-			}
-		}
-		s = string(out)
-	}
-	for len(s) > mesh.MaxPeerName {
-		_, size := utf8.DecodeLastRuneInString(s)
-		s = s[:len(s)-size]
-	}
-	return s
 }
 
 // DefaultName is "emu_totem_" and the last four hex digits of the MAC.
@@ -725,6 +703,20 @@ func (n *Node) deletePeer(mac mesh.MAC) {
 	n.order = slices.DeleteFunc(n.order, func(m mesh.MAC) bool { return m == mac })
 }
 
+// ForgetPeers drops every bond without telling anyone, as a factory
+// reset does. No unbond notice goes out: this is the device forgetting
+// them, not a decision about what they should hold.
+func (n *Node) ForgetPeers(now time.Time) {
+	if len(n.peers) == 0 {
+		return
+	}
+	for _, mac := range slices.Clone(n.order) {
+		n.deletePeer(mac)
+	}
+	n.leds.Play(AnimPeerDeleteCountdown, now)
+	n.log.Info("all bonds forgotten")
+}
+
 // Unbond forgets a peer and tells it (EspConn.del_peer with is_unbond),
 // which 5.0.3 receivers ignore.
 func (n *Node) Unbond(now time.Time, mac mesh.MAC) []Packet {
@@ -774,8 +766,16 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 	n.adoptClock(now, m)
 	p, ok := n.peers[rx.Src]
 	if !ok && m.Command == mesh.PeerStatus && rx.Dst == n.cfg.MAC {
-		// Status unicast to us means the sender kept us in its config.json
-		// while this device, which has no flash storage, rebooted.
+		// Status unicast to us means the sender kept us in its
+		// config.json while this device rebooted, or was flashed.
+		if len(n.peers) >= maxBonds {
+			// The same limit every other path applies. Past it the bond
+			// would be lost at the next boot anyway, because the saved
+			// list is read back through it.
+			n.log.Warn("bond not restored: already at the bond limit",
+				"mac", rx.Src, "bonds", len(n.peers), "max", maxBonds)
+			return
+		}
 		n.log.Info("restoring bond the peer still holds", "mac", rx.Src)
 		p, ok = n.addPeer(rx.Src), true
 	}
@@ -1265,6 +1265,8 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 	}
 	cfg := SimConfig{
 		Motion: m, Bearing: bearing, NoFix: n.sensors.Fix == nil,
+		// The battery carries over as it reads, 0% included: a simulation
+		// started on a flat device must not report a full one.
 		Percent: n.sensors.Battery.Percent, Charging: n.sensors.Battery.Charging,
 		Flat: n.sensors.Orientation == mesh.OrientationHorizontal, Rand: n.rng,
 	}

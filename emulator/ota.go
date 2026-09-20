@@ -151,10 +151,9 @@ type OTA struct {
 	// done and total are the download's progress in bytes.
 	done, total int64
 	err         error
-	started     time.Time
-	finished    time.Time
-	// took is how long the exchange actually ran, by the wall clock: the
-	// node's own clock is frozen for the length of a blocking update.
+	// took is how long the exchange ran, by the wall clock: the node's
+	// own clock does not move for the length of a blocking update, so it
+	// cannot measure one.
 	took time.Duration
 }
 
@@ -289,7 +288,7 @@ func (n *Node) Update(now time.Time) error {
 	if o.state == OTADownloading || o.state == OTAChecking {
 		return errors.New("ota: an update is already running")
 	}
-	o.state, o.started, o.err, o.done, o.total = OTAChecking, now, nil, 0, 0
+	o.state, o.err, o.done, o.total = OTAChecking, nil, 0, 0
 	// The touch blocks this update takes, so they can be given back
 	// exactly as they were found.
 	var blocked []time.Time
@@ -298,7 +297,7 @@ func (n *Node) Update(now time.Time) error {
 	// ever reported, never used to decide anything.
 	began := time.Now()
 	fail := func(err error) error {
-		o.state, o.err, o.finished, o.took = OTAFailed, err, now, time.Since(began)
+		o.state, o.err, o.took = OTAFailed, err, time.Since(began)
 		n.log.Warn("ota failed", "err", err)
 		n.leds.Play(AnimOTAFailed, now)
 		n.unblockTouch(blocked)
@@ -395,7 +394,7 @@ func (n *Node) Update(now time.Time) error {
 	// with the bootloader's own hash check deciding whether it stays. The
 	// emulator stops here: it has one image, and losing it would take the
 	// board off the mesh.
-	o.state, o.finished, o.took = OTADone, now, time.Since(began)
+	o.state, o.took = OTADone, time.Since(began)
 	n.leds.Play(AnimIdle, now)
 	n.unblockTouch(blocked)
 	n.log.Info("ota complete", "installed", false,

@@ -160,17 +160,23 @@ func (r *recogniser) release(now time.Time) {
 func (r *recogniser) poll(now time.Time) []Gesture {
 	var out []Gesture
 	if r.down {
-		if r.longFor > 0 && !r.longHeld && now.Sub(r.downAt) >= r.longFor {
-			r.longHeld = true
-			out = append(out, LongHold)
-		}
+		// In the order a finger makes them: the hold at 800 ms, the long
+		// hold at ten seconds. One poll can land past both — a blocking
+		// update or a flash erase stalls the loop — and reporting the
+		// long hold first would run the compass reset before the alarm.
 		if !r.held && now.Sub(r.downAt) >= r.holdFor {
 			r.held = true
 			out = append(out, Hold)
 		}
+		if r.longFor > 0 && !r.longHeld && now.Sub(r.downAt) >= r.longFor {
+			r.longHeld = true
+			out = append(out, LongHold)
+		}
 		return out
 	}
-	if r.taps > 0 && now.Sub(r.lastRelease) >= multiTapWindow {
+	// A tap count is only decided once the finger is up: a press that is
+	// still down may yet become a double tap.
+	if !r.down && r.taps > 0 && now.Sub(r.lastRelease) >= multiTapWindow {
 		switch r.taps {
 		case 1:
 			out = append(out, SingleTap)
@@ -187,14 +193,22 @@ func (r *recogniser) poll(now time.Time) []Gesture {
 	return out
 }
 
-// next is when poll has something to do, or the zero time.
+// next is when poll has something to do, or the zero time. While the
+// finger is down it is the next hold; the tap count cannot resolve until
+// the finger lifts, so offering its deadline here would hand a caller a
+// time at which poll does nothing — and a caller that walks time forward
+// would never get past it.
 func (r *recogniser) next() time.Time {
-	switch {
-	case r.down && !r.held:
-		return r.downAt.Add(r.holdFor)
-	case r.down && r.longFor > 0 && !r.longHeld:
-		return r.downAt.Add(r.longFor)
-	case r.taps > 0:
+	if r.down {
+		switch {
+		case !r.held:
+			return r.downAt.Add(r.holdFor)
+		case r.longFor > 0 && !r.longHeld:
+			return r.downAt.Add(r.longFor)
+		}
+		return time.Time{}
+	}
+	if r.taps > 0 {
 		return r.lastRelease.Add(multiTapWindow)
 	}
 	return time.Time{}
