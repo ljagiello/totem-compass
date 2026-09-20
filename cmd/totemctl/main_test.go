@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/ljagiello/totem-compass/client"
 	"github.com/ljagiello/totem-compass/client/clienttest"
@@ -603,18 +604,19 @@ func FuzzParseRawFrame(f *testing.F) {
 		if err != nil {
 			return
 		}
-		// Spelled out rather than calling CleanHex, which is what
-		// parseRawFrame itself uses: an oracle built from the
-		// implementation agrees with it however wrong both are, and the
-		// separators are the thing under test.
-		clean := strings.ToLower(strings.NewReplacer(
-			":", "", "-", "", " ", "", "\t", "", "\n", "", "\r", "",
-			"\u00a0", "", "\u2006", "", "\u2007", "", "\u2008", "",
-			"\u2009", "", "\u200a", "", "\u202f", "", "\u205f", "",
-			"\u3000", "", "\u1680", "", "\u2000", "", "\u2001", "",
-			"\u2002", "", "\u2003", "", "\u2004", "", "\u2005", "",
-			"\v", "", "\f", "", "\u0085", "",
-		).Replace(strings.Join(args, "")))
+		// Built from the rule rather than by calling CleanHex, which is
+		// what parseRawFrame uses: an oracle made of the implementation
+		// agrees with it however wrong both are. The rule is that a
+		// colon, a dash and any space are separators and nothing else is
+		// dropped.
+		var kept []rune
+		for _, r := range strings.Join(args, "") {
+			if r == ':' || r == '-' || unicode.IsSpace(r) {
+				continue
+			}
+			kept = append(kept, r)
+		}
+		clean := strings.ToLower(string(kept))
 		if len(fr.Bytes) < 2 || hex.EncodeToString(fr.Bytes) != clean {
 			t.Fatalf("parseRawFrame(%q) = % x, want the bytes of %q", s, fr.Bytes, clean)
 		}
