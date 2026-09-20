@@ -293,7 +293,7 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	//
 	// It is said out loud, because doing nothing quietly looks the same
 	// as the console having missed the line.
-	if d <= edgeLockout {
+	if d < edgeLockout {
 		n.log.Info("hold too short to register, as on the device",
 			"input", in, "held", dur(d), "shortest", dur(edgeLockout))
 	}
@@ -343,7 +343,6 @@ func (n *Node) input(in Input) *recogniser {
 	return nil
 }
 
-// newInputs builds the three recognisers with the firmware's timings.
 // clearPending drops whatever a finger had started — a press still down,
 // a tap still inside its window — without re-arming the post-boot wait.
 // A device powering down forgets them: none of it means anything after
@@ -358,6 +357,7 @@ func clearPending(rs []recogniser) {
 	}
 }
 
+// newInputs builds the three recognisers with the firmware's timings.
 func newInputs(now time.Time) []recogniser {
 	rs := []recogniser{
 		{in: Crystal, holdFor: crystalPairHold},

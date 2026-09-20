@@ -31,6 +31,10 @@ func (n *Node) SetColor(c Color, now time.Time) {
 		n.log.Warn("cannot change colour while in a bond group", "color", c)
 		return
 	}
+	// Checked like every other colour from outside: the console validates
+	// its own argument, but a driver or an embedding caller does not, and
+	// State writes this to flash.
+	c = paletteColor(n.log, "caller", int8(c), n.leds.DefaultColor())
 	n.cfg.ColorID = int8(c)
 	n.leds.SetDefaultColor(c)
 	n.leds.Tick(now)

@@ -197,6 +197,12 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	switch {
 	case p.off:
 		return p.mode, false
+	case b.NoPowerChip:
+		// No cell to be low: the zeroes such a board reports are the
+		// absence of a reading, and driving it into PowerLow would put
+		// power mode 2 in every status frame and flash the low-battery
+		// ring at someone whose device cannot go flat.
+		p.mode = PowerNormal
 	case b.Charging:
 		// On the charger first: a pack that reads flat while it charges is
 		// filling up, and powering it down there would kill the radio at

@@ -96,11 +96,11 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 				peer.coordsAt = now.Add(time.Unix(p.LastSeenUnix, 0).Sub(n.wall(now)))
 			}
 		}
-		// Only a colour in the palette: an id off the flash that is not
-		// one renders as an unlit pixel, so the peer would be given a
-		// dial point that cannot be seen.
-		if c := Color(p.ColorID); c != 0 && c.InPalette() {
-			peer.color = c
+		// 0 is red and also the zero value, so a saved 0 is left as the
+		// colour the bond drew; anything else goes through the same check
+		// every colour from outside gets.
+		if p.ColorID != 0 {
+			peer.color = paletteColor(n.log, "saved peer", p.ColorID, peer.color)
 		}
 	}
 	if st.Brightness > 0 {
@@ -110,17 +110,11 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted
 	// The crystal's own colour comes off the same sector as the peers',
-	// so it gets the same check: an id outside the thirteen renders as an
-	// unlit pixel, and State would write it straight back, so a single
-	// bad byte would leave the crystal dark for good. 0 is red, which is
-	// also the default, so there is nothing to tell apart there.
-	if c := Color(st.ColorID); c.InPalette() {
-		n.cfg.ColorID = st.ColorID
-		n.leds.SetDefaultColor(c)
-	} else {
-		n.log.Warn("saved crystal colour is not one of the thirteen, keeping the default",
-			"id", st.ColorID)
-	}
+	// so it gets the same check. 0 is red, which is also the default, so
+	// there is nothing to tell apart there.
+	c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
+	n.cfg.ColorID = int8(c)
+	n.leds.SetDefaultColor(c)
 	return errs
 }
 

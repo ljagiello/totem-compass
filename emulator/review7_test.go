@@ -50,7 +50,12 @@ func TestOurOwnFixIsCheckedToo(t *testing.T) {
 		}
 		// And nothing impossible goes out on the air.
 		for _, s := range h.take() {
-			if m, ok := s.msg.(mesh.Peer); ok && !livePosition(m.Lat, m.Lon) && (m.Lat != 0 || m.Lon != 0) {
+			// usablePosition, which is the rule fix() applies: Null Island
+			// is the firmware's own way of saying it has no fix, so a
+			// frame carrying it is a frame carrying no position. The
+			// earlier spelling paired livePosition with a zero check that
+			// could never change the answer.
+			if m, ok := s.msg.(mesh.Peer); ok && !usablePosition(m.Lat, m.Lon) && (m.Lat != 0 || m.Lon != 0) {
 				t.Errorf("%s: broadcast a position of %v, %v", bad.name, m.Lat, m.Lon)
 			}
 		}

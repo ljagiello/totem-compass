@@ -82,6 +82,23 @@ var palette = [...]struct {
 // the air or off the flash is a number, not a promise.
 func (c Color) InPalette() bool { return c >= 0 && int(c) < len(palette) }
 
+// paletteColor is a colour id from outside — a flash sector, a frame off
+// the air, a driver — checked against the thirteen. Anything else renders
+// as an unlit pixel and, once saved, comes back that way at every boot,
+// so it is refused and the caller keeps what it had.
+//
+// One helper rather than the check written out at each ingress: it was
+// written out three times with three different fallbacks and three
+// different messages, and the fourth ingress was missed entirely.
+func paletteColor(log *slog.Logger, source string, id int8, fallback Color) Color {
+	if c := Color(id); c.InPalette() {
+		return c
+	}
+	log.Warn("colour is not one of the thirteen, keeping what we had",
+		"source", source, "id", id, "using", fallback)
+	return fallback
+}
+
 // RGB is the colour's pixel value.
 func (c Color) RGB() RGB {
 	if !c.InPalette() {
@@ -359,7 +376,10 @@ func (l *LEDs) Dark(off bool, now time.Time) {
 		return
 	}
 	l.off = false
-	l.redraw()
+	// From now, not from l.start: that is when the device went down, and
+	// a first tick measuring frames from it would start an animation
+	// hours into its own sequence.
+	l.start, l.next, l.resting = now, now, false
 }
 
 // Animation is what is playing.
@@ -435,7 +455,11 @@ func (l *LEDs) SetBrightness(f float64) {
 
 // Next is when Tick next has a frame to draw.
 func (l *LEDs) Next() time.Time {
-	if l.resting {
+	// l.off as well as l.resting, though Play and redraw both refuse a
+	// dark strip: the property is worth stating where it is read, so a
+	// future writer of resting cannot hand a driver a deadline on a
+	// powered-down device — which is a busy loop at full power.
+	if l.off || l.resting {
 		return time.Time{}
 	}
 	return l.next

@@ -252,15 +252,19 @@ func New(cfg Config, now time.Time) *Node {
 	if cfg.GNSSSource == 0 {
 		cfg.GNSSSource = mesh.GNSSDevice
 	}
-	if c := Color(cfg.ColorID); !c.InPalette() {
-		// The board reads this off a flash sector and hands it straight
-		// here, so an id outside the thirteen arrives before Restore ever
-		// runs — and Restore keeping "the default" would be keeping the
-		// corrupt one. An unlit crystal for good, from one bad byte.
-		cfg.Logger.Warn("crystal colour is not one of the thirteen, using red",
-			"id", cfg.ColorID)
-		cfg.ColorID = int8(ColorRed)
+	if p := cfg.Position; p != nil && !usablePosition(p.Lat, p.Lon) {
+		// The same rule SetPosition applies. A board hands this straight
+		// in, and a position every reader silently ignores would leave the
+		// device searching for a fix for ever with nothing to say why.
+		cfg.Logger.Warn("configured position is not one a device could be at, starting with none",
+			"lat", p.Lat, "lon", p.Lon)
+		cfg.Position = nil
 	}
+	// The board reads this off a flash sector and hands it straight here,
+	// so an id outside the thirteen arrives before Restore ever runs —
+	// and Restore keeping "the default" would be keeping the corrupt one.
+	// An unlit crystal for good, from one bad byte.
+	cfg.ColorID = int8(paletteColor(cfg.Logger, "configuration", cfg.ColorID, ColorRed))
 	n := &Node{
 		cfg: cfg, log: cfg.Logger, rng: cfg.Rand, boot: now,
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
@@ -457,15 +461,16 @@ var minClock = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 func (n *Node) read(now time.Time) {
 	n.sensors, n.sensorsAt = n.source.Read(now), now
 	// Whether the board has a battery monitor is a fact about the board,
-	// so the configuration has the last word on it: a source of its own —
-	// a driver, or a simulation swapped in at runtime — has no way to
-	// know, and the OTA gate must not turn on a board that has nothing to
-	// gate. Only ever set here, never cleared: the safe answer is the one
-	// that keeps the gate on.
-	if n.cfg.NoPowerChip {
-		n.sensors.Battery.NoPowerChip = true
-	}
-	if f := n.sensors.Fix; f != nil && f.Time.After(minClock) {
+	// so the configuration has the last word on it, both ways: a source
+	// of its own — a driver, or a simulation swapped in at runtime — has
+	// no way to know, and one that claimed there was no chip would turn
+	// the OTA battery gate off on a board with a flat cell. An
+	// assignment, not a set: clearing is the half that keeps the gate on.
+	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
+	// n.fix(), not the raw reading: a receiver whose position this node
+	// refuses has not earned its clock either, and that clock would be
+	// advertised to every peer and would re-slot every radio window.
+	if f := n.fix(); f != nil && f.Time.After(minClock) {
 		n.clockOffset = f.Time.Sub(now)
 		if !n.gnssClock {
 			n.gnssClock = true
@@ -476,12 +481,14 @@ func (n *Node) read(now time.Time) {
 	}
 }
 
-// fix is the current GNSS solution, or nil.
 // fix is this device's own GNSS solution, or nil when it has none.
 //
 // A position that no device could be at is no position: nil is what a
 // Totem indoors reports, and that is the honest answer for a garbled one
-// too. This is the same guard every position off the air gets, and it
+// too. Null Island counts as garbled — it is the firmware's own way of
+// saying it has no fix, and treating it as a place puts the compass
+// confidently on a bearing measured from the Gulf of Guinea. That is
+// usablePosition, the same guard every position off the air gets, and it
 // belongs here as much as there — a board's own receiver driver is code
 // like any other, the console can be told anything, and this is the one
 // position this device puts on the air. Left unchecked, a NaN reached the
@@ -490,7 +497,7 @@ func (n *Node) read(now time.Time) {
 // status frame this node broadcast.
 func (n *Node) fix() *Fix {
 	f := n.sensors.Fix
-	if f == nil || !livePosition(f.Lat, f.Lon) {
+	if f == nil || !usablePosition(f.Lat, f.Lon) {
 		return nil
 	}
 	return f
@@ -1253,13 +1260,9 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 				// outside the thirteen renders unlit — so one garbled
 				// frame would blank the crystal, and State would write it
 				// to flash for the next boot to find.
-				if c := Color(m.ColorID); c.InPalette() {
-					n.cfg.ColorID = m.ColorID
-					n.leds.SetDefaultColor(c)
-				} else {
-					n.log.Warn("smart group assigned a colour that is not one of the thirteen, keeping ours",
-						"id", m.ColorID)
-				}
+				c := paletteColor(n.log, "smart group", m.ColorID, n.leds.DefaultColor())
+				n.cfg.ColorID = int8(c)
+				n.leds.SetDefaultColor(c)
 				continue
 			}
 			if !slices.Contains(n.cfg.Owned, m.MAC) {
@@ -1403,13 +1406,13 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 		return
 	}
 	cfg := SimConfig{
-		Motion: m, Bearing: bearing, NoFix: n.sensors.Fix == nil,
+		Motion: m, Bearing: bearing, NoFix: n.fix() == nil,
 		// The battery carries over as it reads, 0% included: a simulation
 		// started on a flat device must not report a full one.
 		Percent: n.sensors.Battery.Percent, Charging: n.sensors.Battery.Charging,
 		Flat: n.sensors.Orientation == mesh.OrientationHorizontal, Rand: n.rng,
 	}
-	if f := n.sensors.Fix; f != nil {
+	if f := n.fix(); f != nil {
 		cfg.Lat, cfg.Lon = f.Lat, f.Lon
 	}
 	n.SetSensors(NewSim(cfg, now), now)
