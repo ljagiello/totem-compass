@@ -238,6 +238,11 @@ type Node struct {
 	// busy with a boot animation, an alarm or a download; the reminder
 	// waits for the strip rather than being lost or drawn over them.
 	lowOwed bool
+	// saidVolts and saidPct are latches on the two battery warnings.
+	// read() runs on every pass of a loop that polls every 5 ms, and a
+	// driver stuck out of range would otherwise say the same thing two
+	// hundred times a second for as long as the board is on.
+	saidVolts, saidPct bool
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
 	// given the default one made from its MAC. A saved name does not
@@ -569,26 +574,41 @@ func (n *Node) read(now time.Time) {
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
-	// What a battery can read, asked of every reading rather than of the
-	// config alone. New checks the config, but a source set later —
-	// SetSensors takes a real board's drivers, and the console's batt
-	// goes through Controls — arrives here and nowhere else, and from
-	// here it reaches the status frame on the air.
+	// A reading the frame can carry, asked of every reading rather than
+	// of the config alone: a source set later — SetSensors takes a real
+	// board's drivers, and the console's batt goes through Controls —
+	// arrives here and nowhere else, and from here it reaches the air.
 	//
-	// The ceiling is the only bound worth having: below it, a flat pack
-	// is exactly the reading the cutoff exists for. Above it the number
-	// is not a voltage, and it is also past what a peer frame can carry
-	// — the field is a half float whose encoder has no range check, so
-	// 131072 goes out as -0 and a million as -0.000233.
-	if b := &n.sensors.Battery; b.Volts != 0 && (!(b.Volts > 0) || b.Volts > maxPlausibleVolts) {
-		n.log.Warn("battery voltage is not one a cell reads, ignoring it",
-			"volts", b.Volts, "most", maxPlausibleVolts)
+	// Only what cannot be sent, which is not the same as what a cell is
+	// unlikely to read. A pack below the curve is the reading the cutoff
+	// exists for, and a board whose divider reads a little high is still
+	// telling the truth about its cell — zeroing either would be this
+	// device lying about its own battery over a tenth of a volt. What is
+	// refused is a number the peer frame's half float cannot hold: its
+	// encoder has no range check, so 131072 goes out as -0, a million as
+	// -0.000233, and a NaN as a NaN for every peer to decode.
+	//
+	// Once, not once per reading. This runs on every pass of a loop that
+	// polls every 5 ms, and a driver stuck out of range filled the only
+	// diagnostic channel the board has with two hundred copies a second
+	// of the same line — the reason warnedClock, saidBondLimit and
+	// saidRestoreLimit are all latches.
+	b := &n.sensors.Battery
+	if b.Volts != 0 && (!(b.Volts > 0) || b.Volts > maxSendableVolts) {
+		if !n.saidVolts {
+			n.saidVolts = true
+			n.log.Warn("battery voltage is not one a peer frame can carry, ignoring it",
+				"volts", b.Volts, "most", float32(maxSendableVolts))
+		}
 		b.Volts = 0
 	}
 	// And a percentage that is one. The frame carries it as a signed
 	// byte, so a driver's 120 goes out as 120 and a -50 as -50.
-	if b := &n.sensors.Battery; b.Percent < 0 || b.Percent > 100 {
-		n.log.Warn("battery percentage is not a percentage, ignoring it", "percent", b.Percent)
+	if b.Percent < 0 || b.Percent > 100 {
+		if !n.saidPct {
+			n.saidPct = true
+			n.log.Warn("battery percentage is not a percentage, ignoring it", "percent", b.Percent)
+		}
 		b.Percent = 0
 	}
 	// A real power chip reports a cell voltage; the percentage is what
@@ -636,6 +656,16 @@ func (n *Node) read(now time.Time) {
 	// battery, it is the battery.
 	n.applyPowerMode(now)
 }
+
+// maxSendableVolts is the largest cell voltage a peer frame carries: the
+// field is a half float, and the encoder this package ports has no range
+// check, so a number past the half's own limit runs off the end of the
+// five-bit exponent and into the sign bit.
+//
+// Not a plausibility band. A board whose divider reads a little high is
+// still telling the truth about its cell, and refusing it would be this
+// device lying about its own battery over a tenth of a volt.
+const maxSendableVolts = 65504
 
 // loggableVolts is a peer's reported cell voltage, or zero when the
 // frame did not carry a number at all. The field is a half float and
@@ -1107,7 +1137,10 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 	}
 	p.heard, p.lastHeard, p.rssi, p.viaMesh, p.stale = true, now, rx.RSSI, false, false
 	p.status = m
-	if usablePosition(m.Lat, m.Lon) {
+	// Once, and used again for the line below: two tests of the same
+	// thing six lines apart can drift if the rule ever changes.
+	carried := usablePosition(m.Lat, m.Lon)
+	if carried {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	if bonded {
@@ -1126,7 +1159,6 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 		// frame carrying one turned the whole line into
 		// "lat":"!ERROR:json: unsupported value: NaN".
 		var lat, lon float32
-		carried := usablePosition(m.Lat, m.Lon)
 		if carried {
 			lat, lon = m.Lat, m.Lon
 		}
@@ -1704,6 +1736,12 @@ func (n *Node) AddBond(mac mesh.MAC, name string, now time.Time) error {
 	return nil
 }
 
+// Fix is where this device believes it is, or nil when it does not know.
+// It is what every frame this node sends uses, so a caller showing a
+// position shows the same one the air does — a reading the node itself
+// refuses is not a position, whatever the receiver reported.
+func (n *Node) Fix() *Fix { return clonePosition(n.fix()) }
+
 // SOSMuted reports whether the alarm's blinking is muted. It survives a
 // reboot on a device that saves its settings.
 func (n *Node) SOSMuted() bool { return n.sosMuted }
@@ -1842,6 +1880,13 @@ func (n *Node) SetFlat(flat bool, now time.Time) error {
 
 // SetBattery sets the charge level and whether the Totem is charging.
 func (n *Node) SetBattery(percent int8, charging bool, now time.Time) error {
+	// Refused here as well as ignored by read(), which is the rule
+	// SetPosition states two functions down: a caller that asked for
+	// something impossible should be told, not left believing the
+	// device is at 120% while every frame it sends says 0.
+	if percent < 0 || percent > 100 {
+		return fmt.Errorf("battery of %d%% is not a percentage", percent)
+	}
 	if err := n.set(now, func(c Controls) { c.SetBattery(percent, charging, now) }); err != nil {
 		return err
 	}

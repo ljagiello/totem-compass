@@ -4,6 +4,7 @@ package store
 
 import (
 	"encoding/binary"
+	"fmt"
 	"hash/crc32"
 	"testing"
 )
@@ -457,33 +458,49 @@ func TestATornWriteCostsNoErase(t *testing.T) {
 // that are not erased and clear the whole sector, which is the cost this
 // design exists to avoid.
 func TestAFailedWriteCostsNoErase(t *testing.T) {
-	sec := newMemSector(4096)
-	j, err := Open(sec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := j.Save([]byte("the settings before the failure")); err != nil {
-		t.Fatal(err)
-	}
+	// How much of the record reached the flash. Zero is the one the
+	// board's own driver produces most: a range check, an alignment
+	// check and a lock that will not open all refuse before writing a
+	// byte, and stepping over a record that does not exist leaves erased
+	// bytes in the middle of the journal — which the scan stops at, so
+	// every save after it is invisible at the next boot.
+	for _, landed := range []int{0, 2, 12, 20} {
+		t.Run(fmt.Sprintf("%d bytes landed", landed), func(t *testing.T) {
+			sec := newMemSector(4096)
+			j, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := j.Save([]byte("the settings before the failure")); err != nil {
+				t.Fatal(err)
+			}
 
-	sec.failWriteAfter = 12
-	if err := j.Save([]byte("a write the driver gave up on")); err == nil {
-		t.Fatal("a write that failed reported success")
-	}
-	sec.failWriteAfter = -1
+			sec.failWriteAfter = landed
+			if err := j.Save([]byte("a write the driver gave up on")); err == nil {
+				t.Fatal("a write that failed reported success")
+			}
+			sec.failWriteAfter = -1
 
-	erases := sec.erases
-	if err := j.Save([]byte("the settings after it")); err != nil {
-		t.Fatal(err)
-	}
-	if sec.erases != erases {
-		t.Errorf("the save after a failed write erased the sector %d times", sec.erases-erases)
-	}
-	again, err := Open(sec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, err := again.Load(); err != nil || string(got) != "the settings after it" {
-		t.Errorf("after the save: %q, %v", got, err)
+			erases := sec.erases
+			want := []byte("the settings after it")
+			if err := j.Save(want); err != nil {
+				t.Fatal(err)
+			}
+			// A save after a whole header landed appends past it. One
+			// after a stump of bytes that is not a header has to clear
+			// them, which costs the sector and loses nothing. What must
+			// not happen either way is a save that reports success and
+			// cannot be read back.
+			if landed >= headerLen && sec.erases != erases {
+				t.Errorf("the save after a failed write erased the sector %d times", sec.erases-erases)
+			}
+			again, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := again.Load(); err != nil || string(got) != string(want) {
+				t.Errorf("after the save: %q, %v", got, err)
+			}
+		})
 	}
 }

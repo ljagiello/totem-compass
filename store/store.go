@@ -394,14 +394,23 @@ func (j *Journal) Save(p []byte) error {
 		}
 		j.next, j.torn, j.blank, erased = 0, 0, 0, true
 	}
-	if err := j.sec.WriteAt(rec, j.next); err != nil {
+	at := j.next
+	if err := j.sec.WriteAt(rec, at); err != nil {
 		// Whatever landed before the driver gave up is written, so the
-		// next record cannot go there. Stepping over the whole thing
-		// costs the space and keeps the erase budget: leaving the head
-		// where it was had the next save find bytes that are not erased
-		// and clear the sector, which is the cost this whole design is
-		// arranged to avoid.
-		j.next = min(j.next+len(rec), j.sec.Size())
+		// next record cannot go there — leaving the head where it was
+		// had the next save find bytes that are not erased and clear the
+		// sector, which is the cost this whole design is arranged to
+		// avoid.
+		//
+		// How much landed is a question for the sector, not for the
+		// length of the record that was attempted. A driver can refuse
+		// before writing a byte — a range check, an alignment check, a
+		// lock that would not open — and stepping over the whole record
+		// then leaves erased bytes in the middle of the journal, which
+		// the scan stops at: every save after it lands past a gap that
+		// no reopen can cross, so the settings look like they were never
+		// written at all.
+		j.next = j.headAfter(at)
 		if erased {
 			// The sector was cleared and the record that should have
 			// replaced its contents did not land, so what this journal
@@ -410,12 +419,43 @@ func (j *Journal) Save(p []byte) error {
 			// save would compare against a record that is not there.
 			j.last = nil
 		}
-		return fmt.Errorf("store: writing %d bytes at %d: %w", len(rec), j.next, err)
+		return fmt.Errorf("store: writing %d bytes at %d: %w", len(rec), at, err)
 	}
 	j.next += len(rec)
 	j.seq = next
 	j.last = append([]byte(nil), p...)
 	return nil
+}
+
+// headAfter is where the next record may go once a write at off has
+// failed: after whatever of it reached the flash, which is what the
+// sector says rather than what the attempt intended.
+//
+// A read that fails leaves the head where it was. That is the
+// conservative answer — the next save finds bytes it cannot write into
+// and erases, which costs a sector but loses nothing.
+func (j *Journal) headAfter(off int) int {
+	buf := make([]byte, j.sec.Size()-off)
+	if err := j.sec.ReadAt(buf, off); err != nil {
+		return off
+	}
+	// Whether a header landed decides where the next record may go, the
+	// same way it decides where a scan resumes.
+	//
+	// One did: a later scan reads it, disbelieves it — the checksum word
+	// is the last thing written and will not have landed — and starts
+	// looking again past its header, so a record written inside that
+	// span would never be found. It goes after the header at the
+	// earliest.
+	//
+	// One did not: then there is nothing here a scan would read as a
+	// record, so it stops at these bytes and the head stays where it
+	// was. If they are not erased the next save clears the sector, which
+	// costs an erase and loses nothing.
+	if len(buf) < headerLen || [4]byte(buf[0:4]) != magic {
+		return off
+	}
+	return off + max(writeHead(buf, headerLen), headerLen)
 }
 
 // erased reports whether n bytes at off are still 0xff, the value flash

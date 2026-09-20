@@ -296,7 +296,18 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS,
 			"heading", sense.Azimuth, "color", cfg.ColorID, "flat", sense.Orientation == mesh.OrientationHorizontal,
 			"batt", sense.Battery.Percent, "volts", sense.Battery.Volts, "charging", sense.Battery.Charging}
-		if p := sense.Fix; p != nil {
+		// n.Fix(), not sense.Fix: the reading is whatever a receiver
+		// reported, and a driver may report a NaN. This handler writes
+		// JSON, which cannot hold one — a single such reading turns the
+		// whole line into "lat":"!ERROR:json: unsupported value: NaN"
+		// and totemctl then reads a string where it wants a number. The
+		// node's own answer is the one every frame it sends uses.
+		//
+		// has_position says which it is, so a reader does not have to
+		// take a pair of zeroes for a place: Null Island is how this
+		// firmware says it has no fix.
+		self = append(self, "has_position", n.Fix() != nil)
+		if p := n.Fix(); p != nil {
 			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM,
 				"speed", p.SpeedKPH, "sats", p.SatCount, "odometer_m", p.OdometerM)
 		}
