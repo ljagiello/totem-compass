@@ -92,6 +92,10 @@ const (
 	holdTime = 800 * time.Millisecond
 	// longHold is sw_sos's long_hold_ms=10000, the compass reset.
 	longHold = 10 * time.Second
+	// maxTaps is as far as the tap count is worth keeping: the firmware's
+	// last gesture is the triple tap, and poll reads anything at or past
+	// three as one.
+	maxTaps = 4
 	// crystalPairHold is how long the Touch Crystal has to be held to start
 	// pairing. The user guide says about 1.2 s.
 	crystalPairHold = 1200 * time.Millisecond
@@ -163,7 +167,14 @@ func (r *recogniser) release(now time.Time) {
 		// Ended, but not a tap: nothing a finger did that fast is one.
 		return
 	}
-	r.taps++
+	// Counted up to the last gesture there is and no further. The
+	// firmware has no fourth, and poll already reads anything past three
+	// as a triple tap, so the extra counting buys nothing — and a caller
+	// that presses and releases faster than it polls, which fuzzing does
+	// and a stalled loop could, would otherwise grow this without limit.
+	if r.taps < maxTaps {
+		r.taps++
+	}
 	r.lastRelease = now
 }
 
