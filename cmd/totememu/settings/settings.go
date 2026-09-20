@@ -64,6 +64,13 @@ func Open(log *slog.Logger, sec store.Sector) *Store {
 	// every other reason the settings cannot be read. Unread is how a
 	// caller says so deliberately.
 	j, err := store.Open(sec)
+	if errors.Is(err, store.ErrNoSector) {
+		// Told apart from a driver that is there and failing, because
+		// they call for different things: one is a board being worked
+		// on, the other is a board whose flash may be going.
+		log.Warn("no settings sector on this board, running without saving")
+		return s
+	}
 	if err != nil {
 		log.Warn("settings unavailable, running without saving", "err", err)
 		return s

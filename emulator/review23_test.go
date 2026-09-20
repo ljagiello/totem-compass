@@ -31,8 +31,11 @@ func TestTheMeshScheduleIsATimeThisDeviceReaches(t *testing.T) {
 			t.Fatalf("meshDelivery(%.0f m) = %v, under the floor", d, got)
 		case got < last:
 			t.Fatalf("meshDelivery(%.0f m) = %v, less than the %v before it", d, got, last)
-		case got > 7*24*time.Hour:
-			t.Fatalf("meshDelivery(%.0f m) = %v, which is not a span a device waits out", d, got)
+		case got > 155*time.Hour:
+			// The firmware's own answer for the far side of the world is
+			// about six and a half days. Anything beyond it is the
+			// arithmetic having gone wrong rather than a distance.
+			t.Fatalf("meshDelivery(%.0f m) = %v, longer than the width of the world", d, got)
 		}
 		last = got
 	}

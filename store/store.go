@@ -248,19 +248,19 @@ func (j *Journal) Save(p []byte) error {
 	if len(p) > MaxRecord {
 		return fmt.Errorf("%w: %d bytes, the record holds %d", ErrTooLarge, len(p), MaxRecord)
 	}
-	// The next number, which neither wraps nor reaches the value erased
-	// flash reads as. Refusing to read all ones and then writing it was
-	// the worse half of the two: scan skips such a record's number, so a
-	// sector of them comes back with the counter at 0 and the save after
-	// that writes a number the sector already holds.
+	// The next number, which never reaches the value erased flash reads
+	// as. Refusing to read all ones and then writing it would be the
+	// worst of both: scan skips such a record's number, so a sector of
+	// them comes back with the counter at 0, and the save after that
+	// writes a number the sector already holds.
 	//
-	// Reaching the top takes four billion saves of a sector that erases
-	// every few dozen, so neither is a thing that happens — but a
-	// counter that came round to zero would make a sector of real
-	// records read as a fresh one, and repeating the last number is the
-	// smaller lie.
+	// That is also what stops it wrapping, since the counter can no
+	// longer hold the value 1 turns over. Reaching the top takes four
+	// billion saves of a sector that erases every few dozen, so this is
+	// not a thing that happens — and repeating the last number is a
+	// smaller lie than a sector of real records reading as a fresh one.
 	next := j.seq + 1
-	if next == 0 || next == 0xffffffff {
+	if next == 0xffffffff {
 		next = j.seq
 	}
 	rec := make([]byte, headerLen+len(p)+pad(len(p)))

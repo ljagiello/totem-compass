@@ -497,7 +497,12 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	// nothing would go on the air either way — this is the state that
 	// would be left behind.
 	if n.power.Off() {
-		return nil
+		// flush, not nil: anything the reading queued on the way down
+		// belongs to the run that is ending. PowerOff clears the outbox
+		// for that reason, and this is the one way out of Receive that
+		// would otherwise skip the drain and leave a frame for the next
+		// Poll to send after the device is down.
+		return n.flush()
 	}
 	n.log.Debug("rx", "src", rx.Src, "dst", rx.Dst, "rssi", rx.RSSI, "len", len(rx.Data), "frame", fmt.Sprintf("%x", rx.Data))
 	m, err := mesh.Parse(rx.Data)
@@ -1357,6 +1362,11 @@ func (n *Node) meshTick(now time.Time) {
 
 // earthHalfCircumferenceM is as far apart as two devices on the planet
 // can be, which is the widest a distance passed below can honestly be.
+// A ceiling on the delay itself would be dead: the firmware's own
+// arithmetic tops out at about six and a half days for a peer on the
+// other side of the world, and this package's job is to behave like the
+// device, so any limit that did not change that answer would be a
+// branch that never runs.
 const earthHalfCircumferenceM = 20_100_000
 
 // meshDelivery is Parser.cal_mesh_delivery(dist, range=75).
@@ -1370,10 +1380,13 @@ func meshDelivery(distM float64) time.Duration {
 	if !(distM > 0) || math.IsInf(distM, 0) {
 		distM = 0
 	}
-	// And a ceiling, because int(distM) is what overflows and a floor
-	// alone does not stop it: half the way round the world is as far
-	// apart as two devices get, so anything past it is a number rather
-	// than a distance.
+	// And a ceiling, because int() below is what overflows and a floor
+	// alone does not stop a number that is merely enormous. Go leaves
+	// that conversion implementation-defined when the value does not
+	// fit, and this host saturates in a way that happens to land back
+	// inside the answer's range — so no test here can show the
+	// difference, the same as the NaN guard in scale(). The board is a
+	// different compiler and a different architecture.
 	distM = min(distM, earthHalfCircumferenceM)
 	h := int(distM) / meshHopRange
 	ms := (h/2+1)*50 + (h-h/2)*4050
