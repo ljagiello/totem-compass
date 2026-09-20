@@ -187,8 +187,9 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 	case p.off:
 		return p.mode, false
 	case b.Volts > 0 && b.Volts <= cutoffVolts:
+		// Report the cutoff; the node does the powering down, which is
+		// more than setting a flag — the radio windows have to stop.
 		p.mode = PowerOff
-		p.off = true
 	case b.Charging:
 		p.mode = PowerNormal
 	case b.Low || (b.Volts > 0 && b.Volts <= lowBattVolts):

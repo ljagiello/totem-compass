@@ -477,3 +477,40 @@ func TestOTAReportKeys(t *testing.T) {
 		t.Errorf("report = %s", b)
 	}
 }
+
+// TestCutoffStopsTheRadio: "Voltages too low, powering down" has to stop
+// the device, not just label it. A peer's Totem sees a flat device go
+// quiet; one that kept transmitting would be reported as fine until it
+// browned out.
+func TestCutoffStopsTheRadio(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	h.advance(10 * time.Second)
+	if len(h.take()) == 0 {
+		t.Fatal("a healthy device sent nothing")
+	}
+	if err := h.n.SetBattery(1, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.n.sensors.Battery.Volts = cutoffVolts - 0.01
+	h.n.device(h.now)
+	if !h.n.Power().Off() {
+		t.Fatal("a device under the cutoff is still on")
+	}
+	h.advance(time.Minute)
+	if s := h.take(); len(s) != 0 {
+		t.Errorf("a device past its cutoff sent %d frames", len(s))
+	}
+}
+
+// TestVoltsAndPercentAgree: a level set by hand and the voltage reported
+// with it have to be two views of the same battery, or a peer sees a
+// device at 50% holding a voltage the curve calls 41%.
+func TestVoltsAndPercentAgree(t *testing.T) {
+	for p := int8(0); p <= 100; p += 5 {
+		v := voltsFor(p)
+		if back := battPctFor(v); back < p-2 || back > p+2 {
+			t.Errorf("%d%% is %.3f V, which reads back as %d%%", p, v, back)
+		}
+	}
+}
