@@ -83,19 +83,26 @@ func main() {
 
 	// The settings sector is read before the node starts, so the name and
 	// the colour it was given last are the ones it comes up with.
-	saved := settings.Open(log, settingsSector())
-	if !storeAtBoot {
-		// Unread says so on the console, so it is only called when it is
-		// true: calling it either way logged "settings not read at boot"
-		// on every boot, one line above "settings restored", and sent
-		// whoever was working out why a device lost its bonds after the
-		// wrong one.
-		saved = settings.Unread(log)
+	// One or the other, never both: Unread says on the console that the
+	// sector was not read, so calling it either way logged that one line
+	// above "settings restored" — and calling Open either way took the
+	// 4 KB read with the cache and interrupts off, which is the whole
+	// thing storeAtBoot exists to skip while the flash driver is being
+	// worked on.
+	saved := settings.Unread(log)
+	if storeAtBoot {
+		saved = settings.Open(log, settingsSector())
 	}
 	// One copy: State() clones the peers it hands out, and this is the
 	// window in which the board is also starting the radio and the ring.
 	boot0 := saved.State()
-	if boot0.Name != "" && name == "" {
+	// len, not a string comparison: TinyGo 0.42 on xtensa gets == and !=
+	// wrong on a string field of a copied struct, which is what boot0 is
+	// — the same miscompile that made every `color <name>` fail on the
+	// board. A device whose saved name silently did not come back would
+	// look exactly like a device that had not saved one, and no host
+	// test can see it, because this file only builds for the board.
+	if len(boot0.Name) != 0 && name == "" {
 		name = boot0.Name
 	}
 	node := emulator.New(emulator.Config{
@@ -111,7 +118,7 @@ func main() {
 	saved.Restore(node, boot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
-		"channel", mesh.Channel, "phy", "LR 250K", "boots", saved.State().BootCount)
+		"channel", mesh.Channel, "phy", "LR 250K", "boots", boot0.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	front := newPanel(log)

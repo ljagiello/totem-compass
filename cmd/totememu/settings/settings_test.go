@@ -86,13 +86,19 @@ func testLog(t *testing.T) *slog.Logger {
 func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // node is a device with the given name, bonded to the owned Totem when
-// asked, which is what there is to save. A nil *testing.T is the fuzzer,
-// which has no log to write to and cannot fail here.
+// asked, which is what there is to save.
+//
+// The logger is separate from the T on purpose: the fuzzer has a T and
+// must fail on a bond it cannot make, but it runs millions of times, and
+// formatting every node's boot lines into t.Log for nobody to read cost
+// it two thirds of its throughput.
 func node(t *testing.T, name string, bond bool) *emulator.Node {
-	log := discard()
+	return nodeLogged(t, testLog(t), name, bond)
+}
+
+func nodeLogged(t *testing.T, log *slog.Logger, name string, bond bool) *emulator.Node {
 	if t != nil {
 		t.Helper()
-		log = testLog(t)
 	}
 	n := emulator.New(emulator.Config{
 		MAC: self, Owned: []mesh.MAC{totem}, Name: name,

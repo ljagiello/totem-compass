@@ -224,6 +224,11 @@ type Node struct {
 	// that varied it would grow this without limit, while the addresses
 	// it can hold are the owned ones.
 	warnedClock map[mesh.MAC]bool
+	// lowOwed is a low-battery reminder that has not been shown yet. The
+	// mode changes when the pack says so, which may be while the ring is
+	// busy with a boot animation, an alarm or a download; the reminder
+	// waits for the strip rather than being lost or drawn over them.
+	lowOwed bool
 	// named is whether this device was built with a name — `-X
 	// main.name=` on the board, Config.Name in a test — rather than
 	// given the default one made from its MAC. A saved name does not
@@ -266,13 +271,14 @@ func New(cfg Config, now time.Time) *Node {
 		// SanitizeName did is not only shortening: a name that is not
 		// text loses the bytes that are not, so saying it did not fit
 		// would be wrong as often as right.
+		msg := "name is not one a peer frame and the settings can both hold, using what is left"
 		if short == "" {
-			cfg.Logger.Warn("name is not text a peer frame and the settings can hold, falling back to the default",
-				"name", gave, "bytes", len(gave), "using", cfg.Name)
-		} else {
-			cfg.Logger.Warn("name is not one a peer frame and the settings can both hold, using what is left",
-				"name", gave, "bytes", len(gave), "using", cfg.Name)
+			// Nothing survived, so the default stands in — and calling
+			// that "what is left" would tell a reader that the name made
+			// from the MAC is a remnant of the one they chose.
+			msg = "name is not text a peer frame and the settings can hold, falling back to the default"
 		}
+		cfg.Logger.Warn(msg, "name", gave, "bytes", len(gave), "using", cfg.Name)
 	}
 	if cfg.Rand == nil {
 		cfg.Rand = rand.New(rand.NewPCG(uint64(now.UnixNano()), binary.BigEndian.Uint64(append([]byte{0, 0}, cfg.MAC[:]...))))
@@ -339,15 +345,13 @@ func New(cfg Config, now time.Time) *Node {
 	// with a clock takes the GNSS path, which aligns the windows itself.
 	// A second one here would leave two window jobs rescheduling each
 	// other, and every peer would see every status twice.
-	if !n.hasJob(jobWindow) {
+	// Not on a device the reading above has already switched off: read()
+	// acts on what it reads, so a node built on a pack under the cutoff
+	// is down by now, and arming a window would leave it transmitting
+	// from a device that is supposed to be silent.
+	if !n.power.Off() && !n.hasJob(jobWindow) {
 		n.scheduleWindow(now)
 	}
-	// And the mode that follows from the reading, last, once the node is
-	// whole. A device built on a pack under the cutoff has to come up and
-	// go straight back down rather than report power mode normal until
-	// something else polls it — and the going down empties the job list,
-	// so it has to happen after the window above is armed and not before.
-	n.applyPowerMode(now)
 	return n
 }
 
@@ -581,6 +585,14 @@ func (n *Node) read(now time.Time) {
 			n.startAligned(now)
 		}
 	}
+	// And the mode that follows from what was just read. Here rather
+	// than at each caller: every path that takes a reading has the same
+	// decision to make, and of the ten that call this, five had it and
+	// five did not — so `batt 2` on the console reported power mode
+	// normal until something else polled, and a simulation swapped in on
+	// a flat pack went on running. A mode is not an opinion about the
+	// battery, it is the battery.
+	n.applyPowerMode(now)
 }
 
 // fix is this device's own GNSS solution, or nil when it has none.
@@ -1339,6 +1351,15 @@ func (n *Node) meshTick(now time.Time) {
 
 // meshDelivery is Parser.cal_mesh_delivery(dist, range=75).
 func meshDelivery(distM float64) time.Duration {
+	// A distance that is not one goes to the floor rather than into the
+	// arithmetic. int(NaN) is implementation-defined — 0 on arm64, the
+	// most negative int64 on amd64 — and from there the multiplications
+	// below overflow and come out as a peer next asked about in two
+	// hundred years, which is a peer never asked about again. The
+	// callers all check their coordinates; this is the floor under them.
+	if !(distM > 0) || math.IsInf(distM, 0) {
+		distM = 0
+	}
 	h := int(distM) / meshHopRange
 	ms := (h/2+1)*50 + (h-h/2)*4050
 	return time.Duration(max(ms, 6000)) * time.Millisecond
@@ -1558,7 +1579,6 @@ func (n *Node) FactoryReset(now time.Time) {
 	// next power-up starts the counters from zero anyway.
 	n.power.ClearLearnedMaxVolts()
 	n.read(now)
-	n.applyPowerMode(now)
 }
 
 // AddBond puts back a bond the device already had, the way a Totem reads

@@ -83,6 +83,12 @@ type Journal struct {
 // sector cannot be read; a sector full of noise opens empty, because a
 // device that cannot read its settings still has to boot.
 func Open(sec Sector) (*Journal, error) {
+	// Here rather than in each caller: this is the line that would
+	// panic, so every caller present and future is covered by one check
+	// instead of each needing its own copy of it.
+	if sec == nil {
+		return nil, errors.New("store: no sector")
+	}
 	if sec.Size() < headerLen+align {
 		return nil, fmt.Errorf("store: sector of %d bytes is too small", sec.Size())
 	}
@@ -176,20 +182,29 @@ func (j *Journal) scan(buf []byte) {
 // A torn write and a record carrying nothing prove nothing about their
 // own header — an empty body checksums to 0 whatever the header says, so
 // sixteen bytes of noise make a whole valid empty record — and they may
-// only step the counter on by one. That is enough for the next save to
-// write a number the sector does not already hold, which is the point of
-// counting, while a sector of noise can no longer drive the counter
-// wherever it likes: one word of rubbish claiming four billion would
-// otherwise pin the journal near the top of the range for good, and
-// every save after it would be wrapping to zero.
+// only step the counter on by one. That is exactly right for the case
+// they describe, a save a reset cut short, whose number was the next one
+// anyway; against a header that claims more it is a bound rather than a
+// promise, and the next save can still write a number such a header
+// carried. What it does promise is that a sector of noise cannot drive
+// the counter: one word of rubbish claiming four billion would otherwise
+// pin the journal near the top of the range for good.
+//
+// Neither kind may reach the value erased flash reads as. All ones is
+// the pattern of a sector nobody has written rather than a number
+// anybody chose, and a counter parked there stays there: Save cannot go
+// past it, so every save afterwards would write the same number, which
+// is the one thing counting is for.
 func (j *Journal) keepSeq(seq uint32, proven bool) {
 	switch {
+	case seq == 0xffffffff:
+		// Erased flash, not a number.
 	case seq <= j.seq:
 		// Only ever climbs: a number below the one already seen is an
 		// older record, or a sector that holds anything at all.
 	case proven:
 		j.seq = seq
-	default:
+	case j.seq < 0xfffffffe:
 		j.seq++
 	}
 }

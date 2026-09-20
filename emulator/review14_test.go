@@ -49,8 +49,16 @@ func TestARestoreOnALowPackSaysSo(t *testing.T) {
 	if !strings.Contains(logged.String(), "power mode") {
 		t.Errorf("the mode changed without a word: %s", logged.String())
 	}
+	// The reminder is owed, not lost and not drawn over the power-up
+	// ring: a device coming up on a low pack shows its boot animation
+	// and then says the pack is low, in that order, which is what the
+	// firmware does with every passing event that wants the strip.
+	if got := h.n.LEDs().Animation(); got != AnimBoot {
+		t.Errorf("the ring shows %s during the power-up animation", got)
+	}
+	h.advance(bootAnim + time.Second)
 	if got := h.n.LEDs().Animation(); got != AnimLowBattery {
-		t.Errorf("the ring shows %s, want the low-battery flash", got)
+		t.Errorf("once the strip was free the ring showed %s, want the low-battery flash", got)
 	}
 }
 

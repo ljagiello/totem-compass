@@ -200,12 +200,27 @@ func TestAnUpdateOnAFlatPackPowersDown(t *testing.T) {
 	if v := h.n.Sensors().Battery.Volts; v > cutoffVolts {
 		t.Fatalf("a flat pack reads as %v V, above the cutoff of %v", v, cutoffVolts)
 	}
-	// The reading is in the node's sensors, and nothing has acted on it.
-	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
-		t.Fatalf("update on a flat pack: %v", err)
-	}
+	// Acted on where it was read, which is what read() does now: the
+	// device is down before anything asks it for an update.
 	if !h.n.Power().Off() {
 		t.Error("a pack below the cutoff was read and then left running")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrPoweredDown) {
+		t.Fatalf("update on a flat pack: %v", err)
+	}
+
+	// And the gate itself, on a pack that is low and still alive: under
+	// the 30% an update needs, above the cutoff that stops everything.
+	h = newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	if err := h.n.SetBattery(10, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	if h.n.Power().Off() {
+		t.Fatal("a pack at 10 percent switched the device off")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("update on a pack at 10 percent: %v", err)
 	}
 }
 

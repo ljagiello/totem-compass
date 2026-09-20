@@ -59,17 +59,10 @@ func Unread(log *slog.Logger) *Store {
 // either way.
 func Open(log *slog.Logger, sec store.Sector) *Store {
 	s := &Store{log: log}
-	// Unread is how a caller says there is no sector, and this is the
-	// same answer for one that arrives without one anyway: the journal
-	// would call Size on it and the board would boot-loop, which is the
-	// outcome Unread exists to avoid. A nil interface is the only nil
-	// this can see — an interface holding a nil pointer is not equal to
-	// nil in Go and will still panic inside the driver it names, which
-	// is the driver's own business.
-	if sec == nil {
-		log.Warn("no settings sector, running without saving")
-		return s
-	}
+	// A sector that is not there comes back as an error from store.Open,
+	// which is where the check belongs, and lands in the same warning as
+	// every other reason the settings cannot be read. Unread is how a
+	// caller says so deliberately.
 	j, err := store.Open(sec)
 	if err != nil {
 		log.Warn("settings unavailable, running without saving", "err", err)

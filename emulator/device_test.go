@@ -143,7 +143,10 @@ func TestBatteryDrivesThePowerMode(t *testing.T) {
 		// SetBattery maps the level to a voltage; force the one under test.
 		h.n.sensors.Battery.Volts = tt.volts
 		h.n.sensors.Battery.Low = tt.volts <= lowBattVolts
-		h.n.device(h.now)
+		// applyPowerMode, not device(): the reading is forced here rather
+		// than coming from a source, so read() — which is what pairs the
+		// two now — would overwrite it on the way past.
+		h.n.applyPowerMode(h.now)
 		if got := h.n.Power().Mode(); got != tt.want {
 			t.Errorf("%.2f V at %d%% gave %s, want %s", tt.volts, tt.pct, got, tt.want)
 		}
@@ -563,7 +566,7 @@ func TestCutoffStopsTheRadio(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.n.sensors.Battery.Volts = cutoffVolts - 0.01
-	h.n.device(h.now)
+	h.n.applyPowerMode(h.now)
 	if !h.n.Power().Off() {
 		t.Fatal("a device under the cutoff is still on")
 	}
@@ -805,13 +808,21 @@ func TestEveryAnimationEnds(t *testing.T) {
 
 // TestUpdateRefusesAtZeroPercent: 0% is the flattest reading there is, so
 // it belongs inside the battery gate. It used to fall outside it.
+//
+// It is also under the cutoff, and a reading under the cutoff switches
+// the device off wherever it is taken — so an update is refused for that
+// first, and the gate itself is what a pack that is low and still alive
+// runs into.
 func TestUpdateRefusesAtZeroPercent(t *testing.T) {
 	srv := newFakeOTA()
 	h := newHarness(t, func(c *Config) { c.OTATransport = srv })
 	if err := h.n.SetBattery(0, false, h.now); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+	if !h.n.Power().Off() {
+		t.Fatal("an empty battery left the device running")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrPoweredDown) {
 		t.Fatalf("update on an empty battery: %v", err)
 	}
 	if len(srv.posts) != 0 {

@@ -129,7 +129,10 @@ func TestAFactoryResetForgetsThePack(t *testing.T) {
 	// told to forget what it knew. What a reset throws away is the
 	// history: it keeps whatever the present reading says, because that
 	// is a measurement and not a memory.
-	if err := h.n.SetBattery(0, false, h.now); err != nil {
+	// Low, but above the cutoff: at 0% the device switches itself off,
+	// and a device that is off does not learn from the pack it is on —
+	// which is the point of the reading below, not of this line.
+	if err := h.n.SetBattery(20, false, h.now); err != nil {
 		t.Fatal(err)
 	}
 	h.n.Sensors() // no-op read, so the harness state is settled

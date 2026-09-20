@@ -98,7 +98,6 @@ func (n *Node) Restore(st *store.State, now time.Time) []error {
 	// poll — and one coming up on a pack below the cutoff has to power
 	// down rather than report that it has.
 	n.read(now)
-	n.applyPowerMode(now)
 	return errs
 }
 

@@ -268,3 +268,43 @@ func TestALongLivedBoardKeepsCounting(t *testing.T) {
 		t.Errorf("the next save took number %d", got)
 	}
 }
+
+// TestTheCounterIsNotParkedAtTheErasedValue: all ones is the pattern of
+// a sector nobody has written, not a number anybody chose. A counter
+// parked there stays there — Save will not go past it — so every save
+// afterwards writes the number the sector already holds, which is the
+// one thing counting is for.
+func TestTheCounterIsNotParkedAtTheErasedValue(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		seq  uint32
+		body []byte
+	}{
+		{"a whole record claiming it", 0xffffffff, []byte("settings someone chose")},
+		{"a record with nothing in it", 0xffffffff, nil},
+		{"one step below it", 0xfffffffe, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec := newMemSector(4096)
+			writeRaw(t, sec, 0, tc.seq, tc.body)
+			j, err := Open(sec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := j.Seq(); got == 0xffffffff {
+				t.Fatal("the counter was parked at the value erased flash reads as")
+			}
+			was := j.Seq()
+			for i := range 3 {
+				if err := j.Save([]byte{byte(i), 'x'}); err != nil {
+					t.Fatal(err)
+				}
+				got := j.Seq()
+				if got <= was {
+					t.Fatalf("save %d took number %d, and the one before it was %d", i, got, was)
+				}
+				was = got
+			}
+		})
+	}
+}

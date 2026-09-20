@@ -359,11 +359,6 @@ func (n *Node) Update(now time.Time) error {
 	// have the gate decide on a battery from seconds ago — and seconds
 	// ago is what the gate exists not to reboot on.
 	n.read(now)
-	// And the mode that follows from it. read() leaves the node holding
-	// a reading it has not acted on; every other caller pairs the two,
-	// and a device that reads a flat pack here has exactly the decision
-	// to make that applyPowerMode makes.
-	n.applyPowerMode(now)
 	b := n.sensors.Battery
 	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))

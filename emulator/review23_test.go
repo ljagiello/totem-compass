@@ -37,12 +37,18 @@ func TestTheMeshScheduleIsATimeThisDeviceReaches(t *testing.T) {
 		last = got
 	}
 
-	// And a distance that could not be measured does not become one.
-	if got := meshDelivery(-1); got < 6*time.Second || got > time.Minute {
-		t.Errorf("meshDelivery(-1) = %v, want the floor", got)
-	}
-	if got := meshDelivery(math.NaN()); got <= 0 {
-		t.Errorf("meshDelivery(NaN) = %v", got)
+	// And a distance that could not be measured goes to the floor, not
+	// into the arithmetic. The same band as the loop above, because
+	// "positive" is not an assertion here: int(NaN) is the most negative
+	// int64 on amd64, and the multiplications that follow overflow into
+	// a large positive number — a peer next asked about in two hundred
+	// years, which reads as positive and is a peer never asked about
+	// again.
+	for _, d := range []float64{-1, -20_000_000, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		got := meshDelivery(d)
+		if got < 6*time.Second || got > time.Minute {
+			t.Errorf("meshDelivery(%v) = %v, want the floor", d, got)
+		}
 	}
 }
 
@@ -71,5 +77,79 @@ func TestABoardBuiltOnAFlatPackComesUpOff(t *testing.T) {
 	}
 	if !h.n.hasJob(jobWindow) {
 		t.Error("a node on a full pack came up with no radio window")
+	}
+}
+
+// TestEveryReadingIsActedOn: the mode is not an opinion about the
+// battery, it is the battery — so it follows every reading, from the one
+// place that takes them. Five of the ten callers of read() paired it
+// with applyPowerMode and five did not, so `batt 2` on the console
+// reported power mode normal until something else polled, and a
+// simulation swapped in on a flat pack went on running.
+func TestEveryReadingIsActedOn(t *testing.T) {
+	t.Run("a console battery", func(t *testing.T) {
+		h := newHarness(t, nil)
+		h.advance(bootAnim + time.Second)
+		if err := h.n.SetBattery(2, false, h.now); err != nil {
+			t.Fatal(err)
+		}
+		if got := h.n.Power().Mode(); got == PowerNormal {
+			t.Error("a pack at 2 percent still reads as mode normal")
+		}
+	})
+
+	t.Run("a simulation swapped in", func(t *testing.T) {
+		h := newHarness(t, nil)
+		h.advance(bootAnim + time.Second)
+		h.n.SetSensors(NewStatic(Sensors{Battery: Battery{Volts: 3.1, Percent: 40}}), h.now)
+		if !h.n.Power().Off() {
+			t.Error("a source reporting a pack under the cutoff left the device running")
+		}
+	})
+
+	t.Run("a clock", func(t *testing.T) {
+		pack := &collapsingPack{b: Battery{Volts: 4.0, Percent: 90}}
+		h := newHarness(t, func(c *Config) { c.Sensors = pack })
+		h.advance(bootAnim + time.Second)
+		pack.b = Battery{Volts: 3.1, Percent: 40}
+		if err := h.n.SetClock(t0, h.now); err != nil {
+			t.Fatal(err)
+		}
+		if !h.n.Power().Off() {
+			t.Error("the reading taken with the clock was not acted on")
+		}
+	})
+}
+
+// TestTheLowBatteryReminderWaitsForTheRing: it is a reminder, and a boot
+// animation, an alarm or a download is the picture someone is actually
+// looking at. Owed rather than drawn over them, and not lost either.
+func TestTheLowBatteryReminderWaitsForTheRing(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.4, 8 })
+	if got := h.n.LEDs().Animation(); got != AnimBoot {
+		t.Fatalf("a device on a low pack came up showing %s, not its power-up ring", got)
+	}
+	h.advance(bootAnim + time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimLowBattery {
+		t.Errorf("once the strip was free the ring showed %s", got)
+	}
+
+	// And a reminder owed while something else holds the ring is not
+	// spent on it: the alarm keeps the strip, and the reminder follows.
+	h = newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	h.n.SetSOS(true)
+	h.advance(time.Second)
+	if err := h.n.SetBattery(8, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(2 * time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimSOS {
+		t.Errorf("the low-battery reminder took the ring from the alarm: %s", got)
+	}
+	h.n.SetSOS(false)
+	h.advance(2 * time.Second)
+	if got := h.n.LEDs().Animation(); got != AnimLowBattery {
+		t.Errorf("after the alarm ended the ring showed %s, and the reminder was owed", got)
 	}
 }

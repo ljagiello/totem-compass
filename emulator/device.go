@@ -116,7 +116,6 @@ func (n *Node) PowerOn(now time.Time) {
 // after the sensors have been read.
 func (n *Node) device(now time.Time) {
 	n.pollInputs(now)
-	n.applyPowerMode(now)
 	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
 		restful(w) && n.leds.Animation() == w {
 		n.power.takeCharger()
@@ -129,6 +128,14 @@ func (n *Node) device(now time.Time) {
 		n.leds.Play(AnimBoot, now)
 		n.log.Info("charger connected", "volts", n.sensors.Battery.Volts,
 			"batt", n.sensors.Battery.Percent)
+	}
+	// The low-battery reminder, once the strip is free. Owed by
+	// applyPowerMode rather than played there, so that coming up on a
+	// low pack shows the power-up ring and then the reminder, in that
+	// order, rather than one over the other.
+	if w := n.wantedAnimation(); n.lowOwed && restful(w) && n.leds.Animation() == w {
+		n.lowOwed = false
+		n.leds.Play(AnimLowBattery, now)
 	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.
@@ -172,7 +179,13 @@ func (n *Node) applyPowerMode(now time.Time) {
 		n.log.Warn("voltages too low, powering down", "volts", n.sensors.Battery.Volts)
 		n.PowerOff(now)
 	case PowerLow:
-		n.leds.Play(AnimLowBattery, now)
+		// Owed rather than played here, and for the reason the charger's
+		// ring is owed: this is a reminder, and a boot animation, an
+		// alarm or a download is the picture someone is actually looking
+		// at. A device built on a low pack used to stamp the reminder
+		// over its own power-up ring, which the firmware plays to the
+		// end. It goes on as soon as the strip is resting.
+		n.lowOwed = true
 	}
 }
 

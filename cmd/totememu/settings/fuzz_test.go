@@ -31,7 +31,7 @@ func FuzzSettings(f *testing.F) {
 
 	// A real record, so the corpus starts from something that parses.
 	seedSec := newMemSector()
-	Open(discard(), seedSec).Save(node(nil, "lcfs_spare", true))
+	Open(discard(), seedSec).Save(nodeLogged(nil, discard(), "lcfs_spare", true))
 	f.Add(append([]byte(nil), seedSec.b[:256]...), true, "")
 
 	f.Fuzz(func(t *testing.T, raw []byte, bonded bool, built string) {
@@ -39,11 +39,11 @@ func FuzzSettings(f *testing.F) {
 		copy(sec.b, raw)
 
 		s := Open(discard(), sec)
-		// The fuzzer's t, not nil: node() only takes nil for the seed
-		// call above, where there is an *testing.F and no T. Passing it
-		// here let an AddBond that started refusing the owned Totem go
-		// by in silence, and every bond assertion below with it.
-		n := node(t, built, bonded)
+		// The fuzzer's T, so a bond it cannot make is a failure rather
+		// than a silence — and the discarding logger, because this runs
+		// millions of times and nobody reads the lines of a case that
+		// passes.
+		n := nodeLogged(t, discard(), built, bonded)
 		was := n.Config().Name
 		s.Restore(n, t0)
 
