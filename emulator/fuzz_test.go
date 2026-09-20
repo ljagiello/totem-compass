@@ -355,7 +355,7 @@ func FuzzRestore(f *testing.F) {
 		}
 		// A bond for a Totem this board does not own is refused, not
 		// dropped silently, so errors here are the expected answer.
-		h.n.Restore(st, h.now)
+		h.n.Restore(&st, h.now)
 		if got := h.n.BondCount(); got > maxBonds {
 			t.Fatalf("restored %d bonds, over the %d limit", got, maxBonds)
 		}

@@ -20,7 +20,7 @@ import (
 // radio windows kept running on a pack below the cutoff.
 func TestARestoreOnAFlatPackPowersDown(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.2, 1 })
-	h.n.Restore(store.State{}, h.now)
+	h.n.Restore(&store.State{}, h.now)
 	if got := h.n.Power().Mode(); got != PowerOff {
 		t.Fatalf("a 3.2 V pack reads mode %s, want off", got)
 	}
@@ -42,7 +42,7 @@ func TestARestoreOnALowPackSaysSo(t *testing.T) {
 		c.BattVolts, c.BattPct = 3.4, 5
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
-	h.n.Restore(store.State{}, h.now)
+	h.n.Restore(&store.State{}, h.now)
 	if got := h.n.Power().Mode(); got != PowerLow {
 		t.Fatalf("a 3.4 V pack reads mode %s, want low", got)
 	}

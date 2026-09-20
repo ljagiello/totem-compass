@@ -29,6 +29,10 @@ type settings struct {
 	key []byte
 	// state is what the device is running with.
 	state store.State
+	// found is whether the flash held a record this boot. The zero State
+	// above is what a board with nothing saved runs with, and it is not
+	// a set of settings: nobody chose it.
+	found bool
 }
 
 // storeAtBoot says whether the settings are read while the device starts.
@@ -69,6 +73,7 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 		return s
 	}
 	s.key = emulator.SettingsKey(s.state)
+	s.found = true
 	s.state.BootCount++
 	log.Info("settings restored", "name", s.state.Name, "peers", len(s.state.Peers),
 		"boots", s.state.BootCount, "seq", j.Seq(), "free", j.Free())
@@ -78,16 +83,25 @@ func openSettings(log *slog.Logger, atBoot bool) *settings {
 // restore puts the saved bonds and settings back into a node, so the
 // device comes up as it went down.
 func (s *settings) restore(n *emulator.Node, now time.Time) {
-	for _, err := range n.Restore(s.state, now) {
+	var rec *store.State
+	if s.found {
+		rec = &s.state
+	}
+	had := n.BondCount()
+	for _, err := range n.Restore(rec, now) {
 		// A saved peer that is no longer in the owned list is refused,
 		// and that is worth saying: it means the board was reflashed for
 		// a different Totem and the old bond is being dropped.
 		s.log.Warn("saved bond not restored", "err", err)
 	}
-	// What came back, not what was in the record: a board reflashed for a
-	// different Totem refuses every saved bond, and saying three were
-	// restored beside three refusals is the opposite of a report.
-	if got := n.BondCount(); got > 0 {
+	// What this record brought back, not what the node holds: a board
+	// reflashed for a different Totem refuses every saved bond, and
+	// saying three were restored beside three refusals is the opposite
+	// of a report. Counting the difference rather than the total is what
+	// makes it the record's doing — restore() runs into a fresh node
+	// today, and a count of everything bonded would stop being an answer
+	// to "what was restored" the moment it does not.
+	if got := n.BondCount() - had; got > 0 {
 		s.log.Info("bonds restored", "peers", got, "saved", len(s.state.Peers))
 	}
 }

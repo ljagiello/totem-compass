@@ -123,6 +123,16 @@ func (j *Journal) scan(buf []byte) {
 		// a reader sees, and a sector holding noise can carry any value
 		// for it — ordering by it would let a bogus 0xffffffff in old
 		// bytes hide every record saved afterwards.
+		// A record with nothing in it is stepped over rather than taken.
+		// Load reads a nil payload as "nothing saved", so letting one
+		// become j.last would report an empty sector and hide every good
+		// record written before it. Save refuses to write one now, but a
+		// sector from an earlier build can already hold one.
+		if len(body) == 0 {
+			j.torn++
+			off = end + pad(n)
+			continue
+		}
 		j.last = append([]byte(nil), body...)
 		j.seq = seq
 		off = end + pad(n)

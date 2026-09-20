@@ -224,10 +224,21 @@ type Node struct {
 	// that varied it would grow this without limit, while the addresses
 	// it can hold are the owned ones.
 	warnedClock map[mesh.MAC]bool
+	// named is whether this device was built with a name — `-X
+	// main.name=` on the board, Config.Name in a test — rather than
+	// given the default one made from its MAC. A saved name does not
+	// overwrite a name someone chose.
+	named bool
 }
 
 // New starts a node at time now.
 func New(cfg Config, now time.Time) *Node {
+	// Whether anyone chose this name, recorded here because here is
+	// where it is known. Restore used to ask whether the name still
+	// equalled DefaultName, which is a guess at this fact: it also says
+	// yes to a board deliberately flashed with the name it would have
+	// had anyway.
+	named := cfg.Name != ""
 	if cfg.Name == "" {
 		cfg.Name = DefaultName(cfg.MAC)
 	}
@@ -290,6 +301,7 @@ func New(cfg Config, now time.Time) *Node {
 		warnedClock: map[mesh.MAC]bool{},
 		meshGrp:     meshGroup(cfg.MAC),
 	}
+	n.named = named
 	n.source = cfg.Sensors
 	if n.source == nil {
 		n.source = &staticSensors{s: Sensors{
@@ -1172,7 +1184,15 @@ func (n *Node) relay(now time.Time, frame []byte, m mesh.Locate) bool {
 		return false
 	}
 	pos := n.fix()
-	if m.RelayMinDistM > 0 && distance(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
+	// The last hop's position is four bytes off the air, so it gets what
+	// every other coordinate from outside gets. A frame carrying NaN
+	// there — another firmware, a garbled field, a peer with no fix that
+	// wrote one anyway — compares false against any distance, which
+	// turned the minimum-distance rule off for exactly the frames least
+	// worth trusting. An unusable one is no last hop at all, and a hop
+	// whose distance cannot be known cannot be too close.
+	if m.RelayMinDistM > 0 && usablePosition(m.LastHopLat, m.LastHopLon) &&
+		distance(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
 		return false
 	}
 	b := slices.Clone(frame)
@@ -1381,6 +1401,17 @@ func distance(lat1, lon1, lat2, lon2 float32) float64 {
 	// can leave a just above 1, and Asin of that is NaN — which spreads
 	// into the mesh delay (where int(NaN) is implementation-defined) and
 	// into furthestPeer, where the builtin max carries it to every peer.
+	//
+	// The clamp is for that rounding and nothing else: Go's min returns
+	// NaN if either argument is one, so a coordinate that arrives as NaN
+	// goes straight through it. Every caller checks its coordinates
+	// first — peerDistance through fix() and hasCoords, relay() through
+	// usablePosition — and -1 is what the rest of this file already
+	// means by "no distance", so a caller that forgets is answered with
+	// that rather than with a number that poisons the arithmetic.
+	if math.IsNaN(a) {
+		return -1
+	}
 	return 2 * r * math.Asin(math.Sqrt(min(a, 1)))
 }
 

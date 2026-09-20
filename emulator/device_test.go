@@ -1072,7 +1072,7 @@ func TestPeerPositionSurvivesAReboot(t *testing.T) {
 	}
 
 	fresh := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
-	if errs := fresh.n.Restore(st, fresh.now); len(errs) != 0 {
+	if errs := fresh.n.Restore(&st, fresh.now); len(errs) != 0 {
 		t.Fatalf("restore: %v", errs)
 	}
 	fresh.advance(bootAnim + time.Second) // past the power-up animation

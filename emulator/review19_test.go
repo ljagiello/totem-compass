@@ -45,13 +45,22 @@ func TestTheDistanceToTheOtherSideOfTheWorld(t *testing.T) {
 			t.Error("a peer on the other side of the world is NaN away")
 		}
 	}
-	h.advance(time.Minute)
+	// And the node keeps running on it: the distance reaches the mesh
+	// delay, where int(NaN) is implementation-defined and the arithmetic
+	// that follows overflows, so a minute of timers is what says the
+	// peer is still being asked about rather than scheduled past the end
+	// of time.
+	h.take()
+	h.advance(2 * time.Minute)
+	if len(h.take()) == 0 {
+		t.Error("nothing was sent in two minutes: the mesh tick stopped")
+	}
 }
 
 // TestABlankRecordIsNotSettings: `store open` on a sector that is empty
-// or unreadable restores a zero State. Taken at face value it un-muted
-// an alarm and turned the crystal red — settings someone had chosen on a
-// device that had not saved them yet.
+// or unreadable has no record to hand back. Taking that for a set of
+// settings un-muted an alarm and turned the crystal red — choices
+// someone had made on a device that had not saved them yet.
 func TestABlankRecordIsNotSettings(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.ColorID = int8(ColorBlue) })
 	h.advance(bootDebounce)
@@ -61,7 +70,7 @@ func TestABlankRecordIsNotSettings(t *testing.T) {
 		t.Fatal("the alarm was not muted to begin with")
 	}
 
-	h.n.Restore(store.State{}, h.now)
+	h.n.Restore(nil, h.now)
 	if !h.n.SOSMuted() {
 		t.Error("restoring nothing un-muted the alarm")
 	}
@@ -76,7 +85,7 @@ func TestABlankRecordIsNotSettings(t *testing.T) {
 // reflash with a new name never took effect.
 func TestABuiltInNameBeatsTheSavedOne(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.Name = "fieldunit7" })
-	h.n.Restore(store.State{Name: "emu_totem_abb0"}, h.now)
+	h.n.Restore(&store.State{Name: "emu_totem_abb0"}, h.now)
 	if got := h.n.Config().Name; got != "fieldunit7" {
 		t.Errorf("the saved name overwrote the built-in one: %q", got)
 	}
@@ -84,7 +93,7 @@ func TestABuiltInNameBeatsTheSavedOne(t *testing.T) {
 	// A device still carrying the default has not been named, so the
 	// record wins.
 	h = newHarness(t, nil)
-	h.n.Restore(store.State{Name: "lcfs_spare"}, h.now)
+	h.n.Restore(&store.State{Name: "lcfs_spare"}, h.now)
 	if got := h.n.Config().Name; got != "lcfs_spare" {
 		t.Errorf("the saved name did not come back: %q", got)
 	}
@@ -133,15 +142,28 @@ func TestABrightnessThatIsNotANumber(t *testing.T) {
 	}
 	// And the same for the download's share, which reaches the ring.
 	l.Play(AnimOTA, t0)
-	l.SetProgress(math.NaN())
+	l.SetProgress(0.5)
 	l.Tick(t0.Add(time.Second))
-	lit := 0
+	half := litPixels(l)
+	if half == 0 {
+		t.Fatal("half a download lit no pixels at all")
+	}
+	// The share that is not a number leaves the ring where it was: it is
+	// not a smaller download, it is no answer, and the last real one is
+	// the truest thing on the strip.
+	l.SetProgress(math.NaN())
+	l.Tick(t0.Add(2 * time.Second))
+	if got := litPixels(l); got != half {
+		t.Errorf("a share that is not a number moved the ring from %d pixels to %d", half, got)
+	}
+}
+
+func litPixels(l *LEDs) int {
+	n := 0
 	for _, px := range l.Ring() {
 		if px != Off {
-			lit++
+			n++
 		}
 	}
-	if lit > RingPixels {
-		t.Errorf("%d of %d pixels are lit", lit, RingPixels)
-	}
+	return n
 }

@@ -245,7 +245,7 @@ func TestTheChargerRingGoesStale(t *testing.T) {
 // also the zero value, so a saved 0 leaves the colour the bond drew.
 func TestAPeerColourOfRedIsLeftAlone(t *testing.T) {
 	h := newHarness(t, nil)
-	h.n.Restore(store.State{Peers: []store.PeerState{{
+	h.n.Restore(&store.State{Peers: []store.PeerState{{
 		MAC: [6]byte(totem), Name: "totem", ColorID: 0,
 	}}}, h.now)
 	got := h.n.peers[totem].color

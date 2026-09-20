@@ -201,7 +201,7 @@ func TestRestoreRefusesACrystalColourOutsideThePalette(t *testing.T) {
 		c.ColorID = int8(ColorTeal)
 		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
 	})
-	h.n.Restore(store.State{ColorID: 120}, h.now)
+	h.n.Restore(&store.State{ColorID: 120}, h.now)
 
 	if got := h.n.LEDs().DefaultColor(); !got.InPalette() {
 		t.Errorf("the crystal took colour %d, which is not in the palette", int(got))

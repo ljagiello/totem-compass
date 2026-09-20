@@ -229,10 +229,19 @@ const maxPlausibleVolts = 4.4
 func (p *Power) startRun(now time.Time) {
 	p.sleptMs, p.awakeMs, p.maxVolts = 0, 0, 0
 	p.lastTick = now
-	// The charger is not touched: it is a thing in the world rather than
-	// a counter, and charging() sets chargeShown while the device is down
-	// precisely so the ring is not replayed when it comes back on a cable
-	// that never moved.
+	// The charger is not touched at all, neither the mark nor the
+	// debounce. charging() sets chargeShown while the device is down
+	// precisely so the ring is not replayed when it comes back on a
+	// cable that never moved, and the driver keeps polling while it is
+	// down — that is how the power button works — so every connection
+	// that survives a power cycle is marked.
+	//
+	// Starting the debounce again instead would announce such a
+	// connection 300 ms after every power-up: the ring says "the charger
+	// just went in", and a cable that has been in since yesterday did
+	// not. The ceiling below is the same argument for the same reason.
+	// The only way past both is a power cycle with no poll in it, which
+	// the driver does not do and a test has to construct.
 }
 
 // Mode is the power mode a status frame carries.
@@ -357,7 +366,11 @@ func (p *Power) sleep(now, next time.Time) time.Duration {
 	if p.off {
 		// Neither asleep nor awake: the driver keeps polling so the power
 		// button works, and booking that as time awake made a device that
-		// had been switched off all day report a duty cycle for it.
+		// had been switched off all day report a duty cycle for it. The
+		// span that ended with the button is dropped along with the rest
+		// — at most one poll of it, against a total in hours, and the
+		// alternative is carrying a "was awake until" through a path
+		// whose whole job is that the device is not.
 		return 0
 	}
 	if next.IsZero() || p.holdSleep {

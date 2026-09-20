@@ -59,7 +59,7 @@ func TestASmartGroupBondOutlivesThePairingWindow(t *testing.T) {
 func TestTheSavedNameComesBack(t *testing.T) {
 	h := newHarness(t, nil)
 	was := h.n.Config().Name
-	h.n.Restore(store.State{Name: "lcfs_totem"}, h.now)
+	h.n.Restore(&store.State{Name: "lcfs_totem"}, h.now)
 	if got := h.n.Config().Name; got != "lcfs_totem" {
 		t.Errorf("the name is %q after a restore, want the saved one (was %q)", got, was)
 	}

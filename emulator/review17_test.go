@@ -72,7 +72,7 @@ func TestAPoweredDownDeviceLearnsNothing(t *testing.T) {
 func TestTheCountersStartAgainAtEveryBoot(t *testing.T) {
 	h := newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 3.8, 50 })
 	h.collect(h.n.Poll(h.now))
-	h.n.Restore(store.State{SleepMs: 9_000_000, LearnedMaxVolts: 4.35}, h.now)
+	h.n.Restore(&store.State{SleepMs: 9_000_000, LearnedMaxVolts: 4.35}, h.now)
 
 	if got := h.n.Power().SleptMs(); got >= 9_000_000 {
 		t.Errorf("the sleep total came back as %d ms", got)
@@ -83,7 +83,8 @@ func TestTheCountersStartAgainAtEveryBoot(t *testing.T) {
 	// And what it saves is this run's, so reading it back cannot inflate
 	// anything.
 	first := h.n.State(1).SleepMs
-	h.n.Restore(h.n.State(1), h.now)
+	saved := h.n.State(1)
+	h.n.Restore(&saved, h.now)
 	if got := h.n.State(1).SleepMs; got != first {
 		t.Errorf("a save and restore moved the sleep total from %d to %d", first, got)
 	}

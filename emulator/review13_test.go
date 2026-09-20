@@ -52,7 +52,7 @@ func TestRestorePutsThePowerModeInStep(t *testing.T) {
 	if got := h.n.Power().Mode(); got != PowerNormal {
 		t.Fatalf("a node starts in mode %s, want normal", got)
 	}
-	h.n.Restore(store.State{}, h.now)
+	h.n.Restore(&store.State{}, h.now)
 	if got := h.n.Power().Mode(); got != PowerLow {
 		t.Errorf("after restoring on a 3.4 V pack the mode is %s, want low", got)
 	}

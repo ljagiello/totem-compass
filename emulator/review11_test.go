@@ -87,7 +87,7 @@ func TestASavedPositionIsNeverFromTheFuture(t *testing.T) {
 	if err := h.n.SetClock(t0, h.now); err != nil {
 		t.Fatal(err)
 	}
-	h.n.Restore(store.State{Peers: []store.PeerState{{
+	h.n.Restore(&store.State{Peers: []store.PeerState{{
 		MAC: [6]byte(totem), Name: "totem", Lat: 37.775, Lon: -122.42,
 		LastSeenUnix: t0.Add(5 * 365 * 24 * time.Hour).Unix(),
 	}}}, h.now)

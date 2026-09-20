@@ -262,7 +262,7 @@ func TestPeerTimeIsAWallSecond(t *testing.T) {
 	// than from a second it cannot read.
 	st := h.n.State(1)
 	fresh := newHarness(t, nil)
-	if errs := fresh.n.Restore(st, fresh.now); len(errs) != 0 {
+	if errs := fresh.n.Restore(&st, fresh.now); len(errs) != 0 {
 		t.Fatalf("restore: %v", errs)
 	}
 	rp := fresh.n.peers[totem]

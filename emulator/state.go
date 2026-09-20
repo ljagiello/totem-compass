@@ -37,11 +37,19 @@ func (n *Node) State(boots uint32) store.State {
 		// the sector, which is what `store` prints.
 		LearnedMaxVolts: n.power.LearnedMaxVolts(),
 	}
-	// No cap here: n.order cannot hold more than maxBonds, which is half
-	// of store.MaxPeers, so a limit at this end could never bind and
-	// would only send a reader looking for a truncation that never
-	// happens.
+	// n.order cannot hold more than maxBonds, which is half of
+	// store.MaxPeers, so this never binds. It is here because the only
+	// thing between a breach of that and a device that silently stops
+	// saving is MarshalBinary's error, which reaches a log line at best:
+	// a bond limit raised past the record's without anyone noticing the
+	// two are related would cost every setting on the device, so it
+	// stops at the record's limit and says so.
 	for _, mac := range n.order {
+		if len(st.Peers) == store.MaxPeers {
+			n.log.Warn("more bonds than a saved record holds; the rest are not saved",
+				"saved", len(st.Peers), "bonds", len(n.order))
+			break
+		}
 		p := n.peers[mac]
 		ps := store.PeerState{
 			MAC:     [6]byte(mac),
@@ -74,14 +82,21 @@ func (n *Node) State(boots uint32) store.State {
 // Restore puts a saved state back: the bonds, the brightness and the
 // mute. A bond whose Totem is no longer owned is refused and reported,
 // which is what happens when a board is reflashed for a different one.
-func (n *Node) Restore(st store.State, now time.Time) []error {
+func (n *Node) Restore(st *store.State, now time.Time) []error {
 	var errs []error
-	// A record that carries nothing at all is the absence of settings,
-	// not a set of them: the bonds, the brightness and the reading below
-	// are all worth applying from a real record, and none of them is
-	// worth applying from a blank one.
-	empty := st.Name == "" && st.ColorID == 0 && st.Brightness == 0 &&
-		!st.SOSMuted && len(st.Peers) == 0
+	// No record is nil. Whether the sector held one is something the
+	// caller read off the flash and knows for certain; inferring it here
+	// from a State whose fields are all zero guessed at it, and guessed
+	// wrong for a device saved with no name, no bonds, the default
+	// colour and the brightness left alone — a real record, and the one
+	// a device that has only ever been switched on would write.
+	if st == nil {
+		n.log.Info("nothing saved to restore; keeping what the device is running with")
+		// The reading still happens: see the end of this function.
+		n.read(now)
+		n.applyPowerMode(now)
+		return nil
+	}
 	for _, p := range st.Peers {
 		if err := n.AddBond(p.MAC, p.Name, now); err != nil {
 			errs = append(errs, err)
@@ -136,9 +151,12 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// board takes `-X main.name=` over the saved name on purpose, and
 	// restore() runs straight after New — so assigning unconditionally
 	// put the old name back and then saved it again, and a reflash with
-	// a new name never took effect. DefaultName is not a choice anyone
-	// made, so a device still carrying it yields to the record.
-	if name := store.SanitizeName(st.Name); name != "" && n.cfg.Name == DefaultName(n.cfg.MAC) {
+	// a new name never took effect. n.named is whether anyone chose this
+	// device's name, which New knows because it is what it was handed;
+	// comparing against DefaultName asked the same question of the
+	// answer instead, and got it wrong for a board flashed with the name
+	// it would have been given anyway.
+	if name := store.SanitizeName(st.Name); name != "" && !n.named {
 		n.cfg.Name = name
 	}
 	// Neither the sleep total nor the learned maximum is put back. Both
@@ -147,32 +165,28 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// its own firmware never does. They are saved so that whoever reads
 	// the sector can see what the device last said, and the pack is
 	// measured again on the first poll.
-	// The alarm's mute and the crystal's colour come from a record that
-	// says something. `store open` on a sector that is empty or
-	// unreadable restores a zero State, and taking that at face value
-	// un-muted an alarm and turned the crystal red — settings the
-	// operator had chosen on a device that had not saved them yet.
+	// The alarm's mute and the crystal's colour, from a record that
+	// exists. `store open` on a sector that is empty or unreadable hands
+	// back no record at all, and taking that for one un-muted an alarm
+	// and turned the crystal red — settings the operator had chosen on a
+	// device that had not saved them yet.
 	//
 	// A muted alarm otherwise stays muted: someone silenced it, and a
 	// power cut is not them changing their mind.
-	if empty {
-		n.log.Info("nothing saved to restore; keeping what the device is running with")
-	} else {
-		n.sosMuted = st.SOSMuted
-		// The crystal's own colour comes off the same sector as the
-		// peers', so it gets the same check. 0 is red, which is also the
-		// default, so there is nothing to tell apart there.
-		c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
-		n.cfg.ColorID = int8(c)
-		n.leds.SetDefaultColor(c)
-	}
+	n.sosMuted = st.SOSMuted
+	// The crystal's own colour comes off the same sector as the peers',
+	// so it gets the same check. 0 is red, which is also the default, so
+	// there is nothing to tell apart there.
+	c := paletteColor(n.log, "saved settings", st.ColorID, n.leds.DefaultColor())
+	n.cfg.ColorID = int8(c)
+	n.leds.SetDefaultColor(c)
 	// A reading, and the mode that follows from it, whatever the record
-	// said — this is the node coming into step with its own sensors, not
-	// a setting. A device restoring
-	// its settings at boot has not polled yet, so without this it reports
-	// power mode normal until the first poll — and a device coming up on
-	// a pack below the cutoff has to power down rather than report that
-	// it has.
+	// said: this is the node coming into step with its own sensors
+	// rather than a setting, so it happens even when there is no record
+	// at all. A device restoring its settings at boot has not polled
+	// yet, so without this it reports power mode normal until the first
+	// poll — and one coming up on a pack below the cutoff has to power
+	// down rather than report that it has.
 	n.read(now)
 	n.applyPowerMode(now)
 	return errs

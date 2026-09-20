@@ -423,10 +423,9 @@ func (l *LEDs) SetDial(deg int16, c Color) {
 
 // SetProgress sets the OTA download's share, 0 to 1.
 func (l *LEDs) SetProgress(f float64) {
-	// NaN survives min and max — every comparison with it is false — and
-	// would reach the uint8 conversion in scale(), which Go leaves
-	// implementation-defined. Nothing is a safer share than something
-	// that is not a number.
+	// scale() drops a NaN before it reaches a pixel; this keeps one out
+	// of the field, which the ring indexes with and the console prints.
+	// Nothing is a safer share than something that is not a number.
 	if math.IsNaN(f) {
 		return
 	}
@@ -558,7 +557,10 @@ func (l *LEDs) draw(now time.Time) {
 		}
 	case AnimOTA:
 		// The download's progress ring, white at 30% (PROGRESS_RGB).
-		n := int(l.progress * RingPixels)
+		// Bounded at the use as well as at the setter: this indexes the
+		// ring, and a share above 1 reaching it would not be a wrong
+		// picture but a write past the end of the strip.
+		n := min(int(l.progress*RingPixels), len(l.ring))
 		for i := 0; i < n; i++ {
 			// Dimmed with everything else: a tap of the power button dims
 			// the whole strip, not all of it but this.
@@ -613,6 +615,20 @@ func (l *LEDs) fillCrystal(c RGB) {
 func (l *LEDs) dim(c RGB) RGB { return scale(c, l.brightness) }
 
 func scale(c RGB, f float64) RGB {
+	// Here, where the uint8 conversion is, rather than only at the
+	// setters that happen to take a share from outside: NaN goes through
+	// min and max untouched, because every comparison with it is false.
+	//
+	// Go leaves float-to-integer conversion of a NaN implementation-
+	// defined. The host this is developed on gives 0, which is why no
+	// test here can show the difference — reverting this guard leaves
+	// every host test green. The board is a different compiler and a
+	// different architecture, and the one thing that is certain is that
+	// neither promises anything. A strip that cannot work out a
+	// brightness is dark.
+	if math.IsNaN(f) {
+		return Off
+	}
 	f = min(max(f, 0), 1)
 	return RGB{uint8(float64(c.R) * f), uint8(float64(c.G) * f), uint8(float64(c.B) * f)}
 }

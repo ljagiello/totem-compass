@@ -107,7 +107,7 @@ func TestRestoreRefusesImpossiblePositions(t *testing.T) {
 		st := store.State{Peers: []store.PeerState{{
 			MAC: [6]byte(totem), Name: "totem", Lat: bad.lat, Lon: bad.lon,
 		}}}
-		h.n.Restore(st, h.now)
+		h.n.Restore(&st, h.now)
 
 		// The position is refused outright, not stored and then worked
 		// around: a peer that kept it would still feed it to anything
@@ -139,7 +139,7 @@ func TestRestoreRefusesAColourOutsideThePalette(t *testing.T) {
 	st := store.State{Peers: []store.PeerState{{
 		MAC: [6]byte(totem), Name: "totem", ColorID: 120,
 	}}}
-	h.n.Restore(st, h.now)
+	h.n.Restore(&st, h.now)
 	got := h.n.peers[totem].color
 	if !got.InPalette() {
 		t.Errorf("restored colour %d, which is not in the palette", int(got))

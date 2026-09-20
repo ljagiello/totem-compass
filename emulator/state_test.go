@@ -44,7 +44,7 @@ func TestStateRoundTripsThroughANode(t *testing.T) {
 
 	// A fresh node given that state comes up the same.
 	fresh := newHarness(t, nil)
-	if errs := fresh.n.Restore(st, fresh.now); len(errs) != 0 {
+	if errs := fresh.n.Restore(&st, fresh.now); len(errs) != 0 {
 		t.Fatalf("restore: %v", errs)
 	}
 	if fresh.n.BondCount() != 1 {
@@ -119,7 +119,7 @@ func TestNamesOffTheAirCannotWedgeSaving(t *testing.T) {
 // to.
 func TestRestoreRefusesAPeerItDoesNotOwn(t *testing.T) {
 	h := newHarness(t, nil)
-	errs := h.n.Restore(store.State{Peers: []store.PeerState{
+	errs := h.n.Restore(&store.State{Peers: []store.PeerState{
 		{MAC: [6]byte(totem), Name: "mine"},
 		{MAC: [6]byte(stranger), Name: "someone else's"},
 	}}, h.now)

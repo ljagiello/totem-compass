@@ -103,7 +103,7 @@ func TestASavedPositionTimeIsChecked(t *testing.T) {
 	if err := h.n.SetClock(t0, h.now); err != nil {
 		t.Fatal(err)
 	}
-	h.n.Restore(store.State{Peers: []store.PeerState{{
+	h.n.Restore(&store.State{Peers: []store.PeerState{{
 		MAC: [6]byte(totem), Name: "totem", Lat: 37.775, Lon: -122.42,
 		LastSeenUnix: 1 << 62,
 	}}}, h.now)
@@ -129,7 +129,7 @@ func TestBrightnessComesBackWhereItWas(t *testing.T) {
 
 	st := h.n.State(1)
 	fresh := newHarness(t, nil)
-	fresh.n.Restore(st, fresh.now)
+	fresh.n.Restore(&st, fresh.now)
 
 	// Within half a step of the byte it was stored as, which is the best
 	// one byte can do. Truncating is a whole step out.
