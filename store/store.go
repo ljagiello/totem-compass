@@ -174,9 +174,18 @@ func (j *Journal) Save(p []byte) error {
 	// been written. Check rather than trust the scan: the sector may hold
 	// a previous firmware's data, or noise, in which case appending would
 	// write the AND of the two and lose both.
+	// Everything from here to the end of the sector has to be erased, not
+	// only the span this record will occupy. The scan stops at the first
+	// thing that is not a record and takes the last one it read as the
+	// newest, so anything valid-looking after the write position would
+	// come back as newer than what is about to be written — a save that
+	// silently does not stick. A previous firmware's layout, a torn write
+	// or plain noise can leave exactly that: an erased gap with records
+	// beyond it. In normal use the tail is already erased and this costs
+	// one read.
 	room := j.next+len(rec) <= j.sec.Size()
 	erased := false
-	if !room || !j.erased(j.next, len(rec)) {
+	if !room || !j.erased(j.next, j.sec.Size()-j.next) {
 		if err := j.sec.Erase(); err != nil {
 			return fmt.Errorf("store: erasing the sector: %w", err)
 		}

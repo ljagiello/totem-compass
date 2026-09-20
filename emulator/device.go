@@ -94,17 +94,7 @@ func (n *Node) PowerOn(now time.Time) {
 // after the sensors have been read.
 func (n *Node) device(now time.Time) {
 	n.pollInputs(now)
-	if mode, changed := n.power.update(n.sensors.Battery); changed {
-		n.log.Info("power mode", "mode", mode, "batt", n.sensors.Battery.Percent,
-			"volts", n.sensors.Battery.Volts)
-		switch mode {
-		case PowerOff:
-			n.log.Warn("voltages too low, powering down", "volts", n.sensors.Battery.Volts)
-			n.PowerOff(now)
-		case PowerLow:
-			n.leds.Play(AnimLowBattery, now)
-		}
-	}
+	n.applyPowerMode(now)
 	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
 		restful(w) && n.leds.Animation() == w && n.power.takeCharger() {
 		// On the charger: the ring runs the powerup animation again, which
@@ -135,6 +125,31 @@ func (n *Node) device(now time.Time) {
 			n.leds.Play(want, now)
 			n.leds.Tick(now)
 		}
+	}
+}
+
+// applyPowerMode moves the power mode for the current reading and acts on
+// it: the cutoff has to actually power the device down, and a battery
+// that has just gone low has to say so on the ring.
+//
+// Everywhere the reading changes goes through here. Calling update and
+// dropping what it reports leaves the mode moved and nothing done about
+// it — and because it only reports a change once, the next poll sees
+// nothing to do either. A node restored on a flat pack reported power
+// mode "off" while its radio windows kept running.
+func (n *Node) applyPowerMode(now time.Time) {
+	mode, changed := n.power.update(n.sensors.Battery)
+	if !changed {
+		return
+	}
+	n.log.Info("power mode", "mode", mode, "batt", n.sensors.Battery.Percent,
+		"volts", n.sensors.Battery.Volts)
+	switch mode {
+	case PowerOff:
+		n.log.Warn("voltages too low, powering down", "volts", n.sensors.Battery.Volts)
+		n.PowerOff(now)
+	case PowerLow:
+		n.leds.Play(AnimLowBattery, now)
 	}
 }
 

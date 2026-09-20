@@ -212,6 +212,11 @@ type Node struct {
 	// a Totem pairing next to a full device does not fill the log. Only a
 	// deletion clears it, because only a deletion can make room.
 	saidBondLimit bool
+	// saidRestoreLimit is the same for the other reason a full list gets
+	// reported: a Totem that still holds us and unicasts its status. Two
+	// latches, because one would let whichever fired first silence the
+	// other for the rest of the run.
+	saidRestoreLimit bool
 	// warnedClock is the peers already reported for broadcasting a clock
 	// from before 2020, so each is said once rather than every few
 	// seconds for as long as it is in range. Keyed by address rather than
@@ -845,7 +850,7 @@ func (n *Node) deletePeer(mac mesh.MAC) {
 	delete(n.peers, mac)
 	n.order = slices.DeleteFunc(n.order, func(m mesh.MAC) bool { return m == mac })
 	// There is room again, so the next time there is not is worth saying.
-	n.saidBondLimit = false
+	n.saidBondLimit, n.saidRestoreLimit = false, false
 }
 
 // ForgetPeers drops every bond without telling anyone, as a factory
@@ -930,10 +935,10 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 			// The same limit every other path applies. Past it the bond
 			// would be lost at the next boot anyway, because the saved
 			// list is read back through it.
-			if n.saidBondLimit {
+			if n.saidRestoreLimit {
 				return
 			}
-			n.saidBondLimit = true
+			n.saidRestoreLimit = true
 			n.log.Warn("bond not restored: already at the bond limit",
 				"mac", rx.Src, "bonds", len(n.peers), "max", maxBonds)
 			return
@@ -1026,10 +1031,11 @@ func locateExpiry(wall time.Time) int32 {
 		// value, and a large positive one is a frame every relay keeps
 		// alive for decades.
 		//
-		// 1, not 0: relay() reads a zero expiry as "no expiry set" and
-		// skips the age test altogether, so zero would make the frame
-		// immortal — the very thing being avoided. One second after the
-		// epoch is as expired as the field can say.
+		// 1, not 0. relay() here reads any expiry at or below zero as
+		// expired, so either would do for this node — but the frame goes
+		// to other firmwares too, and zero is the value a reader is most
+		// likely to treat as "no expiry set". One second after the epoch
+		// says the same thing and cannot be mistaken for absence.
 		return 1
 	}
 	return int32(sec) + mesh.LocateLifetimeSec
@@ -1423,14 +1429,24 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 // promises only the bonds — a caller that wants to drop bonds should not
 // have to know it also throws away the battery calibration.
 func (n *Node) FactoryReset(now time.Time) {
+	// The window first: a reset during one would otherwise leave the
+	// sibling still broadcasting bond requests, and the bond just dropped
+	// would be back inside the same six seconds — which is the thing the
+	// board's `store forget` exists to prevent.
+	n.stopPairing(now)
 	n.ForgetPeers(now)
-	n.power.ClearLearnedMaxVolts()
 	// A reading taken with the curve as it now stands, for the same
 	// reason Restore takes one: the percentage worked out with the
 	// forgotten stretch would otherwise stand until the next poll, and
 	// then jump.
 	n.read(now)
-	n.power.update(n.sensors.Battery)
+	n.applyPowerMode(now)
+	// Cleared last. Reading and updating both learn from the present
+	// voltage, so clearing first put the pack straight back — and the
+	// board snapshots the state on the next line, so the record meant to
+	// be empty carried a maximum, and a measured one at that, which a
+	// later restore could no longer correct.
+	n.power.ClearLearnedMaxVolts()
 }
 
 // AddBond puts back a bond the device already had, the way a Totem reads

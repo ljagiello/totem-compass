@@ -154,10 +154,11 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// percentage would still be the one worked out without it — which
 	// `status`, a status frame and the OTA gate would all use.
 	n.read(now)
-	// And the mode that follows from it: the percentage a restored curve
-	// gives can be a different power mode, and leaving that to the next
-	// poll means `power` and `status` report the old one in between.
-	n.power.update(n.sensors.Battery)
+	// And the mode that follows from it, acted on rather than only moved:
+	// the percentage a restored curve gives can be a different power
+	// mode, and a device coming up on a flat pack has to power down
+	// rather than report that it has.
+	n.applyPowerMode(now)
 	return errs
 }
 
