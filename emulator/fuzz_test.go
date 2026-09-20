@@ -1,6 +1,7 @@
 package emulator
 
 import (
+	"math"
 	"math/rand/v2"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/store"
 )
 
 var totem2 = mesh.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, 0x79}
@@ -316,6 +318,69 @@ func FuzzInput(f *testing.F) {
 			if r.taps < 0 || r.taps > 1000 {
 				t.Fatalf("%s counted %d taps", r.in, r.taps)
 			}
+		}
+	})
+}
+
+// FuzzRestore feeds the node a saved state built from arbitrary bytes.
+// This is the path off the flash: a sector holds whatever the last boot
+// wrote, or whatever a half-finished write, a different firmware or a bad
+// block left there, and Restore puts it straight into a live node —
+// bonds, coordinates, colors and a timestamp. The codec is fuzzed on its
+// own in the store package; what is fuzzed here is what the node does
+// with a state that decoded cleanly and still says something impossible.
+func FuzzRestore(f *testing.F) {
+	seed, _ := store.State{
+		Name: "emu_totem_abb0", ColorID: 6, Brightness: 128, SOSMuted: true, BootCount: 3,
+		Peers: []store.PeerState{{
+			MAC: [6]byte(totem), Name: "LCFs totem", ColorID: 4,
+			Lat: 37.5, Lon: -122, LastSeenUnix: t0.Unix(),
+		}},
+	}.MarshalBinary()
+	f.Add(seed, false)
+	f.Add([]byte{1}, true)
+	f.Add([]byte{}, false)
+	f.Fuzz(func(t *testing.T, b []byte, haveClock bool) {
+		var st store.State
+		if err := st.UnmarshalBinary(b); err != nil {
+			return
+		}
+		h := newHarness(t, nil)
+		if haveClock {
+			// With a clock the saved second is converted into the device's
+			// base, which is arithmetic on a number off the flash.
+			if err := h.n.SetClock(t0, h.now); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// A bond for a Totem this board does not own is refused, not
+		// dropped silently, so errors here are the expected answer.
+		h.n.Restore(st, h.now)
+		if got := h.n.BondCount(); got > maxBonds {
+			t.Fatalf("restored %d bonds, over the %d limit", got, maxBonds)
+		}
+		if got := h.n.LEDs().Brightness(); got < 0 || got > 1 {
+			t.Fatalf("restored a brightness of %v", got)
+		}
+		for _, p := range h.n.Peers() {
+			if math.IsNaN(p.DistanceM) || math.IsInf(p.DistanceM, 0) {
+				t.Fatalf("peer %s is %v away", p.MAC, p.DistanceM)
+			}
+		}
+		// The node has to keep running on it: a poll must not panic, must
+		// stay inside the owned scope, and must not leave the ring on a
+		// pixel that does not exist.
+		h.collect(h.n.Poll(h.now.Add(time.Minute)))
+		if got := len(h.n.LEDs().Ring()); got != RingPixels {
+			t.Fatalf("ring holds %d pixels", got)
+		}
+		if strings.Contains(h.n.LEDs().Describe(), "NaN") {
+			t.Fatalf("a restored position reached the ring: %s", h.n.LEDs().Describe())
+		}
+		// And what it saves next has to be storable again, or one bad
+		// sector would stop every save that followed.
+		if _, err := h.n.State(1).MarshalBinary(); err != nil {
+			t.Fatalf("a restored state could not be saved again: %v", err)
 		}
 	})
 }

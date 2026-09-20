@@ -362,6 +362,7 @@ Everything that reaches the emulator from outside is fuzzed, and the fuzz target
 | Frames arriving in the C receive ring | `cmd/totememu/ring.h` | `FuzzRing`, which compiles the same header for the host |
 | What a flash sector holds after a reset, a previous firmware or a wild write | `store.Open` | `FuzzScan` |
 | A saved settings record | `store.State` | `FuzzStateDecode` |
+| A settings record put back into a live node — bonds, coordinates, colours and a timestamp | `emulator.Node.Restore` | `FuzzRestore` |
 | What an update server answers, over plain HTTP | `emulator` OTA client | `FuzzOTAServer` |
 | Edges from a bouncing pin or a jittering touch reading | `emulator` input recogniser | `FuzzInput` |
 | Animations, dials and jumps in time | `emulator.LEDs` | `FuzzLEDs` |

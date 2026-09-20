@@ -92,6 +92,7 @@ jobs:
           - { package: ./emulator, target: FuzzOTAServer }
           - { package: ./emulator, target: FuzzLEDs }
           - { package: ./emulator, target: FuzzInput }
+          - { package: ./emulator, target: FuzzRestore }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
