@@ -356,3 +356,168 @@ func TestSetBatteryRestartsTheDrain(t *testing.T) {
 		t.Errorf("battery = %d%% an hour later, want about 73%% (80%% over a 12 h life)", got)
 	}
 }
+
+// TestSensorsCannotBeWrittenThrough: Sensors() looks like a read, and its
+// Fix was a pointer into the node's own reading — so a caller could put a
+// position on the air that usablePosition exists to keep out.
+func TestSensorsCannotBeWrittenThrough(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	got := h.n.Sensors()
+	if got.Fix == nil {
+		t.Fatal("no fix to test with")
+	}
+	got.Fix.Lat = float32(math.NaN())
+	if f := h.n.fix(); f == nil || math.IsNaN(float64(f.Lat)) {
+		t.Error("a caller wrote a position through Sensors()")
+	}
+}
+
+// TestAWalkThatStartsNowhere: StartSim is exported and took any course
+// it was handed, and the simulation folds a course modulo 360 — so -1
+// walked at 359, one degree west of north, which SetHeading refuses and
+// which this package writes elsewhere to mean "no value". It was the
+// door left open after the others were closed.
+func TestAWalkThatStartsNowhere(t *testing.T) {
+	at := func() *Position { return &Position{Lat: 52.2, Lon: 21.0, AccuracyM: 3} }
+	for _, bad := range []int16{-1, 360, 900, -32768} {
+		h := newHarness(t, func(c *Config) { c.Position = at() })
+		h.n.StartSim(Walk, bad, h.now)
+		h.advance(2 * time.Second)
+		// North, within the wander a walk puts on its own course.
+		if got := h.n.Sensors().Azimuth; !usableBearing(got) || (got > 45 && got < 315) {
+			t.Errorf("a walk started on a course of %d reports %d, and north was the default", bad, got)
+		}
+	}
+	// And a course that is a bearing is walked as given. A walk wanders
+	// around its course, so this is a band rather than a number.
+	h := newHarness(t, func(c *Config) { c.Position = at() })
+	h.n.StartSim(Walk, 90, h.now)
+	h.advance(2 * time.Second)
+	if got := h.n.Sensors().Azimuth; got < 45 || got > 135 {
+		t.Errorf("a walk started east reports %d", got)
+	}
+}
+
+// TestTheSimCrossesThePoleInsteadOfSittingOnIt: the fold reflected the
+// latitude and put the longitude on the far side, but left the course
+// alone — so the next step set off north again from just below the pole,
+// crossed it again, and the track alternated between two points forever.
+// A peer watching saw the longitude flip 180 degrees at the poll rate
+// and the heading alternate, while the odometer kept climbing.
+//
+// TestTheSimStaysOnTheGlobe passes either way: it only asks that the
+// values stay finite and in range, which two points at the pole are.
+func TestTheSimCrossesThePoleInsteadOfSittingOnIt(t *testing.T) {
+	s := NewSim(SimConfig{
+		Lat: 89.9, Lon: 0, Motion: Drive, Bearing: 0,
+	}, t0)
+
+	// Long enough to get there and well down the other side: 50 km/h for
+	// 100 minutes is about 83 km, and the pole is 11 km away.
+	now := t0
+	var lats, lons []float64
+	for range 200 {
+		now = now.Add(30 * time.Second)
+		s.Read(now)
+		lats = append(lats, s.lat)
+		lons = append(lons, s.lon)
+	}
+
+	// It must have got to the other side: a latitude that came back down
+	// well past the pole, rather than hovering just below it.
+	var lowest = math.Inf(1)
+	for _, l := range lats {
+		lowest = math.Min(lowest, l)
+	}
+	if lowest > 89.5 {
+		t.Errorf("driving north from 89.9 for 100 minutes never left the pole: lowest latitude %.5f", lowest)
+	}
+
+	// And it is still going the same way on the ground rather than
+	// oscillating: no two consecutive steps may reverse direction more
+	// than once, which is the crossing itself.
+	reversals := 0
+	for i := 2; i < len(lats); i++ {
+		a, b := lats[i-1]-lats[i-2], lats[i]-lats[i-1]
+		if a != 0 && b != 0 && (a > 0) != (b > 0) {
+			reversals++
+		}
+	}
+	if reversals > 1 {
+		t.Errorf("the track changed direction %d times; crossing the pole is one", reversals)
+	}
+
+	// And the longitude settles on the far side rather than flipping back
+	// and forth: one change, at the crossing.
+	flips := 0
+	for i := 1; i < len(lons); i++ {
+		if math.Abs(lons[i]-lons[i-1]) > 90 {
+			flips++
+		}
+	}
+	if flips > 1 {
+		t.Errorf("the longitude jumped to the far side %d times; crossing the pole is one", flips)
+	}
+}
+
+// TestAStaticSourceCopiesTheFixItWasGiven: every other ingress copies,
+// and says why — a caller must not be able to write through into the
+// readings. NewStatic is the exported constructor a board driver calls,
+// and it kept the caller's pointer.
+func TestAStaticSourceCopiesTheFixItWasGiven(t *testing.T) {
+	fix := &Fix{Lat: 37.7749, Lon: -122.4194, AccuracyM: 3}
+	src := NewStatic(Sensors{Fix: fix, Battery: Battery{Volts: 4.1, Percent: 90}})
+
+	// The caller keeps hold of it and writes something impossible.
+	fix.Lat = float32(math.NaN())
+
+	got := src.Read(t0)
+	if got.Fix == nil {
+		t.Fatal("the fix went away")
+	}
+	if math.IsNaN(float64(got.Fix.Lat)) {
+		t.Error("a caller wrote through NewStatic into the readings")
+	}
+}
+
+// TestSimStartsFromAPositionWeWouldUse: the simulation read the raw fix
+// rather than the one the node will actually use, so a garbled configured
+// position started a walk from a NaN — and every reading after it was NaN
+// too, while `sim` cheerfully reported a walk in progress.
+func TestSimStartsFromAPositionWeWouldUse(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Position = &Position{Lat: float32(math.NaN()), Lon: float32(math.NaN()), AccuracyM: 3}
+	})
+	h.n.StartSim(Walk, 90, h.now)
+	h.advance(10 * time.Second)
+	if f := h.n.fix(); f != nil && !usablePosition(f.Lat, f.Lon) {
+		t.Errorf("the simulation is walking from %v, %v", f.Lat, f.Lon)
+	}
+}
+
+// TestTheSimStaysOnTheGlobe: a long enough drive north ran the latitude
+// past the pole, and the longitude step divides by cos(lat), so the track
+// left the globe and the device silently stopped having a position at
+// all — the ring back to searching, with nothing in the log to say why.
+func TestTheSimStaysOnTheGlobe(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetPosition(&Position{Lat: 89.9, Lon: 0, AccuracyM: 3}, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.n.StartSim(Drive, 0, h.now)
+
+	// Long past the pole at 50 km/h.
+	for range 60 {
+		h.advance(time.Minute)
+		f := h.n.fix()
+		if f == nil {
+			t.Fatalf("the simulation lost its fix after driving north")
+		}
+		if math.IsNaN(float64(f.Lat)) || math.IsInf(float64(f.Lon), 0) {
+			t.Fatalf("the track reached %v, %v", f.Lat, f.Lon)
+		}
+		if f.Lat < -90 || f.Lat > 90 || f.Lon < -180 || f.Lon > 180 {
+			t.Fatalf("the track left the globe at %v, %v", f.Lat, f.Lon)
+		}
+	}
+}

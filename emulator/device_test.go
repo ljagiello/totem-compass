@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -1196,5 +1197,143 @@ func TestSimKeepsAFlatBattery(t *testing.T) {
 	h.n.StartSim(Walk, 90, h.now)
 	if got := h.n.Sensors().Battery.Percent; got != 0 {
 		t.Errorf("a simulation on a flat device reports %d%%", got)
+	}
+}
+
+// TestAPoweredDownDeviceSendsNothing: a device that has switched itself
+// off has no radio, and Receive already refuses to answer while it is
+// off. The console can still reach Pair and Unbond, though, and without
+// the other half of that guard the device broadcast bond requests every
+// 50-99 ms for six seconds while being deaf to the replies.
+func TestAPoweredDownDeviceSendsNothing(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	h.bond()
+	h.take()
+	h.n.PowerOff(h.now)
+
+	if got := h.n.Pair(h.now); len(got) != 0 {
+		t.Errorf("pairing a powered-down device sent %d frames", len(got))
+	}
+	if got := h.n.Unbond(h.now, totem); len(got) != 0 {
+		t.Errorf("unbonding on a powered-down device sent %d frames", len(got))
+	}
+	// And nothing leaks out of a later poll either.
+	h.advance(pairingWindow + 2*time.Second)
+	if got := h.take(); len(got) != 0 {
+		t.Errorf("a powered-down device sent %d frames: %v", len(got), got)
+	}
+
+	// Back on, it works again.
+	h.n.PowerOn(h.now)
+	h.advance(bootDebounce)
+	if got := h.n.Pair(h.now); len(got) == 0 {
+		t.Error("pairing sent nothing once the device was back on")
+	}
+}
+
+// TestAPoweredDownDeviceDoesNoWork: dropping the bytes in sendRaw is not
+// the same as not doing the work. A pairing window opened on a device
+// that is off still armed its timers and built a full status frame every
+// 50-99 ms for six seconds, for the radio to throw away.
+func TestAPoweredDownDeviceDoesNoWork(t *testing.T) {
+	var logged bytes.Buffer
+	h := newHarness(t, func(c *Config) {
+		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+	})
+	h.advance(bootDebounce)
+	h.bond()
+	h.take()
+	h.n.PowerOff(h.now)
+
+	h.collect(h.n.Pair(h.now))
+	if h.n.Pairing() {
+		t.Error("a powered-down device opened a pairing window")
+	}
+	if got := h.n.Next(); !got.IsZero() {
+		t.Errorf("a powered-down device armed a timer for %v", got)
+	}
+	if !strings.Contains(logged.String(), "cannot pair") {
+		t.Errorf("nothing was said about why: %s", logged.String())
+	}
+
+	// And an unbond leaves nothing queued to go out when it comes back.
+	logged.Reset()
+	h.collect(h.n.Unbond(h.now, totem))
+	if len(h.n.outbox) != 0 {
+		t.Errorf("a powered-down device queued %d frames for later", len(h.n.outbox))
+	}
+	if !strings.Contains(logged.String(), "cannot delete a peer") {
+		t.Errorf("nothing was said about why: %s", logged.String())
+	}
+	h.n.PowerOn(h.now)
+	h.advance(10 * time.Second)
+	for _, s := range h.take() {
+		if p, ok := s.msg.(mesh.Peer); ok && p.Command == mesh.PeerUnbond {
+			t.Error("an unbond from while the device was off went out on power-up")
+		}
+	}
+}
+
+// TestPoweringDownDropsWhatWasQueued: refusing to queue an unbond while
+// the device is off is only half of it. One queued a moment *before* the
+// power went sat in the outbox and went out on the next power-up,
+// telling a peer about something from the far side of a power cycle it
+// never saw.
+func TestPoweringDownDropsWhatWasQueued(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootDebounce)
+	h.bond()
+	h.take()
+
+	h.collect(h.n.Unbond(h.now, totem))
+	if len(h.n.outbox) == 0 {
+		t.Fatal("the unbond notice was not queued in the first place")
+	}
+	h.n.PowerOff(h.now)
+	if len(h.n.outbox) != 0 {
+		t.Errorf("powering down left %d frames queued", len(h.n.outbox))
+	}
+
+	h.n.PowerOn(h.now)
+	h.advance(10 * time.Second)
+	for _, s := range h.take() {
+		if p, ok := s.msg.(mesh.Peer); ok && p.Command == mesh.PeerUnbond {
+			t.Error("a notice queued before the power cycle went out after it")
+		}
+	}
+}
+
+// TestAPoweredDownDeviceAsksForNothing: a device that has switched itself
+// off has no timers and nothing to draw, so Next has nothing to offer. A
+// driver waits on Next and polls immediately when it is in the past — so
+// a deadline that never moves is a busy loop at full power on a device
+// that is supposed to be off.
+//
+// An update refused for being powered down used to leave exactly that:
+// the refusal flashes the ring, which is a Play, and device() does not
+// tick a strip that is off, so nothing ever cleared it.
+func TestAPoweredDownDeviceAsksForNothing(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	h.n.PowerOff(h.now)
+	if got := h.n.Next(); !got.IsZero() {
+		t.Fatalf("a powered-down device wants waking at %v", got)
+	}
+
+	// The refusal that flashes the ring must not change that.
+	if err := h.n.Update(h.now); err == nil {
+		t.Fatal("an update on a powered-down device was allowed")
+	}
+	if got := h.n.Next(); !got.IsZero() {
+		t.Errorf("a refused update left a deadline of %v on a device that is off", got)
+	}
+	// And it stays that way however many times it is polled.
+	for range 5 {
+		h.collect(h.n.Poll(h.now))
+		h.now = h.now.Add(5 * time.Millisecond)
+		if got := h.n.Next(); !got.IsZero() {
+			t.Fatalf("polling a powered-down device produced a deadline of %v", got)
+		}
 	}
 }

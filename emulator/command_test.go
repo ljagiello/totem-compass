@@ -1,6 +1,8 @@
 package emulator
 
 import (
+	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -253,5 +255,113 @@ func TestParseRXRejects(t *testing.T) {
 	long := fmt.Sprintf("rx %s all -70 %x", totem, make([]byte, mesh.MaxFrame+1))
 	if _, err := ParseCommand(long); err == nil {
 		t.Error("a frame over the ESP-NOW limit parsed")
+	}
+}
+
+// TestRXTakesPastedHex: a frame is pasted out of a log or a chat window
+// as often as it is typed, so it arrives with colons or a non-breaking
+// space in it. The CLI learned to take those; the console's own rx did
+// not, so the same paste half-worked in one command.
+func TestRXTakesPastedHex(t *testing.T) {
+	plain, err := ParseCommand("rx 8c94df7b0478 all -40 a774020011223344")
+	if err != nil {
+		t.Fatalf("plain hex: %v", err)
+	}
+	for _, in := range []string{
+		"rx 8c:94:df:7b:04:78 all -40 a7:74:02:00:11:22:33:44",
+		"rx 8c94df7b0478 all -40 a77402 0011223344",
+	} {
+		c, err := ParseCommand(in)
+		if err != nil {
+			t.Errorf("%q: %v", in, err)
+			continue
+		}
+		if !bytes.Equal(c.RX.Data, plain.RX.Data) {
+			t.Errorf("%q gave % x, want % x", in, c.RX.Data, plain.RX.Data)
+		}
+	}
+}
+
+// TestApplyRefusesAnEmptyRXCommand: Command and Apply are both exported,
+// and String() already answers "rx" for one with no frame. On the board
+// a nil dereference is a boot loop rather than a refused command.
+func TestApplyRefusesAnEmptyRXCommand(t *testing.T) {
+	h := newHarness(t, nil)
+	_, handled, err := h.n.Apply(Command{Op: OpRX}, h.now)
+	if !handled {
+		t.Error("an rx command with no frame was not handled at all")
+	}
+	if err == nil {
+		t.Error("an rx command with no frame was accepted")
+	}
+}
+
+// TestTheConsoleTakesTheLongestFrameItAccepts: the rx command bounds
+// what it injects by mesh.MaxFrame, and the line limit was sized for a
+// 108-byte peer frame — so the largest frames the validator accepts were
+// refused first, as a line too long, by a limit whose own comment
+// described something shorter.
+//
+// Fed through a LineReader, because that is where the limit lives:
+// ParseCommand has no length check of its own, so asking it whether a
+// long line is "too long" can only ever answer no. Both spellings of
+// the hex, since parseRX cleans separators out and the separated form
+// is half as long again.
+func TestTheConsoleTakesTheLongestFrameItAccepts(t *testing.T) {
+	frame := make([]byte, mesh.MaxFrame)
+	for i := range frame {
+		frame[i] = 0xab
+	}
+	bare := hex.EncodeToString(frame)
+	var sep strings.Builder
+	for i, b := range frame {
+		if i > 0 {
+			sep.WriteByte(':')
+		}
+		fmt.Fprintf(&sep, "%02x", b)
+	}
+
+	for _, tt := range []struct{ how, hex string }{
+		{"typed", bare},
+		{"pasted", sep.String()},
+	} {
+		line := "rx 8c:94:df:7b:04:78 all -25 " + tt.hex
+		// The console reads it as a line at all.
+		var r LineReader
+		var got string
+		var err error
+		for i := 0; i < len(line) && err == nil && got == ""; i++ {
+			got, err = r.Feed(line[i])
+		}
+		if err == nil {
+			got, err = r.Feed('\n')
+		}
+		if err != nil {
+			t.Errorf("%s, %d characters: the console refused the line: %v", tt.how, len(line), err)
+			continue
+		}
+		if got != line {
+			t.Errorf("%s: the console read back %d of %d characters", tt.how, len(got), len(line))
+			continue
+		}
+		// And what it read is a frame rx will take.
+		c, err := ParseCommand(got)
+		if err != nil {
+			t.Errorf("%s: %v", tt.how, err)
+			continue
+		}
+		if c.RX == nil || len(c.RX.Data) != mesh.MaxFrame {
+			t.Errorf("%s: the line parsed to %#v, not a %d-byte frame", tt.how, c.RX, mesh.MaxFrame)
+		}
+	}
+}
+
+// TestPosZeroZeroIsRefused: fix() reads 0,0 as no fix, so SetPosition has
+// to refuse it rather than store something every reader ignores — the
+// device reporting a position it does not have.
+func TestPosZeroZeroIsRefused(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetPosition(&Position{Lat: 0, Lon: 0, AccuracyM: 5}, h.now); err == nil {
+		t.Error("SetPosition accepted Null Island, which fix() reads as no fix")
 	}
 }

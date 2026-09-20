@@ -1,6 +1,7 @@
 package store
 
-// Regressions for the thirty-first review round.
+// The settings record itself: what a name may hold, and how it
+// survives a round trip through flash.
 
 import (
 	"strings"

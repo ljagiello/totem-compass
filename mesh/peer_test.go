@@ -1,7 +1,7 @@
 package mesh
 
-// A regression for what CI's FuzzParse caught in the round before this
-// one, kept in mesh because it is a property of this package's codec.
+// Category 0 frames: what gen_peer_msg builds, and what comes back
+// off the air.
 
 import (
 	"bytes"

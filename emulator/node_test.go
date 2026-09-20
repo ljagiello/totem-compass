@@ -3,6 +3,7 @@ package emulator
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"math"
 	"math/rand/v2"
@@ -709,6 +710,796 @@ func TestImpossiblePositionsAreIgnored(t *testing.T) {
 		h.advance(bootAnim + time.Second)
 		if desc := h.n.LEDs().Describe(); strings.Contains(desc, "NaN") {
 			t.Errorf("%s reached the ring: %s", bad.name, desc)
+		}
+	}
+}
+
+// TestConfigCannotWidenTheOwnedScope: Config() looks like a read, and the
+// owned list is the one invariant this package promises to keep. Handing
+// out the same backing array let a caller add a Totem its owner never
+// listed.
+func TestConfigCannotWidenTheOwnedScope(t *testing.T) {
+	h := newHarness(t, nil)
+	cfg := h.n.Config()
+	if len(cfg.Owned) == 0 {
+		t.Fatal("no owned Totems to test with")
+	}
+	cfg.Owned[0] = stranger
+	if slices.Contains(h.n.Config().Owned, stranger) {
+		t.Error("a caller widened the owned scope through Config()")
+	}
+	if err := h.n.AddBond(stranger, "nope", h.now); err == nil {
+		t.Error("the node bonded with a Totem outside its owned scope")
+	}
+}
+
+func manyOwned() []mesh.MAC {
+	out := make([]mesh.MAC, 0, maxBonds)
+	for i := range maxBonds {
+		out = append(out, mesh.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, byte(0x80 + i)})
+	}
+	return out
+}
+
+// TestNewTakesItsOwnCopies: Config() and Sensors() hand out copies, but
+// the way in was the same hole — a caller that kept the slice or the
+// pointer it passed to New could widen the owned scope, or write a
+// position, afterwards.
+func TestNewTakesItsOwnCopies(t *testing.T) {
+	owned := []mesh.MAC{totem}
+	pos := &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3}
+	h := newHarness(t, func(c *Config) { c.Owned, c.Position = owned, pos })
+
+	owned[0] = stranger
+	if got := h.n.Config().Owned; got[0] == stranger {
+		t.Error("a caller widened the owned scope after New")
+	}
+	if err := h.n.AddBond(stranger, "nope", h.now); err == nil {
+		t.Error("the node bonded with a Totem outside its owned scope")
+	}
+
+	// A poll, so the node takes a fresh reading: without one the fix it
+	// answers with is a copy staticSensors made during New, and the
+	// caller's write could not have reached it either way.
+	pos.Lat = float32(math.NaN())
+	h.collect(h.n.Poll(h.now))
+	if f := h.n.fix(); f == nil || math.IsNaN(float64(f.Lat)) {
+		t.Error("a caller wrote a position through the Config it passed to New")
+	}
+	if got := h.n.Config().Position; got == nil || math.IsNaN(float64(got.Lat)) {
+		t.Error("the node's own configured position was written from outside")
+	}
+}
+
+// TestEveryReadingIsActedOn: the mode is not an opinion about the
+// battery, it is the battery — so it follows every reading, from the one
+// place that takes them. Five of the ten callers of read() paired it
+// with applyPowerMode and five did not, so `batt 2` on the console
+// reported power mode normal until something else polled, and a
+// simulation swapped in on a flat pack went on running.
+func TestEveryReadingIsActedOn(t *testing.T) {
+	t.Run("a console battery", func(t *testing.T) {
+		h := newHarness(t, nil)
+		h.advance(bootAnim + time.Second)
+		if err := h.n.SetBattery(2, false, h.now); err != nil {
+			t.Fatal(err)
+		}
+		if got := h.n.Power().Mode(); got == PowerNormal {
+			t.Error("a pack at 2 percent still reads as mode normal")
+		}
+	})
+
+	t.Run("a simulation swapped in", func(t *testing.T) {
+		h := newHarness(t, nil)
+		h.advance(bootAnim + time.Second)
+		h.n.SetSensors(NewStatic(Sensors{Battery: Battery{Volts: 3.1, Percent: 40}}), h.now)
+		if !h.n.Power().Off() {
+			t.Error("a source reporting a pack under the cutoff left the device running")
+		}
+	})
+
+	t.Run("a clock", func(t *testing.T) {
+		pack := &collapsingPack{b: Battery{Volts: 4.0, Percent: 90}}
+		h := newHarness(t, func(c *Config) { c.Sensors = pack })
+		h.advance(bootAnim + time.Second)
+		pack.b = Battery{Volts: 3.1, Percent: 40}
+		if err := h.n.SetClock(t0, h.now); err != nil {
+			t.Fatal(err)
+		}
+		if !h.n.Power().Off() {
+			t.Error("the reading taken with the clock was not acted on")
+		}
+	})
+}
+
+// TestABatteryWarningIsSaidOnce: read() runs on every pass of a loop
+// that polls every 5 ms, and the check moved into it says its piece
+// there. A driver stuck out of range filled the only diagnostic channel
+// the board has with two hundred copies a second of the same line,
+// drowning everything else and burning serial time in the loop that has
+// to keep feeding the watchdog.
+func TestABatteryWarningIsSaidOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  func(*Config)
+		want string
+	}{
+		{"a voltage no frame can carry", func(c *Config) { c.BattVolts = 131072 }, "battery voltage"},
+		{"a percentage that is not one", func(c *Config) { c.BattPct = 120 }, "battery percentage"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logged bytes.Buffer
+			h := newHarness(t, func(c *Config) {
+				tc.cfg(c)
+				c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+			})
+			// A second of the board's own polling.
+			for range 200 {
+				h.now = h.now.Add(5 * time.Millisecond)
+				h.collect(h.n.Poll(h.now))
+			}
+			if got := strings.Count(logged.String(), tc.want); got != 1 {
+				t.Errorf("the warning was said %d times in a second of polling", got)
+			}
+		})
+	}
+}
+
+// TestARealReadingIsNotZeroed: the check in read() is about what a peer
+// frame can carry, not about what a cell is likely to read. A board
+// whose divider reads a little high is still telling the truth, and a
+// real Totem on a charger reads 4.48 — zeroing either would be this
+// device lying about its own battery over a tenth of a volt.
+func TestARealReadingIsNotZeroed(t *testing.T) {
+	for _, v := range []float32{3.1, 4.2, 4.48, 4.62, 5.0} {
+		h := newHarness(t, func(c *Config) { c.BattVolts = v })
+		if got := h.n.Sensors().Battery.Volts; got != v {
+			t.Errorf("a reading of %v V came back as %v", v, got)
+		}
+	}
+	// And what the frame cannot hold is refused, whatever it claims.
+	for _, v := range []float32{131072, 1e6, float32(math.NaN()), float32(math.Inf(1))} {
+		h := newHarness(t, func(c *Config) { c.BattVolts = v })
+		if got := h.n.Sensors().Battery.Volts; got != 0 {
+			t.Errorf("a reading of %v was kept as %v", v, got)
+		}
+	}
+}
+
+// TestSetBatterySaysNo: a caller that asked for something impossible
+// should be told, which is the rule SetPosition already states. Left to
+// read(), the percentage was quietly zeroed and the caller went on
+// believing the device was at 120%.
+func TestSetBatterySaysNo(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	for _, pct := range []int8{-50, 101, 120} {
+		if err := h.n.SetBattery(pct, false, h.now); err == nil {
+			t.Errorf("SetBattery(%d) was accepted", pct)
+		}
+	}
+	if err := h.n.SetBattery(55, false, h.now); err != nil {
+		t.Errorf("SetBattery(55): %v", err)
+	}
+	if got := h.n.Sensors().Battery.Percent; got != 55 {
+		t.Errorf("the battery reads %d%% after being set to 55", got)
+	}
+}
+
+// TestFixIsWhatTheAirSees: a driver may report a position this node
+// refuses, and a caller showing one should show the same one every frame
+// carries. The board's console writes JSON, which cannot hold a NaN at
+// all, so a receiver reporting one turned the whole self line into an
+// error string.
+func TestFixIsWhatTheAirSees(t *testing.T) {
+	nan := float32(math.NaN())
+	for _, tc := range []struct {
+		name     string
+		lat, lon float32
+		want     bool
+	}{
+		{"a real position", 37.7749, -122.4194, true},
+		{"null island", 0, 0, false},
+		{"not a number", nan, nan, false},
+		{"off the globe", 400, 900, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t, func(c *Config) {
+				c.Sensors = NewStatic(Sensors{
+					Fix:     &Fix{Lat: tc.lat, Lon: tc.lon, AccuracyM: 3},
+					Battery: Battery{Volts: 4.1, Percent: 90},
+				})
+			})
+			if got := h.n.Fix() != nil; got != tc.want {
+				t.Errorf("Fix() reports a position: %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAHeadingThatIsNotABearing: SetHeading refuses its own argument,
+// but that is one door of several — a config, a driver or a simulation
+// all reach the reading, and an azimuth of 900 went into every status
+// frame through any of them.
+func TestAHeadingThatIsNotABearing(t *testing.T) {
+	// The exported setter says no.
+	h := newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	for _, deg := range []int16{-1, 360, 900, -30} {
+		if err := h.n.SetHeading(deg, h.now); err == nil {
+			t.Errorf("SetHeading(%d) was accepted", deg)
+		}
+	}
+	if err := h.n.SetHeading(187, h.now); err != nil {
+		t.Errorf("SetHeading(187): %v", err)
+	}
+
+	// And a reading that arrives another way is not sent either.
+	h = newHarness(t, func(c *Config) { c.Heading = 900 })
+	if got := h.n.Sensors().Azimuth; got < 0 || got > 359 {
+		t.Errorf("a configured heading of 900 came back as %d", got)
+	}
+	if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got < 0 || got > 359 {
+		t.Errorf("a status frame carried an azimuth of %d", got)
+	}
+}
+
+// TestUptimeHasBothEnds: the field is a uint16 of minutes. A board up
+// 45 days wrapped to zero and told every peer it had just started; a
+// clock that runs backwards made it negative, and uint16 of that is 45
+// days of uptime rather than none.
+func TestUptimeHasBothEnds(t *testing.T) {
+	h := newHarness(t, nil)
+	for _, d := range []time.Duration{
+		0, time.Minute, 24 * time.Hour,
+		46 * 24 * time.Hour, // past what the field holds
+		400 * 24 * time.Hour,
+	} {
+		got := h.n.status(t0.Add(d), mesh.PeerStatus, false).UptimeMin
+		want := uint16(min(d/time.Minute, math.MaxUint16))
+		if got != want {
+			t.Errorf("after %v the frame says %d minutes, want %d", d, got, want)
+		}
+	}
+	// And a stamp before the node was built says none, not 45 days.
+	if got := h.n.status(t0.Add(-time.Hour), mesh.PeerStatus, false).UptimeMin; got != 0 {
+		t.Errorf("a clock that ran backwards gave an uptime of %d minutes", got)
+	}
+}
+
+// TestConfigReportsWhereTheDeviceIsNow: cfg.Position is what the node
+// was built or last told, and the sources hand out a fresh reading every
+// time. A walking simulation moved and Config() went on answering with
+// where it set off from.
+func TestConfigReportsWhereTheDeviceIsNow(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetPosition(&Position{Lat: 52.2, Lon: 21.0, AccuracyM: 3}, h.now); err != nil {
+		t.Fatal(err)
+	}
+	start := h.n.Config().Position
+	if start == nil || start.Lat != 52.2 {
+		t.Fatalf("the position did not take: %+v", start)
+	}
+
+	h.n.SetSensors(NewSim(SimConfig{
+		Lat: 52.2, Lon: 21.0, Motion: Walk, Bearing: 90, Percent: -1,
+	}, h.now), h.now)
+	h.advance(10 * time.Minute)
+
+	got := h.n.Config().Position
+	if got == nil {
+		t.Fatal("a walking device reports no position")
+	}
+	if got.Lon == start.Lon {
+		t.Errorf("after ten minutes of walking east the position is still %v", got.Lon)
+	}
+}
+
+// TestSetBatteryAndHeadingReportTheirRefusals: the setters say no rather
+// than recording something else, which is the rule SetPosition states.
+func TestSetBatteryAndHeadingReportTheirRefusals(t *testing.T) {
+	h := newHarness(t, nil)
+	h.advance(bootAnim + time.Second)
+	if err := h.n.SetBattery(120, false, h.now); err == nil {
+		t.Error("SetBattery(120) was accepted")
+	}
+	if err := h.n.SetHeading(900, h.now); err == nil {
+		t.Error("SetHeading(900) was accepted")
+	}
+	// Nothing is asserted about the reading here. Both setters return
+	// before anything touches the sensors, so a check on them — or on
+	// the frame, which status() builds from the same sensors — cannot
+	// fail whatever the setters do. What matters is that a value that
+	// gets past a setter does not reach the air, and that is
+	// TestAHeadingThatIsNotABearing, which drives one in through a door
+	// with no check on it at all.
+	if err := h.n.SetPosition(&Position{Lat: 91, Lon: 0}, h.now); err == nil {
+		t.Error("SetPosition(91) was accepted")
+	}
+}
+
+// TestASentinelIsNotABearing: the compass field has no value meaning
+// "unknown", and -1 is what this package writes when it means that —
+// HeadingOfMotion, SpeedKPH and PosAccuracyM all use it. Folding an
+// out-of-range reading modulo 360 turned that -1 into 359, one degree
+// west of north, and put it on the air as a direction every peer's
+// compass would point in. SetHeading refuses -1 outright, so the two
+// doors disagreed about the same value.
+func TestASentinelIsNotABearing(t *testing.T) {
+	pack := Battery{Volts: 4.1, Percent: 90}
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Azimuth: 187, Battery: pack})
+	})
+	h.advance(time.Second)
+	if got := h.n.Sensors().Azimuth; got != 187 {
+		t.Fatalf("the compass reads %d before anything went wrong", got)
+	}
+
+	for _, bad := range []int16{-1, -30, 360, 900, -32768} {
+		h.n.SetSensors(NewStatic(Sensors{Azimuth: bad, Battery: pack}), h.now)
+		if got := h.n.Sensors().Azimuth; got != 187 {
+			t.Errorf("a reading of %d became %d; the last bearing the compass saw was 187", bad, got)
+		}
+		// And it is not on the air either.
+		if f := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; f != 187 {
+			t.Errorf("a reading of %d reached the air as %d", bad, f)
+		}
+	}
+
+	// A real bearing still takes.
+	h.n.SetSensors(NewStatic(Sensors{Azimuth: 42, Battery: pack}), h.now)
+	if got := h.n.Sensors().Azimuth; got != 42 {
+		t.Errorf("a bearing of 42 came back as %d", got)
+	}
+}
+
+// TestAnOrientationTheFrameHasAMeaningFor: New settles this for what it
+// is given, and a source set later never passes through New — so a
+// driver that leaves the field alone told every peer "unknown", and
+// Config() handed the same out through the front door.
+func TestAnOrientationTheFrameHasAMeaningFor(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Battery: Battery{Volts: 4.1, Percent: 90}})
+	})
+	// Vertical, not merely "not unknown": three values mean anything in
+	// this field and the frame carries whatever it is handed, so a test
+	// that accepts everything else would pass on a 9.
+	if got := h.n.Sensors().Orientation; got != mesh.OrientationVertical {
+		t.Errorf("a source that said nothing about orientation reads as %v", got)
+	}
+	if got := h.n.Config().Orientation; got != mesh.OrientationVertical {
+		t.Errorf("Config reports an orientation of %v", got)
+	}
+	if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got != mesh.OrientationVertical {
+		t.Errorf("a status frame carried an orientation of %v", got)
+	}
+
+	// And a value the frame has no meaning for does not reach it.
+	for _, bad := range []mesh.Orientation{9, 127, -1} {
+		h.n.SetSensors(NewStatic(Sensors{
+			Orientation: bad, Battery: Battery{Volts: 4.1, Percent: 90},
+		}), h.now)
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Orientation; got != mesh.OrientationVertical {
+			t.Errorf("an orientation of %v reached the air as %v", bad, got)
+		}
+	}
+}
+
+// TestABoardThatHasNeverHadABearing: the fallback for a reading that is
+// not a bearing has to start somewhere, and a zero nobody chose is due
+// north — the answer the last two rounds here were about not giving. It
+// starts from the configured heading, which New has already made into a
+// bearing, so a board built with an impossible one reports the default
+// rather than something derived from the impossible value.
+func TestABoardThatHasNeverHadABearing(t *testing.T) {
+	for _, bad := range []int16{-1, 360, 900, -32768} {
+		h := newHarness(t, func(c *Config) { c.Heading = bad })
+		if got := h.n.Config().Heading; got != 0 {
+			t.Errorf("a configured heading of %d came back as %d, want the default", bad, got)
+		}
+		if got := h.n.Sensors().Azimuth; got != 0 {
+			t.Errorf("a configured heading of %d reads as %d", bad, got)
+		}
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got != 0 {
+			t.Errorf("a configured heading of %d reached the air as %d", bad, got)
+		}
+
+		// And the case the seeded fallback is for: a driver that reports
+		// no bearing at all, on a node whose configured one was refused.
+		// What goes out is the default, not something derived from the
+		// value that was turned away.
+		h.n.SetSensors(NewStatic(Sensors{
+			Azimuth: -1, Battery: Battery{Volts: 4.1, Percent: 90},
+		}), h.now)
+		if got := h.n.status(h.now, mesh.PeerStatus, false).Azimuth; got != 0 {
+			t.Errorf("a driver reporting no bearing put %d on the air", got)
+		}
+	}
+	// A heading that is a bearing is kept as given, north included.
+	for _, good := range []int16{0, 1, 187, 359} {
+		h := newHarness(t, func(c *Config) { c.Heading = good })
+		if got := h.n.Config().Heading; got != good {
+			t.Errorf("a configured heading of %d came back as %d", good, got)
+		}
+	}
+}
+
+// TestAnOdometerHasBothEnds: the field on the air is an int16 and the
+// reading is an int32, so a negative odometer past -32768 wrapped into a
+// large positive distance — a device reporting -100000 told its peers it
+// had traveled 31 km. The uptime beside it was given both ends; this
+// had only the top.
+func TestAnOdometerHasBothEnds(t *testing.T) {
+	for _, m := range []int32{0, 1, 32767, 100000, -1, -100000, math.MinInt32, math.MaxInt32} {
+		h := newHarness(t, func(c *Config) {
+			c.Sensors = NewStatic(Sensors{
+				Fix:     &Fix{Lat: 37.7749, Lon: -122.4194, AccuracyM: 3, OdometerM: m},
+				Battery: Battery{Volts: 4.1, Percent: 90},
+			})
+		})
+		got := h.n.status(h.now, mesh.PeerStatus, false).OdometerM
+		if got < 0 {
+			t.Errorf("an odometer of %d went out as %d", m, got)
+		}
+		if m >= 0 && m <= math.MaxInt16 && int32(got) != m {
+			t.Errorf("an odometer of %d went out as %d", m, got)
+		}
+	}
+}
+
+// TestAVoltageTheFrameCannotCarry: the field is a half float and the
+// encoder is a port with no range check of its own, so a finite voltage
+// past its limit runs off the exponent into the sign bit. The emulator
+// guards its own readings; mesh is an exported package, and its encoder
+// refused an over-long name while taking any voltage at all.
+//
+// The first version of this check also refused NaN, the infinities and
+// every negative — which CI caught, because those are patterns the half
+// holds and decodeHalf hands back, so a frame we could read became one
+// we could not write. Both halves of that are pinned below.
+func TestAVoltageTheFrameCannotCarry(t *testing.T) {
+	// Finite and past the half's largest: silently becomes something else.
+	for _, v := range []float32{100000, 131072, 1e6, -100000} {
+		p := mesh.Peer{Command: mesh.PeerStatus, Name: "x", BattVolts: v,
+			TimeOfDayMs: -1, Unix: -1}
+		if _, err := p.MarshalBinary(); err == nil {
+			t.Errorf("a battery of %v V was encoded", v)
+		}
+	}
+	// Every voltage a cell reads, and every other pattern the half holds:
+	// a frame carrying one of these must re-encode.
+	for _, v := range []float32{
+		0, 3.1, 4.1, 4.48, 4.6, 65504, -5,
+		float32(math.NaN()), float32(math.Inf(1)), float32(math.Inf(-1)),
+	} {
+		p := mesh.Peer{Command: mesh.PeerStatus, Name: "x", BattVolts: v,
+			TimeOfDayMs: -1, Unix: -1}
+		if _, err := p.MarshalBinary(); err != nil {
+			t.Errorf("a battery of %v V was refused: %v", v, err)
+		}
+	}
+}
+
+// TestUsablePositionIsOneRule: every path that takes a position from
+// outside asks the same two things — that something was reported, and
+// that it is somewhere a device could be. The pair was written out four
+// times, and the fourth was added because the third had been missed.
+func TestUsablePositionIsOneRule(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		lat, lon float32
+		want     bool
+	}{
+		{"a real place", 37.775, -122.42, true},
+		{"null island is no fix", 0, 0, false},
+		{"a latitude with a zero longitude", 37.775, 0, true},
+		{"past the pole", 91, 0, false},
+		{"past the meridian", 0, 181, false},
+	} {
+		if got := usablePosition(tc.lat, tc.lon); got != tc.want {
+			t.Errorf("%s: usablePosition(%v, %v) = %v, want %v", tc.name, tc.lat, tc.lon, got, tc.want)
+		}
+	}
+	// And a frame carrying one of the refused pairs leaves the peer
+	// without coordinates, whichever path it came in on.
+	h := newHarness(t, func(c *Config) { c.Position = &Position{Lat: 37.775, Lon: -122.42, AccuracyM: 3} })
+	h.bond()
+	f := statusFrame(t0)
+	f.Lat, f.Lon = 0, 0
+	h.rx(totem, self, -40, f)
+	if p := h.n.peers[totem]; p.hasCoords {
+		t.Errorf("a frame reporting no fix gave the peer a position of %v, %v", p.lat, p.lon)
+	}
+}
+
+// TestOurOwnFixIsCheckedToo: four ingress paths got the "could a device
+// be there" guard and the fifth — this device's own receiver — did not,
+// which is the one position it puts on the air. A NaN reached the
+// compass, where converting a bearing to an int16 is implementation
+// defined, so it pointed confidently north; it reached the distance to
+// every peer; and it went out in every status frame.
+func TestOurOwnFixIsCheckedToo(t *testing.T) {
+	for _, bad := range []struct {
+		name     string
+		lat, lon float32
+	}{
+		{"nan", float32(math.NaN()), float32(math.NaN())},
+		{"infinite", float32(math.Inf(1)), -122.42},
+		{"past the pole", 900, -122.42},
+	} {
+		h := newHarness(t, func(c *Config) {
+			c.Position = &Position{Lat: bad.lat, Lon: bad.lon, AccuracyM: 3}
+		})
+		h.bond()
+		h.rx(totem, self, -40, statusFrame(t0))
+		h.advance(bootAnim + time.Second)
+
+		if h.n.fix() != nil {
+			t.Errorf("%s: the node believes it is somewhere", bad.name)
+		}
+		if deg := h.n.LEDs().dial; deg >= 0 {
+			t.Errorf("%s: the compass points at %d", bad.name, deg)
+		}
+		for _, p := range h.n.Peers() {
+			if math.IsNaN(p.DistanceM) || math.IsInf(p.DistanceM, 0) {
+				t.Errorf("%s: a peer is %v away", bad.name, p.DistanceM)
+			}
+		}
+		// And nothing impossible goes out on the air.
+		for _, s := range h.take() {
+			// usablePosition, which is the rule fix() applies: Null Island
+			// is the firmware's own way of saying it has no fix, so a
+			// frame carrying it is a frame carrying no position. The
+			// earlier spelling paired livePosition with a zero check that
+			// could never change the answer.
+			if m, ok := s.msg.(mesh.Peer); ok && !usablePosition(m.Lat, m.Lon) && (m.Lat != 0 || m.Lon != 0) {
+				t.Errorf("%s: broadcast a position of %v, %v", bad.name, m.Lat, m.Lon)
+			}
+		}
+	}
+
+	// And the exported setter refuses one outright, rather than storing
+	// something every reader then has to ignore.
+	h := newHarness(t, nil)
+	if err := h.n.SetPosition(&Position{Lat: 999, Lon: -999}, h.now); err == nil {
+		t.Error("SetPosition accepted a place no device could be")
+	}
+}
+
+// TestAConfiguredColourIsChecked: the board reads the crystal colour off
+// a flash sector and hands it straight to New, so a corrupt id arrives
+// before Restore ever runs — and Restore "keeping the default" would keep
+// the corrupt one. An unlit crystal for good, from one bad byte, written
+// back to flash on the next save.
+func TestAConfiguredColourIsChecked(t *testing.T) {
+	var logged bytes.Buffer
+	h := newHarness(t, func(c *Config) {
+		c.ColorID = 120
+		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+	})
+	if got := h.n.LEDs().DefaultColor(); !got.InPalette() {
+		t.Errorf("the crystal took colour %d from the configuration", int(got))
+	}
+	if got := h.n.Config().ColorID; Color(got).InPalette() == false {
+		t.Errorf("the configuration kept colour %d", got)
+	}
+	if !strings.Contains(logged.String(), "thirteen") {
+		t.Errorf("nothing was said about it: %s", logged.String())
+	}
+	// And it is not written back to flash.
+	if got := h.n.State(1).ColorID; got == 120 {
+		t.Error("the bad colour was saved")
+	}
+}
+
+// TestABatteryReadingKeepsTheBoardsShape: NoPowerChip describes the
+// board, not the reading. Rebuilding the battery struct without it
+// silently re-armed the OTA gate on a board that has nothing to gate.
+func TestABatteryReadingKeepsTheBoardsShape(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.NoPowerChip, c.BattVolts, c.BattPct = true, 0, 0 })
+	h.collect(h.n.Poll(h.now))
+	if err := h.n.Update(h.now); errors.Is(err, ErrBatteryLow) {
+		t.Fatal("a board with no power chip was gated before any reading")
+	}
+	// A reading arrives — the console batt command, or a driver.
+	if err := h.n.SetBattery(20, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.collect(h.n.Poll(h.now))
+	if !h.n.Sensors().Battery.NoPowerChip {
+		t.Error("a battery reading erased the fact that the board has no power chip")
+	}
+
+	// And a source of its own does not get to decide either.
+	h = newHarness(t, func(c *Config) {
+		c.NoPowerChip = true
+		c.Sensors = NewStatic(Sensors{Battery: Battery{Volts: 3.6, Percent: 20}})
+	})
+	h.collect(h.n.Poll(h.now))
+	if !h.n.Sensors().Battery.NoPowerChip {
+		t.Error("a sensor source of its own overrode the board's own shape")
+	}
+}
+
+// TestOnlyTheBoardSaysItHasNoPowerChip: the flag describes the board, so
+// the configuration decides it both ways. Forcing it on but never off let
+// a sensor source claim there was no battery monitor and turn the OTA
+// gate off on a device with a flat cell — the opposite of the guarantee.
+func TestOnlyTheBoardSaysItHasNoPowerChip(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		// No flag: this board has a power chip.
+		c.Sensors = NewStatic(Sensors{Battery: Battery{
+			Volts: 3.4, Percent: 2, Low: true, NoPowerChip: true,
+		}})
+	})
+	h.collect(h.n.Poll(h.now))
+	if h.n.Sensors().Battery.NoPowerChip {
+		t.Error("a sensor source talked the node out of its power chip")
+	}
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("an update on a flat cell was refused with %v, want %v", err, ErrBatteryLow)
+	}
+}
+
+// TestNullIslandIsNoFix: 0,0 is how the firmware says it has no solution.
+// Treated as a place, it stops the search animation, points the compass
+// on a bearing measured from the Gulf of Guinea, and puts distances of
+// thousands of kilometers into the mesh timing.
+func TestNullIslandIsNoFix(t *testing.T) {
+	h := newHarness(t, nil)
+	h.bond()
+	h.rx(totem, self, -40, statusFrame(t0))
+	// Past New and SetPosition, both of which refuse this themselves: a
+	// receiver driver reports through the sensor source, so that is where
+	// a fix of 0,0 actually arrives.
+	h.n.SetSensors(NewStatic(Sensors{
+		Fix:         &Fix{Lat: 0, Lon: 0, AccuracyM: 3},
+		Orientation: mesh.OrientationVertical,
+	}), h.now)
+	h.advance(bootAnim + time.Second)
+
+	if h.n.fix() != nil {
+		t.Error("the node believes Null Island is a place")
+	}
+	if got := h.n.LEDs().Animation(); got != AnimGNSSSearch {
+		t.Errorf("the ring shows %s, want the search for a fix", got)
+	}
+	if deg := h.n.LEDs().dial; deg >= 0 {
+		t.Errorf("the compass points at %d", deg)
+	}
+	for _, p := range h.n.Peers() {
+		if p.DistanceM > 1_000_000 {
+			t.Errorf("a peer is %.0f m away, measured from Null Island", p.DistanceM)
+		}
+	}
+}
+
+// TestAClockNeedsAPlace: a receiver whose position the node refuses has
+// not earned its clock either — that clock is advertised to every peer
+// and re-slots every radio window.
+func TestAClockNeedsAPlace(t *testing.T) {
+	h := newHarness(t, nil)
+	h.n.SetSensors(NewStatic(Sensors{
+		Fix: &Fix{
+			Lat: float32(math.NaN()), Lon: float32(math.NaN()),
+			AccuracyM: 3, Time: t0,
+		},
+		Orientation: mesh.OrientationVertical,
+	}), h.now)
+	h.advance(time.Second)
+	if h.n.gnssClock {
+		t.Error("took a GNSS clock from a receiver that cannot say where it is")
+	}
+}
+
+// TestAConfiguredPositionIsChecked: New validates the name and the
+// colour; a position no device could be at was stored anyway, and then
+// silently ignored by every reader — a device searching for a fix for
+// ever with nothing in the log to say why.
+func TestAConfiguredPositionIsChecked(t *testing.T) {
+	var logged bytes.Buffer
+	h := newHarness(t, func(c *Config) {
+		c.Position = &Position{Lat: 999, Lon: -999}
+		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+	})
+	if h.n.fix() != nil {
+		t.Error("the node kept a position no device could be at")
+	}
+	if !bytes.Contains(logged.Bytes(), []byte("configured position")) {
+		t.Errorf("nothing was said about it: %s", logged.String())
+	}
+}
+
+// TestSetColorIsCheckedLikeTheRest: New, Restore and the Smart Group all
+// check a colour id; SetColor is reachable from a driver or an embedding
+// caller and was the one that did not. State writes it to flash.
+func TestSetColorIsCheckedLikeTheRest(t *testing.T) {
+	h := newHarness(t, func(c *Config) { c.ColorID = int8(ColorTeal) })
+	h.n.SetColor(Color(120), h.now)
+	if got := h.n.LEDs().DefaultColor(); !got.InPalette() {
+		t.Errorf("the crystal took colour %d", int(got))
+	}
+	if got := h.n.LEDs().DefaultColor(); got != ColorTeal {
+		t.Errorf("the crystal is %s, want the colour it had", got)
+	}
+	if got := h.n.State(1).ColorID; got == 120 {
+		t.Error("the bad colour was saved to flash")
+	}
+}
+
+// TestTheClockWarningReachesTheConsole: the warning explains why a Totem
+// never picks up a clock, and totemctl decodes "src" as a MAC — so a line
+// putting a name there failed to parse and was dropped whole, which is
+// the one place it had to arrive.
+func TestTheClockWarningReachesTheConsole(t *testing.T) {
+	var logged bytes.Buffer
+	h := newHarness(t, func(c *Config) {
+		c.Logger = slog.New(slog.NewTextHandler(&logged, nil))
+	})
+	h.bond()
+	h.advance(rtcSyncDelay + time.Second)
+
+	old := statusFrame(t0)
+	old.Unix, old.TimeOfDayMs = 1, 1
+	h.rx(totem, self, -40, old)
+
+	var line string
+	for _, l := range strings.Split(logged.String(), "\n") {
+		if strings.Contains(l, "ignoring a peer's clock") {
+			line = l
+			break
+		}
+	}
+	if line == "" {
+		t.Fatalf("the warning was not logged at all: %s", logged.String())
+	}
+	// totemctl decodes src as a MAC, so a line carrying anything else
+	// there does not parse and never reaches the person watching. The
+	// name has a key of its own.
+	if strings.Contains(line, "src=") {
+		t.Errorf("the warning uses src, which totemctl reads as a MAC: %s", line)
+	}
+	if !strings.Contains(line, "name=Lukasz") {
+		t.Errorf("the warning does not name the peer: %s", line)
+	}
+	if !strings.Contains(line, "mac=") {
+		t.Errorf("the warning does not say which peer: %s", line)
+	}
+}
+
+// TestAClockThePeerFrameCannotCarry: the Unix field in a peer frame is an
+// int32, as it is in the firmware. Fuzzing set a clock in 2055 and the
+// node advertised 1919 — the cast wrapped — which is exactly the value a
+// peer with no clock of its own would have taken as real.
+func TestAClockThePeerFrameCannotCarry(t *testing.T) {
+	h := newHarness(t, nil)
+	h.bond()
+
+	// Past what the frame can hold: refused, like one from before 2020.
+	tooLate := maxClock.Add(time.Hour)
+	if err := h.n.SetClock(tooLate, h.now); err == nil {
+		t.Errorf("accepted a clock of %s, which a peer frame cannot carry", tooLate)
+	}
+	if h.n.gnssClock {
+		t.Error("a clock the frame cannot carry was taken anyway")
+	}
+
+	// One just inside the ceiling is fine, and what goes out is never a
+	// second from the wrong side of the epoch — not even once the device
+	// has been up long enough to cross it.
+	ok := maxClock.Add(-time.Hour)
+	if err := h.n.SetClock(ok, h.now); err != nil {
+		t.Fatalf("a clock an hour inside the ceiling was refused: %v", err)
+	}
+	h.take()
+	h.advance(2 * time.Hour)
+	for _, s := range h.take() {
+		m, isPeer := s.msg.(mesh.Peer)
+		if !isPeer || (m.Unix == -1 && m.TimeOfDayMs == -1) {
+			continue
+		}
+		if got := time.Unix(int64(m.Unix), 0); got.Before(minClock) {
+			t.Errorf("advertised %s, which is before %s", got, minClock)
 		}
 	}
 }
