@@ -91,6 +91,7 @@ jobs:
           - { package: ./store, target: FuzzStateDecode }
           - { package: ./emulator, target: FuzzOTAServer }
           - { package: ./emulator, target: FuzzLEDs }
+          - { package: ./emulator, target: FuzzInput }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

@@ -275,3 +275,39 @@ func FuzzLEDs(f *testing.F) {
 		}
 	})
 }
+
+// FuzzInput drives an input with arbitrary edges. A real pin bounces,
+// a capacitive reading jitters, and the console can ask for anything, so
+// the recogniser has to hold up under any order of press, release and
+// poll — including edges from the past, which a clock that steps back
+// produces.
+func FuzzInput(f *testing.F) {
+	f.Add([]byte{0, 1, 2}, int64(50))
+	f.Add([]byte{0, 0, 0, 1, 1, 2, 2}, int64(1))
+	f.Add([]byte{2}, int64(-5))
+	f.Fuzz(func(t *testing.T, steps []byte, stepMs int64) {
+		h := newHarness(t, nil)
+		now := h.now.Add(bootDebounce)
+		for _, s := range steps {
+			in := Input(s % 3)
+			switch s % 3 {
+			case 0:
+				h.n.Press(in, now)
+			case 1:
+				h.n.Release(in, now)
+			default:
+				h.n.pollInputs(now)
+			}
+			now = now.Add(time.Duration(stepMs) * time.Millisecond)
+		}
+		// However it was driven, the node still works: the next poll must
+		// not panic, and what it sends must stay inside the owned scope.
+		h.collect(h.n.Poll(now.Add(time.Minute)))
+		for i := range h.n.inputs {
+			r := &h.n.inputs[i]
+			if r.taps < 0 || r.taps > 1000 {
+				t.Fatalf("%s counted %d taps", r.in, r.taps)
+			}
+		}
+	})
+}

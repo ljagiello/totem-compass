@@ -357,6 +357,8 @@ Everything that reaches the emulator from outside is fuzzed, and the fuzz target
 | What a flash sector holds after a reset, a previous firmware or a wild write | `store.Open` | `FuzzScan` |
 | A saved settings record | `store.State` | `FuzzStateDecode` |
 | What an update server answers, over plain HTTP | `emulator` OTA client | `FuzzOTAServer` |
+| Edges from a bouncing pin or a jittering touch reading | `emulator` input recogniser | `FuzzInput` |
+| Animations, dials and jumps in time | `emulator.LEDs` | `FuzzLEDs` |
 
 ## Scope
 
