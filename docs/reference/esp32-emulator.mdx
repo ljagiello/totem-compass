@@ -212,7 +212,15 @@ each to a callback:
 
 The recogniser takes edges, not gestures, so the same code serves a real
 pin, a capacitive reading and the console. v5.0.3's 30 ms edge lockout is
-there, and so is the wait before touch is enabled after a boot.
+there, and so is the wait before touch is enabled after a boot. A hold
+fires when it matures, not when the finger lands, so a three-second hold
+of the crystal opens its pairing window 1.2 s in and keeps it open for
+the full six seconds.
+
+A device that has been powered down answers one gesture — the power
+button held, which turns it back on — and its strip stays dark: on a
+board whose LED follows the crystal, switching it off switches the light
+off.
 
 ```bash
 totemctl mesh send touch crystal hold 1500   # pair, as a finger would
