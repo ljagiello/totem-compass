@@ -82,7 +82,7 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 		// different firmware's layout can leave saying anything at all —
 		// and NaN != 0, so the zero check alone lets it through, into the
 		// distance, the compass dial and the relay decision.
-		if (p.Lat != 0 || p.Lon != 0) && livePosition(p.Lat, p.Lon) {
+		if usablePosition(p.Lat, p.Lon) {
 			peer.hasCoords, peer.lat, peer.lon = true, p.Lat, p.Lon
 			// The saved second is a wall time and coordsAt is in the
 			// device's base, so it can only be put back once this node has
@@ -109,10 +109,18 @@ func (n *Node) Restore(st store.State, now time.Time) []error {
 	// A muted alarm stays muted: someone silenced it, and a power cut is
 	// not them changing their mind.
 	n.sosMuted = st.SOSMuted
-	// The colour is applied whatever it is: 0 is red, which is also the
-	// default, so there is nothing to tell apart.
-	n.cfg.ColorID = st.ColorID
-	n.leds.SetDefaultColor(Color(st.ColorID))
+	// The crystal's own colour comes off the same sector as the peers',
+	// so it gets the same check: an id outside the thirteen renders as an
+	// unlit pixel, and State would write it straight back, so a single
+	// bad byte would leave the crystal dark for good. 0 is red, which is
+	// also the default, so there is nothing to tell apart there.
+	if c := Color(st.ColorID); c.InPalette() {
+		n.cfg.ColorID = st.ColorID
+		n.leds.SetDefaultColor(c)
+	} else {
+		n.log.Warn("saved crystal colour is not one of the thirteen, keeping the default",
+			"id", st.ColorID)
+	}
 	return errs
 }
 

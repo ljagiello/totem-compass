@@ -100,22 +100,21 @@ func (n *Node) device(now time.Time) {
 			n.leds.Play(AnimLowBattery, now)
 		}
 	}
-	if n.power.pluggedIn(n.sensors.Battery, now) {
+	if w := n.wantedAnimation(); n.power.charging(n.sensors.Battery, now) &&
+		restful(w) && n.leds.Animation() == w && n.power.takeCharger() {
 		// On the charger: the ring runs the powerup animation again, which
 		// is what power_conn_new does once v_in has settled. It is a timed
 		// animation, so it goes on only over a strip that is resting —
 		// plugging in is the obvious thing to do during a download or an
 		// alarm, and neither should lose the ring for two seconds because
 		// of it.
-		if w := n.wantedAnimation(); restful(w) && n.leds.Animation() == w {
-			n.leds.Play(AnimBoot, now)
-		}
+		n.leds.Play(AnimBoot, now)
 		n.log.Info("charger connected", "volts", n.sensors.Battery.Volts,
 			"batt", n.sensors.Battery.Percent)
 	}
 	// The clock has to be settled before the device may sleep through a
 	// window, as "Block sleep for GNSS RTC Sync" does.
-	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.State() == OTADownloading)
+	n.power.HoldSleep(!n.clockSet || n.pairing || n.ota.Running())
 	n.power.sleep(now, n.Next())
 	if !n.power.Off() {
 		// A device that is off has no compass and no frames to draw.

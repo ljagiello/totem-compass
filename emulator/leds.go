@@ -84,7 +84,7 @@ func (c Color) InPalette() bool { return c >= 0 && int(c) < len(palette) }
 
 // RGB is the colour's pixel value.
 func (c Color) RGB() RGB {
-	if c < 0 || int(c) >= len(palette) {
+	if !c.InPalette() {
 		return Off
 	}
 	return palette[c].rgb
@@ -92,7 +92,7 @@ func (c Color) RGB() RGB {
 
 // String is the firmware's name for the colour.
 func (c Color) String() string {
-	if c < 0 || int(c) >= len(palette) {
+	if !c.InPalette() {
 		return fmt.Sprintf("color(%d)", int(c))
 	}
 	return palette[c].name
@@ -102,9 +102,18 @@ func (c Color) String() string {
 func (c Color) LogValue() slog.Value { return slog.StringValue(c.String()) }
 
 // ParseColor reads a palette name.
+//
+// The loop indexes the array rather than ranging over its values. Written
+// as `for i, p := range palette { if p.name == s }` this never matched on
+// the board: TinyGo 0.42 on xtensa compares the string field of a
+// range-copied struct wrongly, and every colour was refused with an error
+// that listed the name it had just failed to match. Printing the bytes on
+// both sides showed 726564 == 726564 and the comparison still false. The
+// host build has always been fine, so no test here can catch it — only
+// the board can, which is why this note is here.
 func ParseColor(s string) (Color, error) {
-	for i, p := range palette {
-		if p.name == s {
+	for i := range palette {
+		if palette[i].name == s {
 			return Color(i), nil
 		}
 	}
@@ -338,24 +347,39 @@ func (l *LEDs) Animation() Animation { return l.anim }
 
 // SetDefaultColor changes the crystal's resting colour, as the app does
 // ("Change default crystal color: {}").
-func (l *LEDs) SetDefaultColor(c Color) { l.defaultColor = c }
+func (l *LEDs) SetDefaultColor(c Color) {
+	if c != l.defaultColor {
+		l.redraw()
+	}
+	l.defaultColor = c
+}
 
 // DefaultColor is the crystal's resting colour.
 func (l *LEDs) DefaultColor() Color { return l.defaultColor }
+
+// redraw says the picture has changed, so a frame is due even if the
+// strip had gone quiet. Everything that changes what a resting strip
+// looks like has to call it: a resting strip is paced by next and woken
+// by nothing, so without this the change waits for whatever happens to
+// tick next, or for ever.
+func (l *LEDs) redraw() { l.next, l.resting = l.start, false }
 
 // SetDial points the compass at a bearing in degrees, in a peer's colour.
 // A negative bearing points at nothing.
 func (l *LEDs) SetDial(deg int16, c Color) {
 	if deg != l.dial || c != l.dialColor {
-		// The picture changed, so a frame is due even if the strip had
-		// gone quiet.
-		l.next, l.resting = l.start, false
+		l.redraw()
 	}
 	l.dial, l.dialColor = deg, c
 }
 
 // SetProgress sets the OTA download's share, 0 to 1.
-func (l *LEDs) SetProgress(f float64) { l.progress = min(max(f, 0), 1) }
+func (l *LEDs) SetProgress(f float64) {
+	if p := min(max(f, 0), 1); p != l.progress {
+		l.progress = p
+		l.redraw()
+	}
+}
 
 // ToggleBrightness is the power button's single tap: dim, then full
 // again ("Revert to full brightness").
@@ -365,6 +389,7 @@ func (l *LEDs) ToggleBrightness() float64 {
 	if l.dimmed {
 		l.brightness = dimBrightness
 	}
+	l.redraw()
 	return l.brightness
 }
 
@@ -374,13 +399,21 @@ func (l *LEDs) Brightness() float64 { return l.brightness }
 // SetBrightness puts the scale back to a level the device was left at,
 // which is what a saved setting restores after a reboot.
 func (l *LEDs) SetBrightness(f float64) {
-	l.brightness = min(max(f, 0), 1)
+	if b := min(max(f, 0), 1); b != l.brightness {
+		l.brightness = b
+		l.redraw()
+	}
 	l.dimmed = l.brightness < fullBrightness
 }
 
 // Next is when Tick next has a frame to draw.
 func (l *LEDs) Next() time.Time {
-	if l.resting {
+	// A powered-down strip draws nothing, whatever was last played on it:
+	// a refusal that flashes the ring is still a Play, and device() does
+	// not tick while the device is off, so nothing would ever clear it.
+	// A driver that waits for this would sit on a deadline that never
+	// moves, which is a busy loop on a device that is supposed to be off.
+	if l.off || l.resting {
 		return time.Time{}
 	}
 	return l.next
@@ -562,9 +595,10 @@ func describeRGB(c RGB) string {
 	if c == Off {
 		return "off"
 	}
-	for _, p := range palette {
-		if p.rgb == c {
-			return p.name
+	// Indexed, for the reason in ParseColor.
+	for i := range palette {
+		if palette[i].rgb == c {
+			return palette[i].name
 		}
 	}
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)

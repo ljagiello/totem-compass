@@ -224,14 +224,18 @@ func (p *Power) update(b Battery, now time.Time) (PowerMode, bool) {
 // and the console harness runs it when the next radio window comes round.
 const chargeDebounce = 300 * time.Millisecond
 
-// pluggedIn reports the single poll on which the charger has been there
-// long enough to show the battery level. The firmware launches
-// powerup_animation from power_conn_new at that point, the same animation
-// it plays at boot, so the ring reads as a battery gauge either way.
+// charging reports whether the charger has been connected long enough to
+// show the battery level, and keeps the debounce running. The firmware
+// launches powerup_animation from power_conn_new at that point, the same
+// animation it plays at boot, so the ring reads as a battery gauge either
+// way.
 //
-// It has side effects, which is why it is not exported and not named like
-// a question: the report is a one-shot, and taking it consumes it.
-func (p *Power) pluggedIn(b Battery, now time.Time) bool {
+// It answers the same for as long as the charger stays in. What makes
+// the ring play only once is takeCharger, which the caller reaches only
+// if it is actually going to draw — so a connection that arrives while
+// something else owns the ring is not silently spent, and plays as soon
+// as the ring is free.
+func (p *Power) charging(b Battery, now time.Time) bool {
 	if !b.Charging {
 		p.chargeSince, p.chargeShown = time.Time{}, false
 		return false
@@ -243,12 +247,20 @@ func (p *Power) pluggedIn(b Battery, now time.Time) bool {
 		p.chargeShown = true
 		return false
 	}
-	if p.chargeSince.IsZero() {
+	// A clock that has stepped back would otherwise leave the debounce
+	// measuring a negative stretch, and the ring would never come on
+	// again for as long as the charger stayed in.
+	if p.chargeSince.IsZero() || now.Before(p.chargeSince) {
 		p.chargeSince = now
 	}
-	if p.chargeShown || now.Sub(p.chargeSince) < chargeDebounce {
-		return false
-	}
+	return !p.chargeShown && now.Sub(p.chargeSince) >= chargeDebounce
+}
+
+// takeCharger spends this connection's one showing of the ring. It is
+// separate from charging so that the decision to draw and the record of
+// having drawn cannot come apart: a caller that asks and then does not
+// draw would otherwise lose the animation for the whole connection.
+func (p *Power) takeCharger() bool {
 	p.chargeShown = true
 	return true
 }

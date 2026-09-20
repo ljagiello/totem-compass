@@ -3,8 +3,8 @@ package emulator
 // Regressions for the fifth review round.
 
 import (
+	"encoding/binary"
 	"math"
-	"strings"
 	"testing"
 	"time"
 
@@ -26,7 +26,7 @@ func TestAQuickTapDoesNotLatchTheButton(t *testing.T) {
 		h.now = h.now.Add(edgeLockout / 3)
 		h.n.Release(in, h.now)
 
-		if r := &h.n.inputs[in]; r.down {
+		if r := h.n.input(in); r.down {
 			t.Errorf("%s is still down after the release", in)
 		}
 		// Long enough for a hold and a long hold to mature, if the
@@ -109,14 +109,24 @@ func TestRestoreRefusesImpossiblePositions(t *testing.T) {
 		}}}
 		h.n.Restore(st, h.now)
 
-		for _, p := range h.n.Peers() {
-			if math.IsNaN(p.DistanceM) || math.IsInf(p.DistanceM, 0) {
-				t.Errorf("%s: the peer is %v away", bad.name, p.DistanceM)
+		// The position is refused outright, not stored and then worked
+		// around: a peer that kept it would still feed it to anything
+		// added later that reads lat/lon directly.
+		p := h.n.peers[totem]
+		if p == nil {
+			t.Fatalf("%s: the bond itself was refused", bad.name)
+		}
+		if p.hasCoords {
+			t.Errorf("%s: kept the position as %v, %v", bad.name, p.lat, p.lon)
+		}
+		for _, info := range h.n.Peers() {
+			if math.IsNaN(info.DistanceM) || math.IsInf(info.DistanceM, 0) {
+				t.Errorf("%s: the peer is %v away", bad.name, info.DistanceM)
 			}
 		}
 		h.advance(bootAnim + time.Second)
-		if desc := h.n.LEDs().Describe(); strings.Contains(desc, "NaN") {
-			t.Errorf("%s: reached the ring: %s", bad.name, desc)
+		if deg := h.n.LEDs().dial; deg >= 0 {
+			t.Errorf("%s: the compass points at %d", bad.name, deg)
 		}
 	}
 }
@@ -130,7 +140,15 @@ func TestRestoreRefusesAColourOutsideThePalette(t *testing.T) {
 		MAC: [6]byte(totem), Name: "totem", ColorID: 120,
 	}}}
 	h.n.Restore(st, h.now)
-	if c := h.n.peers[totem].color; !c.InPalette() {
-		t.Errorf("restored colour %d, which is not in the palette", int(c))
+	got := h.n.peers[totem].color
+	if !got.InPalette() {
+		t.Errorf("restored colour %d, which is not in the palette", int(got))
+	}
+	// Refused, not clamped: the peer keeps the colour AddBond drew for
+	// it. Clamping to zero would also be "in the palette", and would
+	// quietly turn every peer with a corrupt id red.
+	mac := h.n.Config().MAC
+	if want := BondColor(0, binary.BigEndian.Uint32(mac[2:6])); got != want {
+		t.Errorf("restored colour %s, want the one the bond drew, %s", got, want)
 	}
 }

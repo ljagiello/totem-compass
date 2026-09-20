@@ -267,9 +267,11 @@ between `_v` and the extension, download it with the progress ring
 running. A device that has switched itself off is refused first — there is
 no rebooting a device that has already stopped — and then the battery
 gate, as `Battery too low for OTA update` does. A board wired without a
-power chip says so, rather than being read as flat: a reading of 0 V and
-0% is also what a dead cell and a failed ADC report, and those two are
-exactly what the gate is for.
+power chip is exempt, but only if it was built with `NoPowerChip` — never
+because it happens to read zeroes. A reading of 0 V and 0% is also what a
+dead cell and a failed ADC report, and those two are exactly what the gate
+is for, so the flag is written the way round where forgetting it keeps the
+gate on.
 
 The emulator stops before writing a slot: it has one image, and losing it
 would take the board off the mesh. Everything up to that point is real,

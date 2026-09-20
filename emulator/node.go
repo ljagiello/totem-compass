@@ -64,11 +64,18 @@ type Config struct {
 	// Sensors reads the GNSS receiver, magnetometer, motion sensor and
 	// power chip. Without one the node reports the fixed Position, Heading
 	// and battery below, as a board with no sensors does.
-	Sensors     SensorSource
-	Position    *Position
-	Heading     int16 // compass azimuth, degrees
-	BattVolts   float32
-	BattPct     int8
+	Sensors   SensorSource
+	Position  *Position
+	Heading   int16 // compass azimuth, degrees
+	BattVolts float32
+	BattPct   int8
+	// NoPowerChip says the board has no battery monitor, so BattVolts and
+	// BattPct are the absence of a reading rather than a reading of zero.
+	// An update is not barred on such a board. Leaving it false is the
+	// safe answer: a board that does have a chip, and reads zero because
+	// the cell is flat or the ADC failed, is exactly what the gate is
+	// for.
+	NoPowerChip bool
 	Version     [3]uint8
 	ReleaseID   uint16
 	ColorID     int8
@@ -201,6 +208,13 @@ type Node struct {
 	// sosMuted is is_sos_mute: the alarm still goes out, the device just
 	// stops blinking about it.
 	sosMuted bool
+	// warnedClock is the peers already reported for broadcasting a clock
+	// from before 2020, so each is said once rather than every few
+	// seconds for as long as it is in range. Keyed by address rather than
+	// by the name in the frame: the name is bytes off the air and a peer
+	// that varied it would grow this without limit, while the addresses
+	// it can hold are the owned ones.
+	warnedClock map[mesh.MAC]bool
 }
 
 // New starts a node at time now.
@@ -241,17 +255,16 @@ func New(cfg Config, now time.Time) *Node {
 	n := &Node{
 		cfg: cfg, log: cfg.Logger, rng: cfg.Rand, boot: now,
 		peers: map[mesh.MAC]*peer{}, outbox: map[mesh.MAC][]byte{}, recent: map[uint16]time.Time{},
-		meshGrp: meshGroup(cfg.MAC),
+		warnedClock: map[mesh.MAC]bool{},
+		meshGrp:     meshGroup(cfg.MAC),
 	}
 	n.source = cfg.Sensors
 	if n.source == nil {
 		n.source = &staticSensors{s: Sensors{
 			Fix: cfg.Position, Orientation: cfg.Orientation, Azimuth: cfg.Heading,
-			// A board told nothing about its battery has no power chip:
-			// zeroes here are the absence of a reading, not a flat cell.
 			Battery: Battery{
 				Volts: cfg.BattVolts, Percent: cfg.BattPct,
-				Present: cfg.BattVolts > 0 || cfg.BattPct > 0,
+				NoPowerChip: cfg.NoPowerChip,
 			},
 		}}
 	}
@@ -460,7 +473,7 @@ func (n *Node) startAligned(now time.Time) {
 
 // adoptClock is the RTC block of Parser._peer: a Totem without a clock
 // takes the time from a peer whose clock came from GNSS.
-func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
+func (n *Node) adoptClock(now time.Time, src mesh.MAC, p mesh.Peer) {
 	if n.clockSet || n.gnssClock || p.TimeOfDayMs <= 0 || p.Unix <= 0 || now.Sub(n.boot) < rtcSyncDelay {
 		return
 	}
@@ -473,12 +486,17 @@ func (n *Node) adoptClock(now time.Time, p mesh.Peer) {
 		// node sent would carry an expiry 55 years in the past, which
 		// every peer with a real clock drops.
 		//
-		// At debug: a peer whose own RTC never started broadcasts status
-		// every one to four seconds, and warning on each one would fill
-		// the log for as long as it is in range. On the board the rotate
-		// that follows holds the watchdog blocker.
-		n.log.Debug("ignoring a peer's clock from before 2020",
-			"src", p.Name, "wall", wall.UTC().Format(time.RFC3339))
+		// Once per name: a peer whose own RTC never started broadcasts
+		// status every one to four seconds, and warning on each would
+		// fill the log for as long as it is in range — on the board the
+		// rotate that follows holds a watchdog blocker. But it is worth
+		// saying at all, because someone wondering why a Totem in the
+		// field never picks up a clock has nothing else to go on.
+		if !n.warnedClock[src] {
+			n.warnedClock[src] = true
+			n.log.Warn("ignoring a peer's clock from before 2020",
+				"mac", src, "src", p.Name, "wall", wall.UTC().Format(time.RFC3339))
+		}
 		return
 	}
 	n.clockOffset = wall.Sub(now)
@@ -783,7 +801,7 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 		return
 	}
 
-	n.adoptClock(now, m)
+	n.adoptClock(now, rx.Src, m)
 	p, ok := n.peers[rx.Src]
 	if !ok && m.Command == mesh.PeerStatus && rx.Dst == n.cfg.MAC {
 		// Status unicast to us means the sender kept us in its
@@ -804,7 +822,7 @@ func (n *Node) onPeer(now time.Time, rx Received, m mesh.Peer) {
 	}
 	p.heard, p.lastHeard, p.rssi, p.viaMesh, p.stale = true, now, rx.RSSI, false, false
 	p.status = m
-	if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
+	if usablePosition(m.Lat, m.Lon) {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	if bonded {
@@ -920,7 +938,7 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 	// Either half being set is a position: a Totem on the meridian or the
 	// equator sends one coordinate as a true zero. The status and reply
 	// paths already read it this way.
-	if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
+	if usablePosition(m.Lat, m.Lon) {
 		p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 	}
 	n.log.Info("locate", "origin", m.Origin, "via", rx.Src, "request", m.ReplyRequested, "hops", m.Hops, "uid", m.UID)
@@ -1030,6 +1048,21 @@ func (n *Node) meshTick(now time.Time) {
 			// Only the wait is shortened, and only then: the firmware
 			// takes its second off after it has compared the elapsed
 			// time against the whole delivery time, not before.
+			//
+			// The modulus really is on milliseconds, odd as that reads.
+			// compass.dis, in the stale-peer loop, is:
+			//
+			//	bc LOAD_FAST 12      # the delivery time, in ms
+			//	86 LOAD_CONST_SMALL_INT 6
+			//	f8 BINARY_OP 33 __mod__
+			//	80 LOAD_CONST_SMALL_INT 0
+			//	d9 BINARY_OP 2 __eq__
+			//	...  22:87:68 LOAD_CONST_SMALL_INT 1000
+			//	     e6 BINARY_OP 15 __isub__
+			//
+			// so 8200 ms is left alone and 8250 ms loses a second, which
+			// is arbitrary — but it is what the device does, and the
+			// point of this package is to behave like the device.
 			if delay.Milliseconds()%6 == 0 {
 				delay -= time.Second
 			}
@@ -1085,6 +1118,18 @@ func livePosition(lat, lon float32) bool {
 	return !math.IsNaN(float64(lat)) && !math.IsNaN(float64(lon)) &&
 		!math.IsInf(float64(lat), 0) && !math.IsInf(float64(lon), 0) &&
 		lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180
+}
+
+// usablePosition is what every path that takes a position from outside
+// has to ask: that something was reported at all, and that it is
+// somewhere a device could be. Null Island is how the firmware says "no
+// fix", so a pair of zeroes is an absence rather than a place.
+//
+// One helper rather than the same two-part test written out at each
+// ingress: it was written out four times, and the fourth was added
+// because the third had been missed.
+func usablePosition(lat, lon float32) bool {
+	return (lat != 0 || lon != 0) && livePosition(lat, lon)
 }
 
 func (n *Node) peerDistance(p *peer) float64 {
@@ -1182,7 +1227,7 @@ func (n *Node) onSmartGroup(now time.Time, rx Received, g mesh.SmartGroup) {
 				continue
 			}
 			p := n.addPeer(m.MAC)
-			if (m.Lat != 0 || m.Lon != 0) && livePosition(m.Lat, m.Lon) {
+			if usablePosition(m.Lat, m.Lon) {
 				p.hasCoords, p.lat, p.lon, p.coordsAt = true, m.Lat, m.Lon, now
 			}
 		}

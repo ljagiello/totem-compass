@@ -284,13 +284,12 @@ func (n *Node) HoldFor(in Input, d time.Duration, now time.Time) []Packet {
 	if r == nil {
 		return nil
 	}
-	// A release inside the edge lockout is noise, so a hold shorter than
-	// it would never end: the input would stay latched down and fire a
-	// hold of its own 800 ms later — on the power button, that powers the
-	// device off with the button still "held".
-	if d <= edgeLockout {
-		d = edgeLockout + time.Millisecond
-	}
+	// A hold shorter than the edge lockout is left exactly as asked: the
+	// release ends the press either way, and the press is then too short
+	// to be a gesture at all. Stretching it past the lockout — which this
+	// did, back when a release inside the lockout was dropped and left
+	// the input latched down — turned "hold for 10 ms" into a counted tap
+	// and, on the power button, a brightness toggle.
 	end := now.Add(d)
 	r.press(now)
 	// Walk the press forward, firing what each moment brings, rather than

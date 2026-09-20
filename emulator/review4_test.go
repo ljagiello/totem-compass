@@ -138,16 +138,21 @@ func TestUpdateWithNoPowerChip(t *testing.T) {
 		t.Errorf("a flat battery was refused with %v, want %v", err, ErrBatteryLow)
 	}
 
-	// A board with no power chip reports zeroes because nothing has told
-	// it otherwise, and says so — the gate reads that rather than
-	// guessing from the zeroes, which a failed reading also produces.
-	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 0, 0 })
+	// A board with no power chip is exempt, and only because it was
+	// configured to say so.
+	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct, c.NoPowerChip = 0, 0, true })
 	h.collect(h.n.Poll(h.now))
-	if b := h.n.Sensors().Battery; b.Present {
-		t.Fatalf("expected a board with no power chip, got %+v", b)
-	}
 	if err := h.n.Update(h.now); errors.Is(err, ErrBatteryLow) {
 		t.Error("a board with no power chip was refused for its battery")
+	}
+
+	// A board that reads zeroes and has not said it lacks a chip is a
+	// flat cell or a failed reading, which is what the gate is for. The
+	// zero value of the flag has to be the one that keeps the gate on.
+	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 0, 0 })
+	h.collect(h.n.Poll(h.now))
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("a board reading 0 V and 0%% was refused with %v, want %v", err, ErrBatteryLow)
 	}
 
 	// A device that has switched itself off is not one to reboot into a

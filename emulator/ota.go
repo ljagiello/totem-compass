@@ -299,7 +299,7 @@ func extFor(method string) string {
 // the firmware's own OTA holds off the watchdog and the radio.
 func (n *Node) Update(now time.Time) error {
 	o := n.ota
-	if o.state == OTADownloading || o.state == OTAChecking {
+	if o.Running() {
 		return errors.New("ota: an update is already running")
 	}
 	o.state, o.err, o.done, o.total = OTAChecking, nil, 0, 0
@@ -327,12 +327,12 @@ func (n *Node) Update(now time.Time) error {
 	// flat battery is how a device does not come back. 0% is the flattest
 	// reading there is, so it belongs inside the gate, and so does Low
 	// from a charger chip that reports no percentage at all. Only a board
-	// with no power chip is exempt, and it says so itself rather than
-	// being guessed at from a pair of zeroes — a failed reading and a
-	// dead cell produce those too, and they are the case the gate exists
-	// for.
+	// with no power chip is exempt, and only because it was configured to
+	// say so — never because it happens to report zeroes, which a failed
+	// reading and a dead cell also do, and those are the cases the gate
+	// exists for.
 	b := n.sensors.Battery
-	if b.Present && !b.Charging && (b.Low || b.Percent < otaMinPct) {
+	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		return fail(fmt.Errorf("%w: %d%%", ErrBatteryLow, b.Percent))
 	}
 	if n.cfg.OTATransport == nil {
