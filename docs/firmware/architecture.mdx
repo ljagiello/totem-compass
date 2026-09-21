@@ -18,7 +18,7 @@ the unused `imu_fusion.py` and `io_mgr.py` were removed). From the bottom up:
 │                 data_upload_v2 · svc_ble_transfer · ota_ble    │
 ├─────────────────────────────────────────────────────────────┤
 │  Sense & act    ubx_gnss · imu_fusion_auto · mag_wmm_data      │
-│                 leds · animations · apa106 · touch_button_v2    │
+│                 leds · animations · touch_button_v2             │
 │                 button · device_power · ds18x20                 │
 ├─────────────────────────────────────────────────────────────┤
 │  Platform lib   f_lib/ (wifi, requests, task_mgr, rtc, gzip,   │
@@ -41,10 +41,11 @@ Reusable infrastructure used by everything above it.
 | `requests.py` | HTTP client (used by OTA and cloud sync) |
 | `task_mgr.py`, `async_helpers.py`, `generators.py` | asyncio task orchestration |
 | `event_manager.py` (top-level) | pub/sub event bus (`evt_*` events) |
-| `rtc_mem.py`, `rtc_v2.py` | data retained across deep sleep in RTC memory |
+| `rtc_mem.py` | the RTC-memory allocator — frames retained in `machine.RTC().memory()` across a reset |
+| `rtc_v2.py` | *not* RTC storage: `class RTCv2(machine.RTC)` adding calendar/timestamp maths |
 | `file_mgr.py`, `gzip.py`, `tarfile.py`, `unpack.py` | file + archive handling for `.tgz` OTA packages |
 | `firmware_ota.py`, `firmware_rollback.py`, `firmware_helpers.py` | OTA slot write + rollback |
-| `neopixel_v2.py` | addressable-LED driver |
+| `neopixel_v2.py` | the addressable-LED driver — `leds.py` imports `NeoPixel` from here |
 | `bitwise.py`, `helpers.py`, `logger.py` | utilities and structured logging |
 
 ### `f_ble/` — Bluetooth LE
@@ -74,7 +75,9 @@ Reusable infrastructure used by everything above it.
     `imu_fusion_auto.py`, `mag_wmm_data.py`, `task_mag_declination.py`
   </Tab>
   <Tab title="LEDs">
-    `leds.py`, `animations.py`, `neopixel.py`, `apa106.py`, `f_lib/neopixel_v2.py`
+    `leds.py`, `animations.py`, `f_lib/neopixel_v2.py`.
+    (`neopixel.py` and `apa106.py` are also frozen but are
+    [dead code](/reference/modules) — nothing imports them.)
   </Tab>
   <Tab title="Input & sensors">
     `button.py`, `touch_button_v2.py`, `peripherals.py`, `ds18x20.py`, `onewire.py`,
@@ -95,7 +98,10 @@ Reusable infrastructure used by everything above it.
   </Tab>
 </Tabs>
 
-The full list with one-line descriptions is on the [module reference](/reference/modules).
+The full list with one-line descriptions is on the [module reference](/reference/modules),
+which also rates each module **DECODED / PARTIAL / NAME-ONLY** so you can tell which of
+the roles above were read out of the bytecode and which are still guesses. Of the 68 Totem
+application modules, 28 are decoded, 27 are partial, and 13 have never been read.
 
 ## Concurrency model
 

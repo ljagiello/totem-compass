@@ -10,8 +10,30 @@ v5.0.2 keep working, and the new BLE features are opt-in.
 
 The comparison reconstructs every frozen module from both images, disassembles them with
 MicroPython's own `mpy-tool.py`, and diffs them function by function (see
-[methodology](/reference/methodology#diffing-firmware-versions)). **74 modules are identical,
-20 changed, 2 were removed.**
+[methodology](/reference/methodology#diffing-firmware-versions)). **73 modules are identical,
+21 changed, 2 were removed.**
+
+<Note>
+  **The 73/21 split is CONFIRMED** by two independent comparisons of the 94 modules
+  common to both images: SHA-256 of the raw `.mpy` files, and a line diff of the
+  disassembly with the source-path header stripped. Both agree exactly, and neither
+  reports a module that the other does not. An earlier revision of this page said 74/20.
+
+  The 21 changed modules are `espnow_conn_v2`, `compass`, `ble_manager`, `ubx_gnss`,
+  `project_data`, `f_ble/file_upload`, `compassing`, `peripherals`, `new_vibe`, `ota_ble`,
+  `f_lib/file_mgr`, `nav_logger`, `f_ble/ble_lite`, `ble_controller`, `f_ble/chunking`,
+  `ble_core`, `f_ble/ble_data`, `button`, `wdt_manager`, `peer_helpers`, `f_ota/system`.
+</Note>
+
+<Note>
+  The diff is complete across all 94 modules — it compares bytecode, so it does not depend
+  on anyone having understood the module. Knowing *that* a function changed is not the
+  same as knowing what it does. Of the 21 changed modules, 14 are rated DECODED, 6
+  PARTIAL, and one — `ble_controller.py` — NAME-ONLY on the
+  [module reference](/reference/modules). Where a change below is described in
+  behavioural terms, that description comes from reading the bytecode; where it is
+  described as "internal", it does not.
+</Note>
 
 ## At a glance
 

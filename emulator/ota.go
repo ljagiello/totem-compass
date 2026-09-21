@@ -480,9 +480,24 @@ func (n *Node) Update(now time.Time) error {
 	o.state = OTAVerifying
 	n.log.Info("ota downloaded", "file", pkg, "bytes", size, "sha256", sum)
 
-	// A Totem writes the image to the inactive slot and reboots into it,
-	// with the bootloader's own hash check deciding whether it stays. The
-	// emulator stops here: it has one image, and losing it would take the
+	// "Verifying" is this emulator's word, and it promises more than the
+	// device does. f_lib/firmware_ota's only check on a finished download
+	// is that the bytes written equal the server's own Content-Length —
+	// ValueError("Received {} bytes (expected {})."). There is no hash and
+	// no signature on this path: the module imports hashlib and never
+	// names it again, which is the likeliest source of the SHA-256 the
+	// documentation used to claim. Over plain HTTP that makes the whole
+	// firmware channel unauthenticated, which the docs now say plainly.
+	//
+	// The sum this transport returns is its own, not the device's, and
+	// nothing here gates on it. It stays because a real transport has it
+	// to hand and a caller may want it in a log line.
+	//
+	// A Totem then writes the image to the inactive slot and reboots into
+	// it. Whether the ESP-IDF bootloader hashes it before letting it stay
+	// is a property of the bootloader, not of anything in these 94
+	// modules, so it is not claimed here. The emulator stops at this
+	// point regardless: it has one image, and losing it would take the
 	// board off the mesh.
 	o.state, o.took = OTADone, time.Since(began)
 	// The same clock the failure path uses: the strip has been ticked at

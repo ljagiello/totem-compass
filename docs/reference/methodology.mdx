@@ -53,6 +53,51 @@ peer frame layout and the pairing handshake.
   </Step>
 </Steps>
 
+## Coverage audit
+
+Symbol recovery tells you what exists. It does not tell you what anyone has actually
+*read*, and the two are easy to confuse — a module can be named, categorised and given a
+confident one-line role on the strength of nothing but its filename.
+
+Every module was therefore audited against `re/v5.0.3/mpy/*.dis` and assigned one of four
+ratings, published per module on the [module reference](/reference/modules):
+
+| Rating | Bar |
+| --- | --- |
+| **DECODED** | Behaviour documented from the bytecode: named functions, constant *values*, control flow |
+| **PARTIAL** | Some verified internals documented, main logic not |
+| **NAME-ONLY** | Role is a hypothesis from the module name and a few strings; never read |
+| **STOCK** | Upstream MicroPython or `micropython-lib`; out of scope |
+
+### How the ratings were derived
+
+1. **Import graph.** Every `IMPORT_NAME` opcode in all 94 disassemblies was extracted and
+   resolved against the module list, giving each module's importers. This is what
+   identified `apa106.py` and `neopixel.py` as dead code, `chat_msg.py`, `f_ota/hotspot.py`
+   and `peer_auto_bond.py` as unreferenced, and `f_lib/logger.py` (41 importers) and
+   `f_lib/task_mgr.py` (28) as the load-bearing modules.
+2. **Distinctive-symbol coverage.** For each module, the identifiers in its `qstr_table`
+   that appear in at most two modules across the image — its *distinctive* symbols, which
+   excludes shared names like `config` or `Event` — were checked against the full text of
+   `docs/`. The fraction of them that appear is a mechanical proxy for decode depth.
+   `f_lib/logger.py`, `f_lib/bitwise.py` and `f_lib/async_helpers.py` each score zero.
+3. **Manual adjudication.** The proxy is unreliable for small modules (a module with one
+   distinctive symbol scores 0% or 100%), so every rating was set by reading what the docs
+   actually claim about that module and checking it against the disassembly. The proxy
+   ranked the candidates; it did not decide them.
+
+<Warning>
+  A "documented" module is not necessarily a *correct* one. This audit found several
+  confident claims that the bytecode contradicts: `apa106.py` presented as the LED driver
+  (it is unreachable; `leds.py` imports `f_lib/neopixel_v2.py`), a deep-sleep power state
+  (the firmware never calls `machine.deepsleep()`), `f_lib/rtc_v2.py` described as
+  RTC-memory storage (it is a `machine.RTC` subclass doing calendar maths), and `BleCtrl`
+  listed as a class (it is a log-line prefix; the class is `BleController`).
+
+  Each of those came from reading a name or a log string and not the code. That is exactly
+  the failure mode the NAME-ONLY rating exists to flag.
+</Warning>
+
 ## Why not a full source decompile?
 
 The application is **frozen MicroPython bytecode**. Unlike CPython (which has mature

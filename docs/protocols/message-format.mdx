@@ -270,12 +270,31 @@ with the corrected `>>3` decode (**Confirmed**):
 | `(2,0)` | 45 | `<BB6BffbbHbbbhhBBiffh` | 43 B |
 
 The keys are **total frame lengths including the SyncWord**, not schema ids: `Parser.aread`
-picks `EXTENDED[key][len(frame)]` on an exact match, and for command 0 any frame of at least 72
-bytes uses the 72 variant (`Non-extended payload being used` otherwise). `compass_mesh` only
+picks `EXTENDED[key][len(frame)]` on an exact match. Failing that, if the frame's **`cmd_id`
+is 0** and it is at least 72 bytes long, the 72 entry is used; otherwise `aread` logs
+`Non-extended payload being used` and falls back to `TOTEM_MSG_MAP`. `compass_mesh` only
 upgrades a `(2,0)` frame to the 45 variant on an exact length match. Commands 1 and 2 of
 category 0 have no `EXTENDED` entry, so a receiver decodes only the first 23 bytes of a bond
 frame. The struct is unpacked from `frame[2:]`, so its leading `BB` is the echoed
 `(cat_id, cmd_id)` at frame offsets 2-3.
+
+<Note>
+The `cmd_id == 0` fallback is keyed on the command byte alone, so in principle it also covers
+`(2,0)`, whose `EXTENDED` dict has no 72 entry. In practice no `(2,0)` frame reaches `aread`:
+`EspConn.recv` handles category 2 command 0 inline and `continue`s. **Confirmed**
+(`espnow_conn_v2.dis:7515-7540` and `:6698-6790`).
+</Note>
+
+Every key in the table is `calcsize(fmt) + 2` — except `EXTENDED[(1,6)][5]`, whose format
+`<BBbbB` also has `calcsize` 5 and so would need a 7-byte frame. Nothing emits either length;
+see [demi-god](/protocols/demigod#frame-layout).
+
+The category 1 (demi-god) map entries describe only the **fixed head** of the frames the
+firmware actually sends. Each `espnow_msg.demigod_gen_*` packer extends its buffer past the
+mapped fields: `(1,2)` builds 30 bytes for a 26-byte entry, `(1,7)` builds 12 for 7, and
+`(1,0)` builds 16 plus four variable-length UTF-8 strings plus an optional trailing byte.
+`struct.unpack` ignores the surplus. Field tables are on the
+[demi-god page](/protocols/demigod#frame-layout).
 
 The field tables below give **frame offsets** (SyncWord at 0), as the firmware's `pack_into`
 calls use them. All are **Confirmed** from the builders in `espnow_conn_v2.Messages` and the
@@ -285,8 +304,20 @@ packed by CPython's `struct` with these formats byte for byte.
 
 ### Peer frame `(0, cmd)`
 
-`gen_peer_msg` fills `ENOW_PEER_BUFF = bytearray(108)` and always sends all **108 bytes**.
-Command 0 is the status, 1 a bond request or confirmation, 2 an unbond notice.
+`ENOW_PEER_BUFF = bytearray(108)` is a module-level buffer in `project_data`; `Messages`
+holds a `memoryview` of it and always sends all **108 bytes**. Command 0 is the status, 1 a
+bond request or confirmation, 2 an unbond notice.
+
+Four methods write it, at different times — a caller that only calls `gen_peer_msg` sends
+whatever the others last left behind:
+
+| Writer | Offsets | When |
+| --- | --- | --- |
+| `build_all` | 0-1 (SyncWord) | once at start-up, then calls the three below |
+| `update_location` | 4, 8, 12, 13 | on each GNSS fix |
+| `update_sos` | 16 | when SOS is toggled |
+| `update_device_data` | 59-70 and the name at 71 | when the device name changes |
+| `gen_peer_msg` | 2, 3, 14, 17, 18, 19, 25, 27, 31, 35-58 and the 5-byte tail after the name | per frame |
 
 | Offset | Code | Field | Source |
 | --- | --- | --- | --- |
@@ -299,14 +330,14 @@ Command 0 is the status, 1 a bond request or confirmation, 2 an unbond notice.
 | 17 | `b` | orientation | `fusion.orientation`: 1 upright, 2 lying flat |
 | 18 | `b` | ack | bond confirmation (command 1) |
 | 19 | `6B` | target MAC | always zero: no caller passes `target_mac` |
-| 25 | `h` | unscheduled | always 0; a receiver that sees non-zero does not predict the sender's next window |
+| 25 | `h` | unscheduled | always 0 from a Totem, but **read**: a receiver that sees non-zero skips predicting the sender's next window (`espnow_conn_v2.dis:9755-9756`) |
 | 27 | `i` | time of day (ms since midnight) | `rtc.itod` if the clock came from GNSS, else −1 |
 | 31 | `i` | Unix time (s) | `rtc.unix()` likewise, else −1 |
 | 35 | `B` | flags | bit 0: the phone is connected over BLE |
 | 36 | `3B` | firmware major, minor, patch | `modes.release_*` |
 | 39 | `h` | altitude (m) | `gnss_data.altitude`, −500 unknown |
 | 41 | `H` | uptime (min) | `modes.uptime_sec // 60` |
-| 43 | `e` | battery voltage | half float, MicroPython's encoder (rounds ties up) |
+| 43 | `e` | battery voltage | half float, `modes.batt_volts` or 0 — see the note below |
 | 45 | `h` | heading of motion (deg) | `get_heading_mot()`, −1 until 10 m travelled |
 | 47 | `h` | odometer (m) | `round(gnss_data.odometer / 1000)` of an odometer in mm |
 | 49-69 | `ffbBBiiBB` | reserved | constants 0.0, 0.0, −1, then zeros; never read |
@@ -317,9 +348,27 @@ Command 0 is the status, 1 a bond request or confirmation, 2 an unbond notice.
 | 73+*n* | `H` | release id | `syst.release_id` |
 | 75+*n* | `b` | battery % | `modes.batt_pct` |
 
-A name longer than 32 bytes does not leave room for the fields after it, and `gen_peer_msg`
-fails. The buffer is reused, so bytes after the battery field can hold leftovers of a longer
-earlier name.
+**The name.** `update_device_data` writes it with
+`pack_utf8_str(buff=peer_msg, start=71, text=get_device_name())`, which is a bare
+`buff[71:71+n] = data` — its `max_size` argument is accepted and never used. The buffer is a
+`memoryview` of 108 bytes, so a name of 33-37 bytes fits the slice but overwrites the field
+region after it, and `gen_peer_msg`'s `struct.pack_into('<bbHb', …, 71+n)` then raises; a
+name of 38 bytes or more makes the slice assignment itself raise. Either way nothing goes
+out. 32 bytes (`108 − 71 − 5`) is the largest name that works. The buffer is reused, so bytes
+after the tail can hold leftovers of a longer earlier name. **Confirmed**
+(`f_lib_bitwise.dis`, `pack_utf8_str`; `espnow_conn_v2.dis`, `update_device_data`).
+
+**The battery voltage** is a `struct` `'e'` half float. MicroPython's software
+`mp_encode_half_float` (`py/binary.c`, used on ESP32 because the port has no native
+`_Float16`) rounds half up, lets a mantissa carry spill into the exponent field, flushes
+values that should become the largest subnormals to zero, and — the part that matters —
+**has no range check**. Past the half's ~65504 limit the exponent runs off the end of its
+five bits and into the sign bit, so a voltage of 131072 encodes as −0 and 100000 as a NaN.
+The Go codec in `mesh/half.go` is a port of both directions and matches a Totem byte for
+byte; its encoder refuses a finite magnitude above 65504 rather than silently changing it.
+The encoder behaviour is **Inferred** — it is MicroPython runtime code, not in the frozen
+bytecode — but the field being `'e'` at offset 43 is **Confirmed** from
+`'<4BhHehhffbB'` at `espnow_conn_v2.dis:1647`.
 
 ### Locate `(2,0)`
 
@@ -363,6 +412,13 @@ record per member.
 | 19 | `H` | time left in the host's window (ms), 0 on finalize or abandon |
 | 21 + 16*i* | `6B` + `<ffbb` | member MAC, then latitude, longitude, accuracy, colour id |
 
+The member MAC is written as a raw 6-byte slice assignment from the **key** of the host's
+`modes.auto_bond_grp` dict, and the four packed values are that entry's items 0-3 — so a
+member's position is whatever the host last heard, not a live value. Offsets 12/13 (the
+host's own accuracy and colour) come from the host's GNSS and the `clr_id` argument; the
+host sends `clr_id = 0` while advertising and `config.color_id` on finalize. **Confirmed**
+(`espnow_conn_v2.dis:1296-1447`, `gen_auto_bond_grp`).
+
 ### Smart Group reply `(7,1)`
 
 16 bytes built in `Parser._smart_group`: `<Hbffb` at offset 4 = group UID, join flag (+1 join,
@@ -393,10 +449,10 @@ time.
 | Symbol | Role |
 | --- | --- |
 | locate UID (offset 20) | `gen_mesh_msg`: `randint(1, 65534)` per new frame; relays and the one reply repeat keep it |
-| `Parser.recent` / `add_recent` | UIDs seen, each kept for its expiry + 15 s (clamped to 15-400 s), at most 512 |
+| `Parser.recent` / `add_recent` | UIDs seen. With no `timeout_unix` the lifetime is `MSG_EXP_MSECS`; with one it is `(timeout_unix − now) × 1000 + 15000`, clamped to 15-400 s. At 512 entries the expired ones are dropped |
 | `MSG_EXP_MSECS` | default lifetime of a `recent` entry (150000 ms) |
 | `MESH_PEER_MSG_LIMIT` | locate requests per stale peer (999) |
-| `msg_offset_ms` | per-peer estimate of the sender's radio-window phase, from peer frame receive times |
+| `msg_offset_ms` | per-peer phase estimate: an EWMA (`0.8 × old + 0.2 × error`) of how far each frame landed from the predicted `peer.next_msg`, clamped to ±500 ms when the next window is predicted |
 | `last_msg_rx`, `last_msg_tx`, `last_msg_ticks` | liveness tracking |
 
 `gen_msg_uid`, `MSG_IN_BUFF` and `MSG_OUT_BUFF` belong to the chat module (`chat_msg`), which

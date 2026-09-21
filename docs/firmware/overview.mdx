@@ -81,5 +81,12 @@ The presence of `webrepl.py`, `upysh.py`, and `mip` (the MicroPython package ins
 in the frozen set indicates a developer-oriented build lineage, though whether WebREPL
 is enabled at runtime depends on boot configuration held in bytecode/NVS.
 
+That lineage shows up in the application too. `project_main.start` has branches that
+import `mpy_dev.dev_comms`, `mpy_dev.dev_imu`, `mpy_dev.dev_leds`, `mpy_dev.dev_rest`,
+`mpy_dev.dev_mem_release` and `web_bluetooth` — a developer bench suite that was **not**
+frozen into the shipped image. Those branches raise `ImportError` on a production device
+and are unreachable anyway, since the module body hard-codes `start(1)`. See
+[boot flow](/firmware/boot-flow).
+
 See [architecture](/firmware/architecture) for the module breakdown and
 [memory map](/firmware/memory-map) for the segment layout.

@@ -1,35 +1,46 @@
 ---
 title: "Bluetooth LE"
-description: "The GATT peripheral the phone app talks to: UUIDs, advertising, connection handshake, and transfer."
+description: "The GATT peripheral the phone app talks to: UUIDs, advertising, connection handshake, transfer, and the reconnect schedule."
 ---
 
-The Totem is a **BLE peripheral** for the phone-app link (the app is the central), but the
-firmware also compiles the **central** role and uses it for some flows such as the OTA-BLE
-client (`Starting OTA Bluetooth connection`). The stack is NimBLE (via MicroPython's
-`bluetooth`), driven by `f_ble/peripheral.py`, `ble_controller.py`, `ble_core.py`, and
-`ble_manager.py`.
+The Totem is a **BLE peripheral** and nothing else. The stack is NimBLE (via MicroPython's
+`bluetooth`), driven by `f_ble/ble_lite.py` (radio, advertising, IRQ), `f_ble/ble_data.py`
+(characteristics, connection state), `f_ble/peripheral.py` (advertising payload),
+`ble_core.py` (the GATT tree), `ble_manager.py` (the application protocol) and
+`ble_controller.py` (when BLE is allowed to be on).
+
+<Note>
+  **There is no central role in the image.** No frozen module calls `gap_connect`,
+  `gap_scan` or any `gattc_*` method — grep the 94 disassembled modules and the only
+  `scan` is `wlan.scan()` in `BleManager.get_nearby`. `ota_ble.py` is *also* a peripheral:
+  `OtaBle.start` advertises as `totem` on the same service and waits for the app to
+  connect and push the image (`ota_ble.dis:1063-1200`). **Confirmed.**
+</Note>
 
 ## GATT identifiers
 
 Custom 128-bit UUIDs recovered verbatim from the image. v5.0.3 exposes **one service and
-three characteristics** (`ble_core.py` `BleCore`; `f_ble/ble_data.py` sets the flags). The
-third, `…-0003`, is new in v5.0.3; v5.0.2 builds only the first two:
+three characteristics**, all built in `BleCore.__init__` (`ble_core.dis:294-400`). The
+third, `…-0003`, is new in v5.0.3; v5.0.2 builds only the first two.
 
-| UUID | device attr | Role |
-| --- | --- | --- |
-| `7913b588-0000-4635-b066-baa2cfc197cf` | `service` | primary transfer service |
-| `7913b588-0001-4635-b066-baa2cfc197cf` | `chars__conn_status` | control / handshake — client writes here |
-| `7913b588-0002-4635-b066-baa2cfc197cf` | `chars__data_transfer` | application data |
-| `7913b588-0003-4635-b066-baa2cfc197cf` | `chars__on_demand` | **v5.0.3+**: file-upload chunk stream (device → app), queue size `on_demand_queue_sz` (default 3) |
+| UUID | device attr | Role | Inbox queue |
+| --- | --- | --- | --- |
+| `7913b588-0000-4635-b066-baa2cfc197cf` | `service` | primary transfer service | — |
+| `7913b588-0001-4635-b066-baa2cfc197cf` | `chars__conn_status` | control / handshake — client writes here | `conn_queue_sz`, default **5** |
+| `7913b588-0002-4635-b066-baa2cfc197cf` | `chars__data_transfer` | application data | `data_queue_sz`, default **10** |
+| `7913b588-0003-4635-b066-baa2cfc197cf` | `chars__on_demand` | **v5.0.3+**: file-upload chunk stream (device → app) | `on_demand_queue_sz`, default **3** |
 
-All characteristics register with the **same flags `0x3E`** =
-`READ | WRITE_NO_RESPONSE | WRITE | NOTIFY | INDICATE`
-(`0x02 | 0x04 | 0x08 | 0x10 | 0x20`; `add_characteristic` in `f_ble/ble_lite.py` passes
-`range/values/write_nr/notify/indicate` all defaulting to `True`, and
-`Characteristic.__init__` ORs the matching bit for each; no encrypted/authenticated
-permission variants are ORed in). Clients should **scan and connect by the service UUID
-`7913b588-0000-4635-b066-baa2cfc197cf`** — the advertised local name is built at runtime and
-should not be relied on. Transfer is implemented in `svc_ble_transfer.py`.
+All three register with the **same flags `0x3E`** =
+`READ | WRITE_NO_RESPONSE | WRITE | NOTIFY | INDICATE` (`0x02 | 0x04 | 0x08 | 0x10 | 0x20`).
+`BleCore` passes only `service`, `uuid` and `queue_size`, so
+`BleLite.add_characteristic` applies its defaults `read=write=write_nr=notify=indicate=True`
+(`f_ble_ble_lite.dis:354-416`) and `Characteristic.__init__` ORs the matching bit for each
+(`f_ble_ble_data.dis:274-330`). No encrypted or authenticated permission variants are ORed
+in, and no descriptors are registered — the CCCDs are NimBLE's own. **Confirmed.**
+
+Clients should **scan and connect by the service UUID
+`7913b588-0000-4635-b066-baa2cfc197cf`**; the advertised local name is a constant but the
+GAP device name characteristic reads `MPY ESP32`.
 
 <Note>
   In **v5.0.2**, `chars__on_demand` was referenced by `f_ble/file_upload.py` but never
@@ -45,78 +56,220 @@ should not be relied on. Transfer is implemented in `svc_ble_transfer.py`.
   Every Totem BLE UUID is in the `7913b588` family.
 </Note>
 
+### Value buffers
+
+`BleManager.start` sizes the two GATT value buffers before launching any task
+(`ble_manager.dis:4308-4400`, **Confirmed**):
+
+| Characteristic | `gatts_set_buffer` max_len |
+| --- | --- |
+| `chars__data_transfer` | **185** bytes |
+| `chars__conn_status` | **84** bytes |
+| `chars__on_demand` | never sized — `set_buff` is not called for it |
+
+A single client write must fit the target buffer regardless of the negotiated MTU. The
+value buffer does not limit the device's own pushes: `gatts_notify` and `gatts_indicate`
+are always called with an explicit `data` argument, which NimBLE sends directly, so
+`…-0003` needs no buffer at all. The
+`OtaBle` variant uses different sizes (92 / 64) and is the only place in the image that
+calls `ble.config()` at all — with `mtu=512`, nothing else (`ota_ble.dis:1095-1110`).
+
 ## Advertising
 
-| Symbol | Role |
-| --- | --- |
-| `ble_advertise`, `gap_advertise` | start advertising |
-| `advertise_burst` | short advertising bursts (power saving) |
-| `gen_advertise_payload` | build the adv payload |
-| `get_device_name`, `device_name_sz` | device name in the payload |
-| `manufacturer_id` | manufacturer-specific adv data |
+`gen_advertise_payload` (`f_ble/peripheral.py` — the whole module is this one
+function plus its `_append` helper) appends AD
+structures in a fixed order and spills into the scan response only when the 31-byte
+advertisement is full. With the arguments `ble_manager` passes, the split is deterministic
+(**Confirmed**, `f_ble_peripheral.dis:82-190`):
 
-`BleManager.start` advertises with `name='totem'`, `appearance=1361` and
-`services=[<Totem service>]` (the full 128-bit UUID; fields that do not fit the 31-byte
-advertisement spill into the scan response). A scanner can match on either the name or the
-service UUID. The GAP device name characteristic reads `MPY ESP32`.
+| AD type | Field | Value | Lands in |
+| --- | --- | --- | --- |
+| `0x01` | Flags | `0x06` = LE General Discoverable + BR/EDR Not Supported | advertisement (3 B) |
+| `0x07` | Complete list of 128-bit service UUIDs | the Totem service UUID | advertisement (18 B) |
+| `0x09` | Complete Local Name | `totem` | advertisement (7 B) |
+| `0x19` | Appearance | `1361` (`0x0551`) | **scan response** (4 B) — 28 + 4 > 31 |
+
+So a passive scan sees the name and the service UUID; the appearance needs an active scan.
+**No manufacturer-specific data is ever advertised** — `manufacturer_id` lives in
+`f_ota/config.py` and `device_name_sz` in `espnow_conn_v2.py`; neither is on the BLE path.
+
+| Call | Advertising interval | Window |
+| --- | --- | --- |
+| `BleLite.advertise(timeout_ms=…, interval_us=50000)` | **50 ms** | `timeout_ms`, default 60 s from `BleManager.start`; 45 s on an auto-reconnect |
+| `BleLite.advertise_burst(duration_ms=…, interval_us=50000)` | **50 ms** | `duration_ms` — 1200 ms from the fast-reconnect loop |
+
+`advertise` is `connectable=True` and its own default interval is 250 ms, but every caller
+in the image overrides it with 50 ms. On connect the device calls
+`gap_advertise(None, adv_data=b'', resp_data=b'')` and stops advertising, so a connected
+Totem cannot be found by a second scanner.
+
+### When BLE is on
 
 BLE is normally **off to save power** and comes up on demand. The user turns it on by
-**double-pressing the physical power button**: `sw_power.cb_double_tap = user_enable_ble`
-(single press toggles brightness, hold powers off). `Compass.start_ble` is a **toggle**: it
-enables BLE when `ble_conn.status_id == 0` and disables it otherwise. While advertising, the
-crystal breathes blue (`launch_ble_breathe(animation_id=1)`). After a session ends,
-`_on_disconnect` disables BLE again, so every new session needs another double-press unless
-the scheduled-reconnect machinery below brings it back. The controller logic
-(`BleCtrl`) manages this:
-(`BleCtrl`) manages this:
+**double-pressing the physical power button** — `sw_power.cb_double_tap = user_enable_ble`
+(`compass.dis:1377-1383`); single press is `toggle_brightness`, hold is `device_off`,
+triple tap is unbound.
 
-```text
-[BleCtrl] Starting BLE
-[BleCtrl] Stopping BLE for blocker
-[BLE Check] Starting advertising burst
-[BLE Check] App connected via fast reconnect
-[BLE Check] No connection - quietly turning BLE back off
-[BleCtrl] Silently reconnecting BLE after blocker cleared
-```
+<Warning>
+  **The double-press is not a toggle.** `user_enable_ble` calls
+  `start_ble(is_user_triggered=True)`, and `Compass.start_ble` takes the enable branch
+  whenever `is_user_triggered` is set, before it ever looks at `ble_conn.status_id`
+  (`compass.dis:6095-6130`). A second double-press while the Totem is already advertising
+  only re-launches the breathe animation; it does not turn BLE off. The
+  `status_id == 0` test is the *fallback* rule, used when the caller passes neither
+  `is_user_triggered` nor `is_force_off`. **Confirmed.**
+</Warning>
 
-A **blocker** system (`BleBlockers`, `Setting BLE block to: {} | for index: {}`) lets
-subsystems veto BLE while they need the radio, then BLE silently reconnects when the
-last blocker clears. A separate **scheduled-disconnect manager** (`ble_schedule_mgr`,
-`evt_ble_schedule_disconn`) governs the on-demand connect/disconnect lifecycle
-(`[ble_schedule_mgr] BLE scheduled disconnection requested`,
-`[ESP-NOW] | Requesting BLE Scheduled Disconnect`), honouring
-`[ESP-NOW] | BLE Auto Reconnect is disabled in App`.
+While advertising, the crystal breathes blue (`launch_ble_breathe(animation_id=1)`); on
+connect it blinks blue twice (`animation_id=2`) and the breathe task is stopped.
+
+What happens when the link drops depends on how it dropped (`BleManager._on_disconnect`,
+`ble_manager.dis:1120-1327`, **Confirmed**):
+
+- **Graceful** (`ble_conn.is_graceful_disconn`, set by the app's `[0x00, 0x03]` write or by
+  the device's own `stop()`): BLE is disabled and stays off. Another double-press is needed.
+- **Ungraceful** (link loss, supervision timeout): the device launches
+  `start_reconnect` as task `restart_ble` — see below.
+
+Either way `_on_disconnect` stops all eight BLE tasks, calls `b_lite.disable()`,
+clears the TX gates and `handoff` bookkeeping, resets the `Controller`, and releases the
+watchdog block (`wdt_mgr.set_condition(WdtConditions.BLE_ACTIVE, False)`).
+
+### Auto-reconnect after an ungraceful drop
+
+`BleManager.start_reconnect(max_attempts=1)` (`ble_manager.dis:4704-4934`, **Confirmed**):
+
+1. If the disconnect *was* graceful and no scheduled reconnect is pending, it bails with
+   `Compass has previously connected, exit auto-reconnect`.
+2. Otherwise, while `ble_conn.status_id == 0`, it relaunches
+   `BleManager.start(timeout_ms=45000, is_ble_breathe=False)` — a silent 45-second
+   advertising window with no LED.
+3. It then waits up to 60 s for a connection. On the advertising window expiring it logs
+   `Timeout waiting for BLE to connect`, nudges ESP-NOW back to mode 0, and sleeps a
+   backoff of **15 s → 30 s → 60 s** before the next attempt.
+4. After `max_attempts` it logs `Reached max BLE reconnect attempts: {}` and releases the
+   watchdog block — unless BLE happens to be up, in which case
+   `Reconnect attempts ended while BLE is up - WDT stays blocked until disconnect`.
+
+`Compass.start_ble` passes `max_attempts=3` by default, `4` for a scheduled reconnect.
+
+### Blockers
+
+`BleController` (`ble_controller.py`, recovered in full) lets two subsystems veto BLE:
+
+| Index | `BleBlockers` | Name in logs |
+| --- | --- | --- |
+| `0` | `BONDING` | `bonding` |
+| `1` | `SMART_GRP` | `smart group` |
+
+`set_block(index, is_blocked)` logs `[BleCtrl] Setting BLE block to: {} | for index: {}`,
+and when it *sets* a block it also sets the app-facing reconnect hint to
+`app_delay=5000, app_duration=10000, attempts=4`. `update()` then launches either
+`stop_ble` (`[BleCtrl] Stopping BLE for blocker`) or `_start_ble`
+(`[BleCtrl] No BLE Blocks`). `stop_ble` calls `BleManager.stop(reconn_start=5000,
+reconn_duration=10000)`, so the app is told when to come back. `_start_ble` waits until
+**10 s** have passed since the last blocker cleared, refuses if the previous link ended
+with `disconn_by in (1, 3)` (`[BleCtrl] Last BLE conn timed out or was disabled by user`),
+and otherwise silently reconnects with `is_reconn=True, max_attempts=4, conn_mode=1`
+(`[BleCtrl] Silently reconnecting BLE after blocker cleared`). **Confirmed.**
+
+### Scheduled disconnect and fast-reconnect bursts
+
+`Compass.ble_schedule_mgr` (`compass.dis:5747-6039`) is a permanent task that waits on
+`modes.evt_ble_schedule_disconn` and then parks BLE for a while. Constants are literals in
+the function prologue (**Confirmed**):
+
+| Constant | Value | Role |
+| --- | --- | --- |
+| outbox wait | **20 000 ms** | how long it waits for `evt_ble_outbox_empty` |
+| normal off window | **30 000 ms** | `reconn_start` told to the app |
+| hung off window | **90 000 ms** | used once `ble_conn.stall_count >= 2` |
+| burst period | **8 000 ms** | `ble_check_loop` advertising cadence |
+| burst length | **1 200 ms** | `BleManager.start(burst_ms=1200)` |
+
+The sequence:
+
+1. `[ble_schedule_mgr] BLE scheduled disconnection requested`.
+2. If the BLE outbox is not empty and the link is not already flagged stalled, it waits up
+   to 20 s (`Waiting on BLE outbox to empty before scheduled disconnect`), then gives up
+   with `BLE outbox not empty after {} ms (App never confirmed the connection?) -
+   disconnecting anyway`.
+3. If a log upload is in flight it waits for the uploader to go idle
+   (`Waiting on BLE log upload to finish before scheduled disconnect`).
+4. If `ble_conn.stall_count >= 2` it logs
+   `BLE hung {} links in a row - staying off {} ms without fast-reconnect bursts` and uses
+   the 90 s window **with no bursts**; otherwise 30 s with bursts.
+5. If the battery is below the BLE threshold it logs `Battery too low for BLE` and just
+   turns BLE off (`start_ble(is_force_off=True)`) with no reconnect promise.
+6. Otherwise it calls `start_ble(is_force_off=True, reconn_start=<window>,
+   reconn_duration=10000)` — which makes `BleManager.stop` emit the `[0x00, 0x05]` frame
+   below — sleeps out the window, and then launches
+   `start_ble(is_reconn=True, max_attempts=4, conn_mode=1)` (`Launching reconnect`).
+
+During the window `BleController.ble_check_loop(window_ms=…)` advertises a **1.2 s
+connectable burst every ~8 s**, aligned to the ESP-NOW radio timer and stopping 5 s before
+the window ends. Each burst is gated on: the scheduled disconnect still pending,
+`ble_conn.status_id == 0`, `disconn_by != 1`, not powering down, no blockers,
+`modes.evt_bonded` set, and `modes.evt_battery_charged` set. A burst that connects logs
+`[BLE Check] App connected via fast reconnect`; one that does not logs
+`[BLE Check] No connection - quietly turning BLE back off` from `burst_cleanup`, which also
+stops every BLE task, sets `b_lite.is_exiting`, stops advertising, calls `disable()` and
+clears the watchdog block. **Confirmed.**
+
+The 15-second hung-link guard (below) is what feeds `evt_ble_schedule_disconn` when an app
+connects and then never says anything. `[ESP-NOW] | Requesting BLE Scheduled Disconnect`
+and `[ESP-NOW] | BLE Auto Reconnect is disabled in App` are the mesh-side triggers for the
+same event.
 
 ## Connection handshake
 
 <Info>
-  **No pairing, bonding, or encryption is required.** The characteristics register with plain
-  flags `0x3E` only; the firmware never calls `ble.config()` with any security option
-  (no bond / mitm / le_secure / io_capability) and the IRQ handler has no passkey or encryption
-  events. An **unpaired custom central can read, write, and subscribe** — the only gate to data
-  flow is the application-layer handshake below.
+  **No pairing, bonding, or encryption is required.** The characteristics register with
+  plain flags `0x3E`; the only `ble.config()` call in the whole image is `ota_ble`'s
+  `mtu=512`, so no `bond`, `mitm`, `le_secure` or `io` option is ever set
+  (`f_ble_ble_lite.dis:1105-1144` — `BleLite.enable` calls `ble.active(True)` and nothing
+  else). The IRQ handler has no passkey or encryption-update branch. An **unpaired custom
+  central can read, write, and subscribe** — the only gate to data flow is the
+  application-layer handshake below. **Confirmed.**
 </Info>
+
+The IRQ handler `BleLite.irq_cb` (`f_ble_ble_lite.dis:807-1020`) implements exactly these
+events (**Confirmed**):
+
+| Event | MicroPython name | Effect |
+| --- | --- | --- |
+| `1` | `_IRQ_CENTRAL_CONNECT` | `conn_handle = data[0]` |
+| `2` | `_IRQ_CENTRAL_DISCONNECT` | `conn_handle = None`, `mtu = 23`, `disconn_by = 1` if unset |
+| `3` | `_IRQ_GATTS_WRITE` | `char.inbox.put(ble.gatts_read(handle))` — this is how every client write arrives |
+| `4` | `_IRQ_GATTS_READ_REQUEST` | returns `0` (always allowed) |
+| `20` | `_IRQ_GATTS_INDICATE_DONE` | `char.evt_indicated.set()` |
+| `21` | `_IRQ_MTU_EXCHANGED` | `mtu = data[1]`; `mtu_payload = mtu - 3` |
+| `27` | `_IRQ_CONNECTION_UPDATE` | stored in `last_gap_params` |
+| `29` / `30` | `_IRQ_GET_SECRET` / `_IRQ_SET_SECRET` | bonding-key store, see [Keys & bonding](#keys--bonding) |
 
 Once connected, the two sides negotiate before app data flows:
 
 <Steps>
   <Step title="Connect by service UUID">
-    Scan for and connect to `7913b588-0000-4635-b066-baa2cfc197cf`; discover its two
+    Scan for and connect to `7913b588-0000-4635-b066-baa2cfc197cf`; discover its
     characteristics.
   </Step>
   <Step title="MTU exchange">
-    `Current MTU: {}` — client-negotiated; aim for ≥ ~188 so a full data frame fits in one PDU
-    (the data value buffer is 185 bytes; larger payloads use the chunking protocol). Determines
-    chunk size for the transfer layer.
+    Entirely client-driven — the device never calls `gattc_exchange_mtu` and never sets a
+    preferred MTU on the app path. It starts at 23 and adopts whatever
+    `_IRQ_MTU_EXCHANGED` reports. Aim for ≥ 188 so a full data frame fits one PDU: the
+    data value buffer is 185 bytes. The MTU also sets the upload chunk size,
+    `min(mtu - 3, 247) - 12`.
   </Step>
   <Step title="Subscribe">
-    Enable notifications / indications so the device can push data (`gatts_notify` /
-    `gatts_indicate` on **conn handle 0** — the app is the only central).
+    Enable notifications *and* indications on `…-0001` and `…-0002` (and `…-0003` if you
+    accept uploads). The device pushes on **conn handle 0** — both `gatts_notify` and
+    `gatts_indicate` are called with a literal `0`, so it only ever talks to one central.
   </Step>
   <Step title="Send the ConnStatus Ready frame">
-    Write the 4-byte frame to `chars__conn_status` (`…-0001`) — see below. Until it arrives the
-    device holds off: `ConnStatus Ready command not yet received, not sending BLE updates`.
-    Logged as `=== BLE Connection Mode: {} | FrameSchemaId: {}`.
+    Write the 4-byte frame to `chars__conn_status` (`…-0001`) — see below. Until it arrives
+    the device holds off: `ConnStatus Ready command not yet received, not sending BLE
+    updates`, and after 15 s it schedules a disconnect.
   </Step>
   <Step title="Data transfer">
     Messages flow on `chars__data_transfer` (`…-0002`) as `(cat_id, cmd_id)` records (Static,
@@ -124,10 +277,21 @@ Once connected, the two sides negotiate before app data flows:
   </Step>
 </Steps>
 
+Right after the connection is established, `BleManager.start` also (**Confirmed**,
+`ble_manager.dis:4550-4620`):
+
+- resets both characteristic inboxes;
+- requests a connection-parameter update:
+  `gap_conn_param_update(0, 10000, 20000, 0, 12000)` — a **10–20 ms connection interval,
+  slave latency 0, 12 s supervision timeout** (`Requesting Gap Conn Params Update`);
+- persists the bonding secret with `save_sess()`;
+- sets `modes.has_ble_connected` and `modes.is_rtc_snapshot`.
+
 ### ConnStatus Ready frame
 
 To unblock app-data flow the client writes the Ready frame to `chars__conn_status`
-(`…-0001`):
+(`…-0001`). Parsed in `BleManager.recv_status_msgs` (`ble_manager.dis:2753-3119`,
+**Confirmed**):
 
 `[0x00, 0x01, conn_mode, frame_schema_id]` or, since v5.0.3,
 `[0x00, 0x01, conn_mode, frame_schema_id, caps]`
@@ -135,44 +299,112 @@ To unblock app-data flow the client writes the Ready frame to `chars__conn_statu
 | Byte | Field | Effect |
 | --- | --- | --- |
 | `0x00` | `cat_id` | Connection Status |
-| `0x01` | `cmd_id` | CONNECTED / READY → sets `is_app_conn`, `status__conn = 1` |
-| `conn_mode` | `msg[2]` | `1` clears pending `static_data_cmd_id` / `peer_cmd_id` and sets **TX ownership** (`evt_is_tx_owner`) |
-| `frame_schema_id` | `msg[3]` | selects the device's **transmit loop** (below); any nonzero value also sets the **TX-ready** gate (`evt_is_tx_ready`) |
-| `caps` (v5.0.3+, optional) | `msg[4] & 1` | app accepts **file uploads** (`controller.is_upload_supported`); absent or `0` suspends the uploader until BLE is next turned on |
+| `0x01` | `cmd_id` | CONNECTED / READY → sets `modes.is_app_conn`, clears `ble_conn.stall_count` |
+| `conn_mode` | `msg[2]`, `0` if the frame is shorter | `1` clears pending `static_data_cmd_id` / `peer_cmd_id` |
+| `frame_schema_id` | `msg[3]`, `0` if the frame is shorter | selects the device's **transmit loop** (below); any nonzero value sets the **TX-ready** gate (`evt_is_tx_ready`) |
+| `caps` (v5.0.3+, optional) | `msg[4] & 1`, `0` if absent | app accepts **file uploads** (`controller.is_upload_supported`); `0` suspends the uploader until BLE is next turned on |
 
-v5.0.3 logs the frame as `=== BLE Connection Mode: {} | FrameSchemaId: {} | UploadSupported: {}`.
-It also adds a **hung-link guard**: if the app has not sent the Ready frame within **15 s** of
-connecting, the device logs `App never sent ConnStatus within {} ms - link treated as hung
-(stall #{}); scheduling a disconnect` and drops the link.
+<Warning>
+  **TX ownership needs both fields.** `evt_is_tx_owner` is set only inside the
+  `frame_schema_id > 0` branch, and only when `conn_mode == 1` as well. A Ready frame with
+  `conn_mode = 1` and schema `0` clears the pending record ids but grants nothing — which
+  is correct, because schema `0` runs the legacy loop where ownership is unused.
+</Warning>
 
-To end the session, write `[0x00, 0x03]` — a graceful-disconnect request (sets
-`ble_conn.is_graceful_disconn`). The device announces its own disconnects on `…-0001` as
-`[0x00, 0x02]`, or `[0x00, 0x05]` + `<ii` when it schedules a reconnect.
+Every cat-`0` write also assigns `controller.status__conn = cmd_id`, whatever the command
+is. v5.0.3 logs the frame as
+`=== BLE Connection Mode: {} | FrameSchemaId: {} | UploadSupported: {}` (only when
+`ble_conn.is_debug`) and always logs `[Upload] App conn frame: {} B | upload support: {}`.
+
+**Hung-link guard.** The legacy transmit loop watches `controller.status__conn`. If it is
+anything other than `1` for **15 s**, the device increments `ble_conn.stall_count`, logs
+`App never sent ConnStatus within {} ms - link treated as hung (stall #{}); scheduling a
+disconnect`, and sets `modes.evt_ble_schedule_disconn` — it does **not** drop the link
+itself; the scheduled-disconnect manager does. The check then repeats every 15 s with
+`Hung link still up (no ConnStatus) - re-requesting the scheduled disconnect`. Two hung
+links in a row push the off window to 90 s and suppress the fast-reconnect bursts.
+(`ble_manager.dis:3840-3890`, **Confirmed**.)
+
+<Note>
+  A `(0x0C, 0x03)` phone-fix frame on `…-0002` is a side door out of this state: if
+  `status__conn != 1` when one arrives, the device logs
+  `App failed to send status_conn, manually setting to 1` and sets `status__conn = 1`,
+  `modes.is_app_conn = True`, `peer_cmd_id = 0` (`ble_manager.dis:2580-2600`).
+  **Confirmed** — but send the Ready frame anyway; nothing else configures the transmit
+  loop.
+</Note>
+
+### Other client → device frames on `…-0001`
+
+| Frame | Meaning |
+| --- | --- |
+| `[0x00, 0x03]` | graceful-disconnect request; sets `ble_conn.is_graceful_disconn` so no auto-reconnect follows |
+| `[0x02, 0x03, …]` | file-upload header reply, 18 bytes — see [chunked transfer](/protocols/message-format#chunking) |
+| `[0x03, 0x00, bits]` | app runtime state: bit0 `isActive`, bit1 `isFocused`, bit2 `isLocked`, bit3 `isUiClosed`, bit4 `isService`, bit5 `isDisconn` (lets the device drop BLE on its own schedule → `modes.is_ble_auto_reconn`) |
+| `[0x04, 0x03, bits]` | half-duplex TX handoff: bit0 revokes, bit1 grants |
+
+### Device → client frames on `…-0001`
+
+`BleManager.stop(reconn_start, reconn_duration)` builds a **10-byte** frame and, while
+`status__conn == 1`, sends it **three times, 50 ms apart**, before tearing the link down
+(`ble_manager.dis:4934-5084`, **Confirmed**):
+
+| Frame | Meaning |
+| --- | --- |
+| `[0x00, 0x02]` + 8 zero bytes | plain disconnect intent |
+| `[0x00, 0x05]` + `<ii` | scheduled disconnect: `(reconn_start_ms, reconn_duration_ms)` — how long until the device advertises again, and for how long. The duration is clamped to `max(duration, 10000)`, so it is at least 10 s |
+| `[0x04, 0x02, 0x02]` + 9 zero bytes | TX handoff to the app, 12 bytes, **indicated** |
 
 ## Transmit modes
 
 `ble_manager` launches **two** transmit tasks on every connection, and `frame_schema_id`
-decides which one runs. Both exist unchanged in v5.0.2 and v5.0.3.
+decides which one runs. Both exist unchanged in v5.0.2 and v5.0.3. `BleManager.start`
+launches five tasks in all: `ble_recv_status`, `ble_recv_data`, `ble_send_data`,
+`ble_send_data_v2` and `ble_file_upload` (plus `ble_advertise` when not bursting, and
+`ble_handoff_wd` after each handoff).
 
 | | Legacy (`frame_schema_id == 0`) | Half duplex (`frame_schema_id > 0`) |
 | --- | --- | --- |
-| Task | `send_data` | `send_data_v2` (`send_data` exits: `Half-duplex is used; exiting send_data loop`) |
-| Device → app | `Characteristic.write(…, send_update=True)`, i.e. notification or indication per the client's CCCD | `Characteristic.indicate()`: `gatts_indicate`, then waits **500 ms** for the ATT confirmation |
+| Task | `send_data` | `send_data_v2` (`send_data` exits: `Half-duplex is used; exiting send_data loop (A)` / `(B)`) |
+| Device → app | `Characteristic.write(…, send_update=True)` → **`gatts_notify(0, handle, data)`** | `Characteristic.indicate()` → `gatts_indicate`, then waits **500 ms** for the ATT confirmation |
 | Delivery check | app-level acks (below) | ATT confirmation; an unconfirmed record is retried forever |
-| Live Data | every third loop pass (~3 s) | at most every 4 s, then TX handoff to the app |
+| Live Data | every third loop pass (~3 s once pacing settles) | at most every 4 s, then TX handoff to the app |
 | Works on macOS / iOS | **yes** (verified on hardware) | **no** (see warning) |
 
-**Legacy acks.** The legacy loop repeats a record every pass until the app acknowledges it
-with a data frame on `…-0002`:
+<Warning>
+  **The legacy loop always notifies — it never indicates, and it never updates the readable
+  value.** `Characteristic.write(data, send_update=False)` (`f_ble_ble_data.dis:528-563`)
+  does nothing unless `send_update` is truthy, and then branches on `self.is_indicate`,
+  which is `True` for all three characteristics. So it always takes the
+  `ble.gatts_notify(0, handle, data)` path; the `gatts_write` branch is dead code in this
+  firmware. A client that polls the characteristic with a GATT read will never see
+  application data — you must subscribe. **Confirmed.**
+</Warning>
+
+**Legacy loop pacing** (`send_data`, `ble_manager.dis:3768-4211`, **Confirmed**). The loop
+sleeps `delay` ms per pass, starting at **200 ms**, becoming **750 ms** after a Peer Sync
+and **1000 ms** once Live Data starts flowing; a Static Data send while `delay` is still
+200 adds an extra 700 ms sleep. Live Data goes out on every third pass —
+`toggle_3_call()` yields `1, 0, 0` forever — so ~3 s apart at the settled cadence.
+
+**Legacy acks.** The loop repeats a record every pass until the app acknowledges it with a
+data frame on `…-0002` (`recv_data_msgs` assigns `controller.<cat>_cmd_id = cmd_id`
+verbatim, so *any* command in a category clears its pending request):
 
 | Record | Repeated while | App ack | Effect |
 | --- | --- | --- | --- |
 | Static Data `(0x01,0x02)` | `static_data_cmd_id == 1` | `(0x01,0x00)` | clears it, sets `is_static_data_sent` |
 | WiFi list `(0x02,0x02)` | `wifi_cmd_id == 1` | `(0x02,0x00)` | clears it and the cached scan |
-| Peer Sync `(0x06,0x07)` | `peer_cmd_id == 1` (only after Static Data was acked) | any other cat-6 command, e.g. `(0x06,0x08)` | moves `peer_cmd_id` on |
+| Peer Sync `(0x06,0x07)` | `peer_cmd_id == 1` — skipped until `is_static_data_sent` (or a scheduled reconnect) | any other cat-6 command, e.g. `(0x06,0x08)` | moves `peer_cmd_id` on |
 
-Peer Pings are sent once each from the outbox (one per pass), and after 10 s of connection the
-loop paces itself behind ESP-NOW (`Wait for ESP-NOW Comms to be sent before sending BLE message`).
+`Controller.__init__` and `Controller.reset` both leave `peer_cmd_id = 1` with everything
+else `0`, so **a Peer Sync is pending from the start** — the app does not have to ask for
+the peer list, only to acknowledge Static Data first.
+
+Peer Pings are sent one per pass from `peer_outbox`, and only while the last Live Data was
+less than 10 s ago. After 10 s of connection the loop also paces itself behind ESP-NOW
+(`Wait for ESP-NOW Comms to be sent before sending BLE message`, then a 100 ms settle and
+`Good to send BLE`).
 
 <Warning>
   **Half duplex stalls on Apple platforms.** Both data characteristics support notify *and*
@@ -182,7 +414,7 @@ loop paces itself behind ESP-NOW (`Wait for ESP-NOW Comms to be sent before send
   record (here a Peer Sync) was retried ~60 times in 30 s, the device never handed TX back,
   and the session never progressed. The macOS Bluetooth log (`bluetoothd`) shows every
   indication dispatched but no confirmation. The legacy loop only uses `send_update`, which
-  honours the notification subscription, and works on the same Mac.
+  is a plain notification, and works on the same Mac.
 </Warning>
 
 ## Half-duplex & comms handoff
@@ -191,55 +423,109 @@ In half-duplex mode the link has an explicit transmit owner:
 
 | Symbol / log | Meaning |
 | --- | --- |
-| `is_tx_owner`, `is_tx_ready` | which side may transmit, and whether it is ready |
-| `Half-duplex is used; exiting send_data loop` | the legacy loop yields to `send_data_v2` |
-| `Generating comms handoff`, `BLE ACK Comms Handoff` | hand the radio between the two paths |
+| `evt_is_tx_owner`, `evt_is_tx_ready` | which side may transmit, and whether it is ready |
+| `Half-duplex is used; exiting send_data loop (A)` / `(B)` | the legacy loop yields to `send_data_v2` |
+| `Generating comms handoff`, `[send_data_v2] BLE ACK Comms Handoff \| Diff: {}ms` | hand the radio between the two paths |
 | `last_handoff_to_app`, `last_handoff_to_esp` | the two handoff targets: BLE (app) and ESP-NOW (mesh) |
-| `ble_handoff_watchdog`, `[BLE Watchdog] Handoff stall detected` | recover a stalled owner |
+| `ble_handoff_wd`, `[BLE Watchdog] Handoff stall detected — reclaiming TX priority` | recover a stalled owner |
 
 The BLE link to the app and the ESP-NOW mesh share a **single radio** on the device, so
 transmit ownership alternates between them. After sending Static Data, Peer Sync, Live Data,
-the WiFi list and queued Peer Pings, the device writes a **handoff frame** on `…-0001`,
-`[0x04, 0x02, 0x02, 0×9]` (12 bytes, flags bit 1 = TX to app), and clears both gates. It hands
-off at most every ~8 s (`handoff_cooldown` = 4 s after the last handoff, plus a 4 s gap).
-v5.0.3 adds `evt_tx_idle` and a **non-critical hold**: a non-critical owner such as the file
-uploader can delay the handoff by up to 2 s
-(`[send_data_v2] Non-critical hold expired ({}); handing off`).
+the WiFi list and queued Peer Pings, `send_data_v2` sets `evt_tx_idle`, builds the handoff
+frame with `gen_comms_handoff` and **indicates** it on `…-0001`:
 
-The app gives ownership back by writing `[0x04, 0x03, flags]` to `…-0001`: **bit 1 grants**
-(sets both gates) and **bit 0 revokes** (clears both; v5.0.3 also clears `evt_tx_idle`).
-`recv_status_msgs` steps the `ble_handoff_wd` watchdog on each grant. The watchdog runs every
-15 s and reclaims TX for the device if the app has held it without writing anything for 5 s.
+```text
+byte  0     1     2      3 .. 11
+     +-----+-----+------+----------------+
+     | 04  | 02  | 0x02 | 00 × 9         |   12 bytes
+     +-----+-----+------+----------------+
+                  flags = pack_flags((0,1,0,0,0,0,0,0)) → bit 1 = TX to app
+```
+
+Only once the indication is confirmed does it clear both gates, set
+`handoff_cooldown = ticks_add(now, 4000)`, record `last_handoff_to_app`, and launch
+`ble_handoff_wd`. Because the next handoff needs
+`ticks_diff(now, handoff_cooldown) >= 4000`, the device hands off **at most every ~8 s**.
+Before handing off it will also delay up to **2 s** for a non-critical owner such as the
+file uploader (`noncrit_owner`), logging
+`[send_data_v2] Non-critical hold expired ({}); handing off`. (`ble_manager.dis:3119-3768`,
+**Confirmed**.)
+
+The app gives ownership back by writing `[0x04, 0x03, flags]` to `…-0001`:
+
+- **bit 1 grants** — sets both gates, **stops** the `ble_handoff_wd` task, and records
+  `last_handoff_to_esp = ticks_ms()`;
+- **bit 0 revokes** — clears `evt_is_tx_owner`, `evt_is_tx_ready` and `evt_tx_idle`.
+
+Both bits are read independently, and revoke is applied before grant.
+
+**The watchdog** (`ble_handoff_watchdog`, `ble_manager.dis:1937-2070`, **Confirmed**)
+sleeps 15 s, then exits immediately if the link is closing, if the schema went back to 0,
+if the device already owns TX, or if no handoff has happened. It calls the link stalled
+when the app has not handed TX back since the last handoff to it
+(`last_handoff_to_esp <= last_handoff_to_app`). Even then it grants a reprieve: if the app
+wrote *anything* in the last 5 s **and** the handoff is less than 60 s old, it sleeps
+another 5 s and re-checks. Otherwise it logs
+`[BLE Watchdog] Handoff stall detected — reclaiming TX priority`, sets both gates and
+restarts the 4 s cooldown.
 
 ## Keys & bonding
 
 <Warning>
-  Bonding is **optional and not required** for the phone-app link. The firmware never forces
-  pairing on the app connection — an unpaired central works. The infrastructure below only
-  persists optional reconnect secrets.
+  Bonding is **optional and not required** for the phone-app link. The firmware never
+  initiates pairing and never requires an encrypted link — an unpaired central works. The
+  infrastructure below only persists a reconnect secret if the *central* chooses to bond.
 </Warning>
 
-BLE bonding keys are persisted in `ble_keys.bin`. Secrets are cached in RTC memory and
-written through to VFS in a two-tier restore (`Saving BLE secrets to rtc memory`,
-`Saving BLE secrets to VFS`, `BLE secrets found in RTC memory, saving to VFS`,
-`Checking for BLE secrets on VFS`; `save_ble_secrets`, `restore_ble_secrets_vfs`,
-`add_secret`), so bonds can survive resets when used.
+The IRQ handler does implement the NimBLE secret store (**Confirmed**,
+`f_ble_ble_lite.dis:900-1000`):
+
+- `_IRQ_SET_SECRET` (30) **clears** `b_lite.secrets` and appends a single
+  `(sec_type, bytes(key), bytes(value))` tuple — the device remembers exactly one bond.
+- `_IRQ_GET_SECRET` (29) returns `secrets[0][2]` when the key is `None`, else scans the
+  list for a matching key.
+
+`BleCore.save_sess` (called on every successful connection) serialises that one secret into
+a 9-byte header plus key and value — magic `0xA7 0x74`, category `1`, lengths at offsets 7
+and 8 — and stores it in RTC memory category 1 (`Saving BLE secrets to rtc memory`).
+`BleCore.reload_sess` reads it back and replays it through `b_lite.add_secret`.
+`device_power.restore_ble_secrets_vfs` / `save_ble_secrets` mirror the same blob to
+`ble_keys.bin` on the VFS so the bond survives a power cycle, not just a reset
+(`Saving BLE secrets to VFS`, `BLE secrets found in RTC memory, saving to VFS`,
+`Checking for BLE secrets on VFS`). `compass.py` logs `Can't load BLE secrets` when that
+fails.
 
 The `gap_pair`, `gap_passkey`, `is_pairing`, `cancel_pairing` symbols exist in the image but
-are never invoked from the app connect path (the IRQ handler has no passkey/encryption branch).
-The separate `add_new_bond` / `create_promo_bond` symbols belong to the **Totem-to-Totem**
-peer auto-bonding mechanism (`[create_promo_bond] Created Bond!`,
-`Creating promo activation bond`, `is_promo_bond`) — see the mesh
-[peer bonding](/protocols/espnow-mesh) page, not app pairing.
+are never invoked from the app connect path. The separate `add_new_bond` /
+`create_promo_bond` symbols belong to the **Totem-to-Totem** peer auto-bonding mechanism
+(`[create_promo_bond] Created Bond!`, `Creating promo activation bond`, `is_promo_bond`) —
+see the mesh [peer bonding](/protocols/espnow-mesh) page, not app pairing.
+
+## Watchdog interaction
+
+`BleManager.start` sets `wdt_mgr.set_condition(WdtConditions.BLE_ACTIVE, True)` as its very
+first action, and the condition is cleared in `_on_disconnect`, in `burst_cleanup`, and at
+the end of `start_reconnect` when BLE really is down. While BLE is up the hardware watchdog
+is therefore blocked — which is why a hung link that the app never confirms is treated as a
+fault worth scheduling a disconnect for. **Confirmed.**
 
 ## OTA over BLE
 
-`ota_ble.py` + `svc_ble_transfer.py` carry a firmware image over the same chunked GATT
-transport for app-driven Bluetooth updates (`Starting OTA Bluetooth connection`,
-`Connected to OTA BLE`, `cb_start_ota`, `close_ota`). This is the live "update via the
-app" path. The legacy WiFi-hotspot OTA path has been retired (`OTA Hotspot has been
-sunset`) and is no longer a live fallback. See [OTA](/subsystems/ota).
+`ota_ble.py` carries a firmware image over the same GATT service using the
+[chunking](/protocols/message-format#chunking) layouts: `OtaBle` rebuilds `BleCore`,
+advertises as `totem` with a 60 s window, raises the MTU with `ble.config(mtu=512)`, sizes
+its buffers to 92 / 64, and receives chunks into a
+`FileTransfer(save_to=SAVE_TO_OTA)` or `SAVE_TO_VFS`
+(`Starting OTA Bluetooth connection`, `Current MTU: {}`, `Connected to OTA BLE`,
+`Received request for file transfer`). This is the live "update via the app" path. The
+legacy WiFi-hotspot OTA path has been retired (`OTA Hotspot has been sunset`) and is no
+longer a live fallback. See [OTA](/subsystems/ota).
 
-A Totem can also trigger OTA on nearby peers over the BLE/ESP-NOW mesh — the "demigod"
+`svc_ble_transfer.py` is the *service wrapper* that runs that mode: it instantiates
+`OtaBle`, enables Bluetooth and watches memory (`Running BLE Transfer`, `Enable
+Bluetooth`), rather than implementing the transfer itself.
+
+A Totem can also trigger OTA on nearby peers over the ESP-NOW mesh — the "demigod"
 fleet push-OTA (`Sending OTA command to update nearby devices`, `Demigod to update nearby
-devices`; `demigod_gen_ota_update`, `enable_demi_daemon`, `demi_god.py`).
+devices`; `demigod_gen_ota_update`, `enable_demi_daemon`, `demi_god.py`). The app asks for
+that with a `(0x02, 0x05)` write on the data characteristic.

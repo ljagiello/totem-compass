@@ -1,15 +1,85 @@
 ---
 title: "Module reference"
-description: "All 94 frozen MicroPython modules in the v5.0.3 image, with inferred roles."
+description: "All 94 frozen MicroPython modules in the v5.0.3 image, with a per-module decode-coverage rating."
 ---
 
-Every module below is frozen into the firmware. Names are exact (from the frozen module
-registry); roles are inferred from symbols, string constants, and log lines.
+Every module below is frozen into the firmware. Names are exact, taken from the frozen module
+registry. **Roles are not all equally trustworthy**, so each one carries a status marker saying
+how it was established.
+
+## How much of this firmware is actually decoded?
+
+<Note>
+  This page used to say roles were "inferred from symbols, string constants, and log lines"
+  without saying which ones. That understated some modules and overstated others. The table
+  below is the result of an explicit audit: every module was checked against its
+  disassembly in `re/v5.0.3/mpy/*.dis`.
+</Note>
+
+| Status | Meaning |
+| --- | --- |
+| **DECODED** | Someone read the bytecode and documented actual behaviour — named functions, constant *values*, control flow. Trust it. |
+| **PARTIAL** | Real internals are documented and verified, but the module's main logic is not. Usually one surface (a wire format, a v5.0.3 delta) was decoded and the rest was left. |
+| **NAME-ONLY** | The role is a guess from the module name and a few strings. **Nothing here has been verified against bytecode.** Treat as a hypothesis. |
+| **STOCK** | Upstream MicroPython or `micropython-lib`, not Totem code. Decoding it would just re-document MicroPython. |
+
+The 94 modules split into **68 Totem application modules**, **23 stock MicroPython
+modules**, and **3 empty package `__init__.py` files**. Coverage of the Totem code —
+the only part worth decoding — is:
+
+| Status | Modules | Share of modules | Lines of disassembly | Share of bytecode |
+| --- | --- | --- | --- | --- |
+| DECODED | 28 | 41% | 50,828 | 55% |
+| PARTIAL | 27 | 40% | 31,817 | 35% |
+| NAME-ONLY | 13 | 19% | 9,534 | 10% |
+
+<Warning>
+  **The firmware is not "fully decoded."** Roughly **55%** of the Totem bytecode is
+  genuinely understood; about **35%** is partly understood; about **10%** — thirteen
+  modules, 9,534 lines — is documented by name only and has never been read.
+
+  The inventory, by contrast, *is* complete: all 94 modules are accounted for, and
+  every module appears somewhere in these docs. Completeness of the list is not the
+  same as completeness of the analysis.
+</Warning>
+
+The counts above are module counts and raw disassembly line counts, which are a proxy for
+volume, not for importance. The ranked gap list below weights by how much other code
+depends on each module.
+
+## What is left to do, in priority order
+
+Ranked by disassembly size × number of importing modules — that is, how much of the rest
+of the firmware is resting on code nobody has read.
+
+| # | Module | Lines | Importers | Status | What is in there, and why it matters |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `f_lib/logger.py` | 688 | **41** | NAME-ONLY | The most-imported module in the entire image. Owns `errors.log` on flash, so it is the source of every log artifact the other pages quote. |
+| 2 | `project_data.py` | 2,642 | 27 | PARTIAL | The global config/constants object. Many constants are documented; the `Config`/`ActiveModes` persistence and mutation paths are not. |
+| 3 | `imu_fusion_auto.py` | 4,392 | 6 | PARTIAL | Calibration state machine is documented; the actual Madgwick fusion maths and the 2D↔3D switch criteria are not. Largest single undecoded body of logic. |
+| 4 | `f_lib/file_mgr.py` | 1,470 | 18 | PARTIAL | Only the v5.0.3 additions (`gen_file_hash`, `get_oldest_file`) are documented. The VFS layout, log rotation and `save_obj`/`rebuild_obj` config serialisation are not. |
+| 5 | `f_lib/bitwise.py` | 526 | 18 | NAME-ONLY | The bit-packing primitives every wire format on this site is built from: `pack_bits`, `pack_2bit_value`, `pack_flags`, `pack_utf8_str` and their inverses. The formats are documented; the primitives are not. |
+| 6 | `f_lib/requests.py` | 1,772 | 4 | NAME-ONLY | Full async HTTP client with a `Downloader` class, `SocketWrapper`, and REST verbs. Carries every cloud request the device makes. |
+| 7 | `f_ota/hotspot.py` | 1,776 | 0 | NAME-ONLY | A complete **HTTP + WebSocket server** (`ws_handshake`, `websockets`, `parse_request`, `get_file`, `get_mime`, `get_device_info`). Nothing imports it, but it is in the shipped image. Largest unexamined network-facing surface. |
+| 8 | `f_lib/rtc_v2.py` | 815 | 13 | PARTIAL | Now correctly identified (see below), but its calendar maths are undocumented. |
+| 9 | `f_lib/task_mgr.py` | 305 | 28 | PARTIAL | Second-most-imported module. The scheduling/cancellation semantics that the concurrency model rests on are asserted, not decoded. |
+| 10 | `debugger.py` | 1,192 | 2 | NAME-ONLY | Not "debug hooks" — an on-device telemetry recorder with its own log writer and rotation (`WriteLog`, `_scheduled_rotation`, `rotate_logs`, `save`). |
+| 11 | `ble_controller.py` | 924 | 2 | NAME-ONLY | The BLE enable/disable blocker engine (`ble_check_loop`, `_should_enable`, `_start_ble`, `stop_ble`, `set_reconn_params`). **The only module that changed in v5.0.3 and has never been read** — see [what changed](/firmware/changes-5.0.3). |
+| 12 | `ubx_gnss.py` | 3,060 | 1 | PARTIAL | UBX framing and a few constants are documented; message parsing and AssistNow handling are not. |
+| 13 | `compassing.py` | 1,956 | 3 | PARTIAL | Heading maths partly documented; peer-proximity LED mapping is not. |
+| 14 | `f_lib/wifi.py` | 940 | 2 | NAME-ONLY | `WiFi` class with `connect_to_known`, `scan`, `get_nearby_networks`. Superseded by `wifi_v2` but still imported by `f_ota/`. |
+| 15 | `f_lib/tarfile.py` | 725 | 1 | NAME-ONLY | The `.tgz` reader the asset/OTA path depends on. |
+
+The remaining NAME-ONLY modules are small or unreferenced: `f_lib/async_helpers.py` (348),
+`f_lib/unpack.py` (229), `peer_auto_bond.py` (190, single function `bond_to_group`, no
+importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
+
+## Registry notes
 
 <Note>
   The v5.0.3 frozen-module registry (`mp_frozen_names`) holds exactly **94** entries — the
   modules listed on this page. Two more `.py` files, `boot.py` and `webrepl_cfg.py`,
-  exist only as on-flash VFS filesystem paths (`./boot.py`, `./webrepl_cfg.py`) and are
+  exist only as on-flash VFS filesystem paths (`./boot.py`, `./webrepl_cfg.py`), and are
   **not** frozen, which is why some tallies of the image reach 96.
 
   v5.0.2 had **96** frozen modules (98 with the two VFS files). v5.0.3 removed two that
@@ -17,145 +87,228 @@ registry); roles are inferred from symbols, string constants, and log lines.
   implementation) and `io_mgr.py` (only `import io`).
 </Note>
 
+<Note>
+  **Five more modules are imported but not present.** `project_main.start` imports
+  `mpy_dev.dev_comms`, `mpy_dev.dev_imu`, `mpy_dev.dev_leds`, `mpy_dev.dev_rest`,
+  `mpy_dev.dev_mem_release` and `web_bluetooth`. None of them is frozen into the image
+  and none is on the VFS, so those branches raise `ImportError` on a production device.
+  They are developer bench paths — see [boot flow](/firmware/boot-flow). *(CONFIRMED: the
+  `IMPORT_NAME` opcodes are in `project_main.dis`; no matching module exists in the 94.)*
+</Note>
+
 ## Top-level application
 
-| Module | Role |
-| --- | --- |
-| `main.py` | application entry after boot |
-| `project_main.py` | project-specific top-level orchestration |
-| `project_data.py` | project constants / configuration data; `ActiveModes` flags (v5.0.3 adds `ble_ticks_app_internet`, `is_ble_log_upload`, `is_file_upload_test`, `is_nav_log_fast_rotate`) |
-| `compass.py` | top-level compass state machine |
-| `compassing.py` | compass math (heading, 2D/3D, bias) |
-| `new_vibe.py` | Vibe Mode — microphone-driven sound-reactive ring LED effect (`mic.read_u16` → `ring.buf`; `newvibe-1.10`, v5.0.2: `newvibe-1.9`). Not magnetometer calibration |
-| `chat_msg.py` | peer-to-peer chat messages |
-| `stats.py` | runtime statistics |
-| `debugger.py` | on-device debug hooks |
-| `demi_god.py` | privileged broadcast command system |
+| Module | Status | Role |
+| --- | --- | --- |
+| `main.py` | DECODED | Entire file is `try: from ota_daemon import *` / `except ImportError: pass`. Nothing else. |
+| `ota_daemon.py` | DECODED | Defines `start_ota(cmd, version, url, networks)`, calls `firmware_rollback.cancel()` to mark the running slot valid, then `from project_main import *` inside a `try` that prints `Project Exception Occurred` on failure |
+| `project_main.py` | DECODED | Module body ends with `rtc_mem.reload()` then `start(1)`; `start(cmd, opt)` dispatches the boot modes. See [boot flow](/firmware/boot-flow) |
+| `project_data.py` | PARTIAL | Project constants / configuration data; `ActiveModes` flags (v5.0.3 adds `ble_ticks_app_internet`, `is_ble_log_upload`, `is_file_upload_test`, `is_nav_log_fast_rotate`). Also owns the RTC device snapshot (`get_device_snapshot` / `set_device_snapshot`) |
+| `compass.py` | DECODED | Top-level compass state machine — the largest application module after `espnow_conn_v2` |
+| `compassing.py` | PARTIAL | Compass math (heading, 2D/3D, bias) and peer-proximity LED mapping |
+| `new_vibe.py` | DECODED | Vibe Mode — microphone-driven sound-reactive ring LED effect (`mic.read_u16` → `ring.buf`; `newvibe-1.10`, v5.0.2: `newvibe-1.9`). Not magnetometer calibration |
+| `chat_msg.py` | PARTIAL | Peer-to-peer chat messages (`Messenger`, `gen_msg_uid`, `MSG_IN_BUFF`, `MSG_OUT_BUFF`). **Imported by no module in v5.0.3** |
+| `stats.py` | PARTIAL | Runtime statistics counters |
+| `debugger.py` | NAME-ONLY | On-device telemetry recorder with its own log writer and rotation — *not* decoded |
+| `demi_god.py` | DECODED | Privileged broadcast command system |
 
 ## Boot & filesystem
 
-| Module | Role |
-| --- | --- |
-| `_boot.py` | first script run at MicroPython start |
-| `inisetup.py` | first-boot filesystem setup |
-| `flashbdev.py` | flash block device for the VFS |
+| Module | Status | Role |
+| --- | --- | --- |
+| `_boot.py` | STOCK | Stock esp32 `_boot`: mounts `bdev` at `/`, falls back to `inisetup.setup()` on `OSError` |
+| `inisetup.py` | STOCK* | Stock esp32 `inisetup`, **with one Totem change**: `setup()` formats LittleFS2 and then writes *both* `boot.py` (stock template) and `main.py` (the `ota_daemon` snippet). Upstream writes only `boot.py` |
+| `flashbdev.py` | STOCK | Flash block device for the VFS |
 
 ## Navigation
 
-| Module | Role |
-| --- | --- |
-| `ubx_gnss.py` | u-blox UBX GNSS driver |
-| `nav_helpers.py` | navigation math helpers |
-| `nav_logger.py` | navigation event logging (v5.0.3: fast `events.bin` rotation at ≥1024 B when `is_nav_log_fast_rotate`) |
-| `imu_fusion_auto.py` | accel/gyro sensor fusion and 2D/3D magnetometer calibration; the sole fusion module in v5.0.3 (byte-identical to v5.0.2), defines `_spin_deg` |
-| `mag_wmm_data.py` | World Magnetic Model data |
-| `task_mag_declination.py` | periodic declination recompute |
+| Module | Status | Role |
+| --- | --- | --- |
+| `ubx_gnss.py` | PARTIAL | u-blox UBX GNSS driver |
+| `nav_helpers.py` | DECODED | Navigation math helpers (`get_azimuth`, `get_heading_mot`, distance, odometer) |
+| `nav_logger.py` | PARTIAL | Navigation event logging (v5.0.3: fast `events.bin` rotation at ≥1024 B when `is_nav_log_fast_rotate`) |
+| `imu_fusion_auto.py` | PARTIAL | Accel/gyro sensor fusion and 2D/3D magnetometer calibration; the sole fusion module in v5.0.3 (byte-identical to v5.0.2), defines `_spin_deg` |
+| `mag_wmm_data.py` | DECODED | World Magnetic Model data — a single constant, `WMM_2025`. Pure data, nothing to decode |
+| `task_mag_declination.py` | PARTIAL | Periodic declination recompute against `WMM_2025` |
 
 ## LEDs
 
-| Module | Role |
-| --- | --- |
-| `leds.py` | LED behavior / status mapping |
-| `animations.py` | animation definitions |
-| `apa106.py` | APA106 addressable-LED driver |
-| `neopixel.py` | NeoPixel-style driver shim |
+| Module | Status | Role |
+| --- | --- | --- |
+| `leds.py` | DECODED | LED behaviour / status mapping (`LightStrip`). **This is the live LED path**: it imports `NeoPixel` from `f_lib/neopixel_v2.py` |
+| `animations.py` | PARTIAL | Animation definitions |
+| `f_lib/neopixel_v2.py` | PARTIAL | The addressable-LED driver actually used, via `leds.py` |
+| `neopixel.py` | STOCK / **DEAD** | Stock MicroPython NeoPixel driver. Imported only by `apa106.py`; nothing else in the image imports it |
+| `apa106.py` | STOCK / **DEAD** | Stock esp32 `apa106`: 49 lines, `class APA106(NeoPixel)` overriding only `ORDER = (0, 1, 2, 3)`. **No module imports it.** Dead code in v5.0.3 |
+
+<Note>
+  **`apa106.py` is not the LED driver.** *(CONFIRMED)* `leds.py` opens with
+  `IMPORT_NAME f_lib.neopixel_v2` / `IMPORT_FROM NeoPixel`. `apa106.py` imports
+  `neopixel`, and a search of all 94 disassemblies for `IMPORT_NAME apa106` and
+  `IMPORT_NAME neopixel` returns only `apa106.dis` itself. Both modules are unreachable
+  in v5.0.3. Earlier revisions of these docs presented `apa106.py` as the driver; that
+  was wrong.
+</Note>
 
 ## Input & sensors
 
-| Module | Role |
-| --- | --- |
-| `button.py` | both physical buttons, power and SOS (`AsyncButton`); v5.0.3 replaces the 50 ms `debounce` coroutine with a 30 ms `_edge_ms` lockout |
-| `touch_button_v2.py` | capacitive Touch Crystal |
-| `peripherals.py` | peripheral bring-up |
-| `ds18x20.py` | DS18B20 temperature sensor |
-| `onewire.py` | 1-Wire bus |
+| Module | Status | Role |
+| --- | --- | --- |
+| `button.py` | DECODED | Both physical buttons, power and SOS (`AsyncButton`); v5.0.3 replaces the 50 ms `debounce` coroutine with a 30 ms `_edge_ms` lockout |
+| `touch_button_v2.py` | PARTIAL | Capacitive Touch Crystal |
+| `peripherals.py` | DECODED | Peripheral bring-up (`DeviceLeds`, `pwr_gate_pin`, `get_batt_pct`) |
+| `ds18x20.py` | STOCK | Stock DS18B20 temperature sensor driver |
+| `onewire.py` | STOCK | Stock 1-Wire bus driver |
 
 ## Bluetooth LE
 
-| Module | Role |
-| --- | --- |
-| `ble_controller.py` | high-level BLE control (`BleCtrl`, blockers) |
-| `ble_core.py` | core BLE glue |
-| `ble_manager.py` | connection/session manager (`BleManager`, `send_data_v2`, `gen_live_data`) |
-| `svc_ble_transfer.py` | chunked transfer GATT service |
-| `ota_ble.py` | OTA over BLE (v5.0.3 imports `CHUNK_HDR_FMT` / `CHUNK_HDR_SZ` from `f_ble.chunking`) |
+| Module | Status | Role |
+| --- | --- | --- |
+| `ble_controller.py` | NAME-ONLY | BLE enable/disable blocker engine. The class is `BleController`; `BleBlockers` is real. **`BleCtrl` is only a log-line prefix, not a class** — an earlier revision of this page listed it as one |
+| `ble_core.py` | DECODED | Core BLE glue — characteristic/service registration, secrets |
+| `ble_manager.py` | DECODED | Connection/session manager (`BleManager`, `send_data_v2`, `gen_live_data`, `execute_cmd`) |
+| `svc_ble_transfer.py` | PARTIAL | Chunked transfer GATT service; entered at boot via the RTC category-0 handoff |
+| `ota_ble.py` | DECODED | OTA over BLE (v5.0.3 imports `CHUNK_HDR_FMT` / `CHUNK_HDR_SZ` from `f_ble.chunking`) |
 
 ## ESP-NOW mesh & peers
 
-| Module | Role |
-| --- | --- |
-| `espnow.py` | ESP-NOW wrapper/shim (origin uncertain; stock MicroPython ships `espnow` as a C module) |
-| `espnow_conn_v2.py` | connection/session layer; message schema maps (`TOTEM_MSG_MAP`, `EXTENDED`, `COMM_SPEED`) |
-| `espnow_msg.py` | ESP-NOW message builders (`*_gen_*` payload generators, `pack_flags`, `rot13`) |
-| `aioespnow.py` | asyncio ESP-NOW (`AIOESPNow`) |
-| `peer_auto_bond.py` | automatic peer bonding |
-| `peer_helpers.py` | peer utilities (`is_peer_stale`: 7200 s in v5.0.3, v5.0.2: 14400 s) |
-| `peer_management.py` | peer registry / lifecycle |
+| Module | Status | Role |
+| --- | --- | --- |
+| `espnow.py` | STOCK | Stock MicroPython esp32 `espnow.py`: `from _espnow import *`, then `class ESPNow(ESPNowBase)` adding `irecv`/`recv`/`irq`/`__iter__`. *(This resolves the "origin uncertain" note in earlier revisions — it is the upstream Python wrapper over the `_espnow` C module.)* |
+| `espnow_conn_v2.py` | DECODED | Connection/session layer; message schema maps (`TOTEM_MSG_MAP`, `EXTENDED`, `COMM_SPEED`). Largest module in the image; the protocol surface is decoded, the radio queue internals less so |
+| `espnow_msg.py` | DECODED | ESP-NOW message builders (`*_gen_*` payload generators, `pack_flags`, `rot13`) |
+| `aioespnow.py` | STOCK | Stock asyncio ESP-NOW wrapper (`AIOESPNow`) |
+| `peer_auto_bond.py` | NAME-ONLY | One function, `bond_to_group`. No module imports it |
+| `peer_helpers.py` | PARTIAL | Peer utilities (`is_peer_stale`: 7200 s in v5.0.3, v5.0.2: 14400 s) |
+| `peer_management.py` | PARTIAL | Peer registry / lifecycle; `auto_bond_to_peers` is decoded, the rest is not |
 
 ## Upload & OTA
 
-| Module | Role |
-| --- | --- |
-| `data_upload_v2.py` | app data upload over WiFi/HTTP (`UploadData`, `upload_file`, `API_ENDPOINT`) |
-| `ota_block_writer.py` | write image chunks to the OTA slot |
-| `ota_callback.py` | OTA progress/state callbacks |
-| `ota_daemon.py` | background OTA task |
+| Module | Status | Role |
+| --- | --- | --- |
+| `data_upload_v2.py` | PARTIAL | App data upload over WiFi/HTTP (`UploadData`, `upload_file`, `API_ENDPOINT`) |
+| `ota_block_writer.py` | DECODED | Write image chunks to the OTA slot (`OtaWriter`, `BlockDev`) |
+| `ota_callback.py` | DECODED | OTA progress/state callbacks and their LED colours (`PROGRESS_RGB`, `ERROR_RGB`, `LOG_RGB`) |
+| `ota_daemon.py` | DECODED | Background OTA entry — see *Top-level application* above |
 
 ## Power & system
 
-| Module | Role |
-| --- | --- |
-| `device_power.py` | power state machine, battery health |
-| `wdt_manager.py` | watchdog management (conditions/blockers; v5.0.3 adds the `WLAN_KICK` blocker) |
-| `event_manager.py` | pub/sub event bus |
+| Module | Status | Role |
+| --- | --- | --- |
+| `device_power.py` | DECODED | Power state machine, battery health, and `shut_down_tasks(method, is_save_config)` — the only power-down path. See [boot flow](/firmware/boot-flow) |
+| `wdt_manager.py` | DECODED | Watchdog management (conditions/blockers; v5.0.3 adds the `WLAN_KICK` blocker) |
+| `event_manager.py` | PARTIAL | Pub/sub event bus (`block` / `unblock`) |
 
 ## `f_ble/` package
 
-| Module | Role |
-| --- | --- |
-| `f_ble/__init__.py` | package init |
-| `f_ble/peripheral.py` | GATT peripheral + advertising |
-| `f_ble/ble_lite.py` | lightweight message model |
-| `f_ble/ble_data.py` | message (de)serialization |
-| `f_ble/chunking.py` | payload fragmentation (`CHUNK_HDR_FMT = '<HHiH'`, `CHUNK_HDR_SZ = 12`) |
-| `f_ble/file_upload.py` | resumable chunked file transfer |
+| Module | Status | Role |
+| --- | --- | --- |
+| `f_ble/__init__.py` | — | Empty package init (15 lines) |
+| `f_ble/peripheral.py` | DECODED | GATT peripheral + advertising (`gen_advertise_payload`) |
+| `f_ble/ble_lite.py` | DECODED | Lightweight GATT peripheral (`BleLite`) |
+| `f_ble/ble_data.py` | DECODED | Message (de)serialisation; `Characteristic`, `Service`, `Conn`, `BleErr` |
+| `f_ble/chunking.py` | DECODED | Payload fragmentation (`CHUNK_HDR_FMT = '<HHiH'`, `CHUNK_HDR_SZ = 12`) |
+| `f_ble/file_upload.py` | DECODED | Resumable chunked file transfer (`FileUploader`, `RES_*` result codes) |
 
 ## `f_ota/` package
 
-| Module | Role |
-| --- | --- |
-| `f_ota/__init__.py` | package init |
-| `f_ota/main.py` | OTA orchestration |
-| `f_ota/hotspot.py` | WiFi hotspot updater |
-| `f_ota/install_ota.py` | write + activate new slot |
-| `f_ota/config.py` | OTA configuration |
-| `f_ota/system.py` | system helpers; `release_code` `5.0.3`, `release_id` 339 (v5.0.2: 335) |
-| `f_ota/f_assets.py` | asset fetch/apply |
+| Module | Status | Role |
+| --- | --- | --- |
+| `f_ota/__init__.py` | — | Empty package init (15 lines) |
+| `f_ota/main.py` | PARTIAL | OTA orchestration (`install_firmware_update`, `get_release_from_api`) |
+| `f_ota/hotspot.py` | NAME-ONLY | An HTTP + WebSocket server, not just a "hotspot updater". Nothing imports it. **Largest unexamined network surface in the image** |
+| `f_ota/install_ota.py` | PARTIAL | Write + activate new slot |
+| `f_ota/config.py` | PARTIAL | OTA configuration and status (`OtaStatus`, `OtaErr`) |
+| `f_ota/system.py` | DECODED | System helpers; `release_code` `5.0.3`, `release_id` 339 (v5.0.2: 335) |
+| `f_ota/f_assets.py` | PARTIAL | Asset fetch/apply |
 
 ## `f_lib/` package
 
-| Module | Role |
-| --- | --- |
-| `f_lib/__init__.py` | package init |
-| `f_lib/wifi.py`, `f_lib/wifi_v2.py` | WiFi station/AP control |
-| `f_lib/requests.py` | HTTP client |
-| `f_lib/task_mgr.py` | asyncio task manager |
-| `f_lib/async_helpers.py` | async utilities |
-| `f_lib/generators.py` | generator helpers |
-| `f_lib/rtc_mem.py`, `f_lib/rtc_v2.py` | RTC-retained memory |
-| `f_lib/file_mgr.py` | file management; v5.0.3 adds async SHA-256 `gen_file_hash(path, buff=None, yield_every=4)` and `get_oldest_file(prefix)` (used by `remove_oldest_log`) |
-| `f_lib/gzip.py`, `f_lib/tarfile.py`, `f_lib/unpack.py` | archive handling for `.tgz` OTA |
-| `f_lib/firmware_ota.py` | OTA slot writing |
-| `f_lib/firmware_rollback.py` | rollback logic |
-| `f_lib/firmware_helpers.py` | firmware helpers |
-| `f_lib/neopixel_v2.py` | LED driver v2 |
-| `f_lib/bitwise.py` | bit manipulation |
-| `f_lib/helpers.py` | misc utilities |
-| `f_lib/logger.py` | structured logging |
+| Module | Status | Role |
+| --- | --- | --- |
+| `f_lib/__init__.py` | — | Empty package init (15 lines) |
+| `f_lib/wifi.py` | NAME-ONLY | `WiFi` class: `connect`, `connect_to_known`, `scan`, `get_nearby_networks`, `power_on`. Used by `f_ota/` |
+| `f_lib/wifi_v2.py` | PARTIAL | Station/AP control with power/protocol modes (`MODE_ESP_NOW_WIFI`, `PM_PERF`, `PM_PWRSAVE`) |
+| `f_lib/requests.py` | NAME-ONLY | Async HTTP client: `Response`, `SocketWrapper`, `Downloader`, and `get`/`post`/`put`/`patch`/`delete`/`head`/`rest` |
+| `f_lib/task_mgr.py` | PARTIAL | asyncio task manager — 28 importers, semantics not decoded |
+| `f_lib/async_helpers.py` | NAME-ONLY | `EventTimeout` (a context manager with `_countdown`) and `AsyncDeque` |
+| `f_lib/generators.py` | PARTIAL | Generator helpers (`breathe_effect`, `sos_timing`) |
+| `f_lib/rtc_mem.py` | DECODED | **The RTC-memory allocator.** `RtcMem` over `machine.RTC().memory()`. See the frame format below |
+| `f_lib/rtc_v2.py` | PARTIAL | **Not RTC-memory storage.** `class RTCv2(machine.RTC)` adding calendar/timestamp maths |
+| `f_lib/file_mgr.py` | PARTIAL | File management; v5.0.3 adds async SHA-256 `gen_file_hash(path, buff=None, yield_every=4)` and `get_oldest_file(prefix)` (used by `remove_oldest_log`) |
+| `f_lib/gzip.py` | NAME-ONLY | gzip decompression for `.tgz` OTA |
+| `f_lib/tarfile.py` | NAME-ONLY | `TarFile` / `TarInfo` / `FileSection` reader |
+| `f_lib/unpack.py` | NAME-ONLY | `unzip_tar` / `unpack_tar` — glues `gzip` to `tarfile` |
+| `f_lib/firmware_ota.py` | PARTIAL | OTA slot writing (`BlockDevWriter`, `from_firmware_file`) |
+| `f_lib/firmware_rollback.py` | DECODED | Rollback logic (`mark_app_valid_cancel_rollback`, `OTA_MIN`/`OTA_MAX`) |
+| `f_lib/firmware_helpers.py` | NAME-ONLY | `running_partition` |
+| `f_lib/neopixel_v2.py` | PARTIAL | The LED driver `leds.py` actually uses |
+| `f_lib/bitwise.py` | NAME-ONLY | Bit manipulation — see below |
+| `f_lib/helpers.py` | PARTIAL | Misc utilities (`rot13`, `fallback`) |
+| `f_lib/logger.py` | NAME-ONLY | Structured logging — see below |
+
+### `f_lib/rtc_mem.py` — RTC-memory frame format *(CONFIRMED)*
+
+`RtcMem` packs variable-length frames into `machine.RTC().memory()`. `_rebuild_contents`
+walks the buffer and builds `contents`, a `dict` mapping **category id → list of byte
+offsets**:
+
+```text
+offset  size  meaning
+  +0      2   magic, b'\xa7t'
+  +2      1   category id
+  +3      1   category-specific byte
+  +4      1   payload length N
+  +5      N   payload
+```
+
+The walk is `i += 5 + mem[i+4]`, stopping at `mem_size` or the end of the buffer.
+
+Three category ids are in use — not two:
+
+| Cat | Written by | Read by | Contents |
+| --- | --- | --- | --- |
+| **0** | `ble_manager.execute_cmd` | `project_main.start` | Reboot-into-service handoff. BLE command 3 or 4 writes a 5-byte frame with `frame[3]` set to 1 or 2 and zero payload, then soft-resets. On the next boot `start` reads it, deletes it, and runs `asyncio.run(svc_ble_transfer.svc_manager(cmd_id=frame[3]))` |
+| **1** | `device_power.save_ble_secrets` | `ble_core`, `device_power` | A raw mirror of `ble_keys.bin` — the BLE pairing secrets, so they survive a reset without a VFS write |
+| **2** | `project_data.set_device_snapshot` | `project_data.get_device_snapshot` | A 7-byte device snapshot: 5-byte header plus a 2-byte payload whose second byte is `pack_flags(...)`. Bit 0 = BLE active or disconnect scheduled; bit 2 = GNSS location available or phone GNSS in use |
+
+### `f_lib/logger.py` — what is actually in it *(CONFIRMED from `obj_table`)*
+
+Not decoded as a module, but its constants are readable directly and are worth recording,
+because every log line quoted elsewhere on this site is produced here:
+
+- **Levels**, in order: `('NOT', 'DBG', 'INF', 'WAR', 'ERR', 'EXC')` — index 0–5, selected
+  by `set_print_level`.
+- **`ErrCode` members**: `InvalidAuth`, `LimitReached`, `OperationFailed`, `ParamMissing`,
+  `ParamInvalid`, `HardwareErr`, `InvalidLength`, `InvalidValue`.
+- **On-flash log file**: `errors.log`. `print_logs` brackets its output with
+  `--- Logged Events ---` / `--- End Logged Events ---`, and reports
+  `No log file on device` when absent.
+- **Record format**: `'{} | {} | {} | {} | {}'` (five fields).
+- Public API: `debug`, `info`, `warn`, `err`, `exc`, `print_logs`, `set_print_level`,
+  plus internal `_log` / `_write`.
+
+### `f_lib/bitwise.py` — the packing primitives *(function list CONFIRMED)*
+
+Every wire format documented under [protocols](/protocols/overview) is built from these,
+but the functions themselves have not been decoded:
+
+`bin_to_hex`, `bin_to_str`, `get_mac_addr`, `hex_to_bin`, `pack_2bit_value`, `pack_bits`,
+`pack_flags`, `pack_utf8_str`, `str_to_bin`, `unpack_2bit_value`, `unpack_bits`,
+`unpack_flags`, `unpack_utf8_str`.
 
 ## Standard / vendored MicroPython
 
-Frozen library modules that ship with or are vendored into MicroPython, not Totem-specific:
+Frozen library modules that ship with, or are vendored into, MicroPython. Not Totem code,
+and out of scope for decoding. Status **STOCK** is inferred from structure — the class and
+method sets match the documented upstream APIs and the modules import the corresponding C
+modules (`_espnow`, `bdev`) — rather than from a byte-for-byte diff against an upstream
+tree.
+
 `asyncio/` (`__init__`, `core`, `event`, `funcs`, `lock`, `stream`), `uasyncio.py`,
 `requests/__init__.py`, `urequests.py`, `mip/__init__.py`, `ssl.py`, `upysh.py`,
-`webrepl.py`, `webrepl_setup.py`.
+`webrepl.py`, `webrepl_setup.py`, `onewire.py`, `ds18x20.py`, `neopixel.py`, `apa106.py`,
+`espnow.py`, `aioespnow.py`, `flashbdev.py`, `_boot.py`, `inisetup.py`.
+
+Of these, `inisetup.py` carries a Totem modification (it writes `main.py` as well as
+`boot.py`), and `neopixel.py` / `apa106.py` are dead code.

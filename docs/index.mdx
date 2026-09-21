@@ -65,6 +65,20 @@ from v5.0.2; [What changed in 5.0.3](/firmware/changes-5.0.3) lists the differen
 | Flash | 4 MB, DIO @ 40 MHz (read from the image header via `esptool`) |
 | Segments | 7 (see [memory map](/firmware/memory-map)) |
 
+## How complete is this?
+
+The **inventory** is complete: all 94 frozen modules are identified and every one of them
+appears in these docs. The **analysis** is not.
+
+Of the 68 modules that are Totem's own code (the other 26 are stock MicroPython and empty
+package inits), 28 have had their behaviour read out of the bytecode, 27 are partly
+decoded, and **13 are documented by name only and have never been read** — including
+`f_lib/logger.py`, which 41 of the other modules import. By volume of disassembly, that is
+roughly 55% decoded, 35% partial, 10% untouched.
+
+The [module reference](/reference/modules) rates every module individually and ranks what
+is left, so you can tell a verified claim from a plausible guess before relying on it.
+
 ## How to read this documentation
 
 Findings are graded by how directly the binary supports them:

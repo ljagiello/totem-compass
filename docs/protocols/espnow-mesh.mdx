@@ -37,14 +37,33 @@ byte   0    1    2      3       4 .. N
 | payload | `[4:]` | struct selected by `(cat_id, cmd_id)` | Confirmed |
 
 **Validation is SyncWord match + length only — there is no CRC or checksum on the ESP-NOW
-frame.** A receiver rejects any frame shorter than 4 bytes or not beginning with
-`0xA7 0x74`, then validates the payload against the per-`(cat,cmd)` struct size. There is
-no in-band length field: the receiver uses the ESP-NOW MAC frame length plus the expected
-struct size.
+frame.** There is no in-band length field: the receiver uses the ESP-NOW MAC frame length
+plus the expected struct size. The checks, in order (**Confirmed**, `EspConn.recv` at
+`espnow_conn_v2.dis:6560-6890` and `Parser.aread` at `:7444-7650`):
 
-```text
-Invalid ESP-NOW message SyncWord or length
-```
+1. The driver must have handed up both a MAC and a payload, and the MAC must be in
+   `e.peers_table` — MicroPython's ESP-NOW module puts every sender there on receipt, and it
+   is also where the per-frame **RSSI** comes from (`peers_table[mac][0]`).
+2. `len(frame) >= 4` and `frame[0:2] == b'\xa7\x74'`, else
+   `Invalid ESP-NOW message SyncWord or length`.
+3. `(cat_id, cmd_id)` must be a key of `TOTEM_MSG_MAP`, else
+   `Unknown Message` with `body` `x{:02x},x{:02x}`.
+4. `struct.unpack(fmt, frame[2:calcsize(fmt)+2])` — the slice is exactly sized, so a frame
+   shorter than `calcsize(fmt) + 2` raises inside the parser task rather than being rejected
+   politely. This is the "length check": there is no upper bound, and trailing bytes are
+   ignored.
+
+`recv` also drops some frames before step 3:
+
+| Dropped | Condition |
+| --- | --- |
+| `(2,0)` | `len(frame) <= 23`, or `gnss_data.location` is `None` |
+| `(2,1)` | always |
+| `(5,0)` | always (the unused chat category) |
+
+`(2,0)` frames that pass never reach `aread` at all: `recv` calls `handle_mesh_msg` and
+`Parser.compass_mesh` inline, each wrapped in `try/except Exception` (`Could not parse mesh`,
+`Mesh processing failed`). Everything else is dispatched to `parser.aread` as a task.
 
 <Note>
 Both `Invalid Checksum value for: {}` and
@@ -84,7 +103,8 @@ Espressif device configured with `WIFI_PROTOCOL_LR` on channel 6. `power_on` als
 
 The LR data rate is set on the ESP-NOW object, not via `wlan.config(lorate=...)`:
 `EspConn.power_on` and `EspConn.recover` both call `self.e.config(rate=41)`, and 41 = `0x29` =
-`WIFI_PHY_RATE_LORA_250K`. v5.0.3's WiFi-kick path re-applies it after restarting the driver.
+`WIFI_PHY_RATE_LORA_250K`. `power_on` also sets `self.e.config(rxbuf=3072)` before activating
+the radio. v5.0.3's WiFi-kick path re-applies the rate after restarting the driver.
 A client should use **LR 250K** to match. *(PHY and rate: Confirmed in v5.0.2 and v5.0.3, and
 on hardware: an ESP32 set up this way bonds with a 5.0.3 Totem, see
 [ESP32 emulator](/reference/esp32-emulator). Earlier versions of this page said the IDF
@@ -116,12 +136,17 @@ The normal bond between two Totems is a handshake of **category 0, command 1** p
 [message format](/protocols/message-format#peer-frame-0-cmd)). It is **Confirmed** from the
 bytecode (`Compass.start_pairing`, `Compass.pair_nearby`, `Parser._peer`) and on hardware.
 
-**Trigger.** A long hold on the Touch Crystal: `Compass.touch_button_cb` maps a short hold
-(≥ 360 ms) to `start_bonding_countdown`, a long hold (≥ 1200 ms) to `start_pairing`, and an
-extra-long hold (≥ 7200 ms) to `start_smart_group`. The owners of both Totems hold them within
-the same few seconds. `start_pairing` refuses while a Smart Group is active or when the Totem
-already has `max_bonds` (8) peers, and it opens a **6 s** window (`asyncio.wait_for(pair_nearby(),
-6)`).
+**Trigger.** A long hold on the Touch Crystal. `TouchButton` defines the three thresholds —
+`_short_hold_ms = 360`, `_long_hold_ms = 1200`, `_ex_hold_hold_ms = 7200`
+(`touch_button_v2.dis:293-301`) — and `Compass.touch_button_cb`, for touch features 1 and 3,
+binds `cb_short_hold` to `start_bonding_countdown`, `cb_long_hold` to `start_pairing` and
+`cb_ex_long_hold` to `start_smart_group` (it re-asserts `set_long_hold_ms(1200)` first; the
+peer-management feature 2 raises it to 3000 instead). The owners of both Totems hold them
+within the same few seconds. `start_pairing` refuses while a Smart Group is active or when
+the Totem already has `max_bonds` (8) peers, and it opens a **6 s** window: the signature is
+`start_pairing(is_init=True, timeout_sec=6)` and the body is
+`asyncio.wait_for(pair_nearby(), timeout_sec)` (`compass.dis:1194-1199`). A timeout logs
+`Pairing Timed Out`. All **Confirmed**.
 
 **Handshake.** While pairing, each Totem runs `pair_nearby`, which every `randrange(50, 100)` ms
 sends:
@@ -144,8 +169,8 @@ only at **RSSI ≥ `BONDING_RSSI` (−25 dBm)**, i.e. with the two devices pract
 
 When the window closes (`cancel_pairing`), a partner that never sent an ack-1 frame
 (`temp_bond` still set) is deleted again: `Deleting Peer with failed bond: {}`. After a
-completed first bond with the phone connected, the Totem sends `ble_first_bond_burst`: about 20
-status frames, 300 ms apart.
+completed first bond with the phone connected, the Totem runs `ble_first_bond_burst`:
+`send_burst(interval_ms=300, burst_duration_ms=6000)`, so 20 frames over 6 s — **Confirmed**.
 
 ```mermaid
 sequenceDiagram
@@ -176,14 +201,22 @@ A Smart Group bonds a whole group at once. It uses category 7 (see
    the host's position, the group UID, the time left and the member list (MAC + position +
    colour per member). It does not carry RSSI: receivers measure it.
 2. A **client** that is pairing and hears a beacon at **RSSI ≥ `SMART_GROUP_RSSI` (−45 dBm)**
-   broadcasts a `(7,1)` join (join flag +1) twice, 200 ms apart (`Sent Smart Group join cmd`).
-   The host adds it (up to `max_bonds`) and each join extends the window by up to 12 s. A
-   client that finds its own MAC in the member list sets `smart_grp_uid` and waits.
+   — or one whose `smart_grp_uid` already matches, at any RSSI — broadcasts a `(7,1)` join
+   (join flag +1) twice, 200 ms apart (`Sent Smart Group join cmd`). The host adds it (up to
+   `max_bonds`) and each join extends the window by up to 12 s. A client that finds its own
+   MAC in the member list sets `smart_grp_uid` and waits.
 3. The host finishes with instruction **3** (shuffled colours) or **−1** (abandon), each as a
-   300 ms × 1.6 s burst. On instruction 3, every member runs
-   `peer_management.auto_bond_to_peers`, which **deletes all existing peers** and bonds with
-   every other member. Wrong-group frames are ignored (`Incorrect auto-bond group, ignore
-   request`); since v5.0.3 a `−1` frame also cancels on a UID match alone.
+   300 ms × 1.6 s `send_burst`. On instruction 3, every member runs
+   `peer_management.auto_bond_to_peers`, which awaits `delete_all_peers()` — **every existing
+   peer is deleted** — and then creates a fresh `Peer` for every other member, with the
+   position and colour the beacon carried. Wrong-group frames are ignored (`Incorrect
+   auto-bond group, ignore request`); a `−1` frame cancels on a UID match, or whenever the
+   receiver is not in a group at all.
+
+`Parser._smart_group` keeps a second, tighter RSSI mark: a beacon at **RSSI ≥ −35** (a
+hardcoded literal, not `SMART_GROUP_RSSI`) also stamps `modes.smart_grp_last_nearby`, which
+is how the Totem knows the host is still right next to it. **Confirmed**
+(`espnow_conn_v2.dis:10118-10126`).
 
 <Warning>
 Hosting a Smart Group near other people's Totems can wipe their friend lists: a member that
@@ -225,26 +258,83 @@ Bonded Totems keep each other up to date with the **peer status** frame, `(0,0)`
 name (field table in [message format](/protocols/message-format#peer-frame-0-cmd)). It is
 **not** a broadcast: `send_now(None, …)` loops over the bonded, non-POI peers and unicasts one
 copy to each. An unbonded Totem therefore transmits nothing except while pairing. A second
-copy goes out when the furthest peer is more than 30 m away.
+copy goes out when `config.furthest_peer > 30` (metres) **and** `recovery_count == 0`, i.e.
+the radio has not been recovered this session — **Confirmed**, `_send_outbox`.
 
-`EspConn.communicate_v2` opens a **radio window** once per period and sends the status about
-75 ms after it opens (`ping_peers`). With a clock the windows are aligned to the wall clock
-(`radio_timer`: the next multiple of the period since the start of the minute), so all
-GNSS-synced Totems transmit in the same slots. The period comes from `COMM_SPEED[speed_id]`
-= `(mpm, radio_on_ms, …)`:
+`EspConn.communicate_v2` opens a **radio window** once per period and sends the status
+75 ms after the window's nominal open tick (`ticks_add(hpt.ticks_radio_on, 75)` in
+`ping_peers` — **Confirmed**, `espnow_conn_v2.dis:4305-4310`; the scheduler then shaves 3 ms off the wait). With a clock the windows are
+aligned to the wall clock (`radio_timer`: the next multiple of the period since the start of
+the minute), so all GNSS-synced Totems transmit in the same slots.
 
-| speed | When | Period | Radio on |
-| --- | --- | --- | --- |
-| 1 | upright, clock set | **4 s** | 400 ms per window |
-| 2 | as 1, eco mode, no peer in SOS | 4 s | 400 ms |
-| 8 | as 1, and a peer lies flat | 1 s | 400 ms |
-| 0 | lying flat, battery fine | 1 s | always |
-| 5 | lying flat, low battery | 2 s | 400 ms |
-| 4 | upright, no clock, has peers | 1 s | always |
-| 3 | upright, no clock, no peers | none | off |
-| 6 | as 3 or 4 without satellites | 5 s, not aligned | 2.5 s, up to 3 sends at rotating sub-second phases |
+`COMM_SPEED` maps a speed id to `(mpm, radio_on_ms, ls_chunk_ms, ls_reserve_ms)`; the period
+is `60 / mpm` seconds. The literal is **Confirmed** at `espnow_conn_v2.dis:931-962`, and the
+selection below from `communicate_v2` at `:2967-3040`.
 
-No status goes out while the Totem is in the bonding UI (`modes.evt_bonded` is cleared).
+| speed | Selected when | Period | Radio on | Light sleep |
+| --- | --- | --- | --- | --- |
+| 1 | upright **and** (clock set **or** `modes.is_force_sleep`) | **4 s** | 400 ms | 50 ms chunks |
+| 2 | as 1, plus eco mode, battery not low, no peer in SOS | 4 s | 400 ms | 500 ms chunks |
+| 8 | as 1, and `is_any_peer_horizontal` | 1 s | 400 ms | 50 ms chunks |
+| 0 | lying flat, battery not low | 1 s | always on | none |
+| 5 | lying flat, battery low | 2 s | 400 ms | none |
+| 4 | upright, no clock, has peers | 1 s | always on | none |
+| 3 | upright, no clock, no peers | 4 s | **0 ms** — the radio is never turned on | 50 ms chunks |
+| 6 | as 3 or 4 and `not gnss_data.is_sat_signal` | 5 s, **not** wall-clock aligned (`last_msg_tx_ticks + 5000`) | 2.5 s, up to 3 sends at rotating sub-second phases | 50 ms chunks |
+
+The order matters: 8 overrides 2 overrides 1, and 6 overrides both 3 and 4. Only the upright
+branches set `is_scheduled` (1, 2, 3, 4, 6, 8); the lying-flat ones (0 and 5) do not, and only
+a scheduled window can light-sleep.
+
+<Note>
+`COMM_SPEED` also defines **speed 7** `(30, 200, 50, 50)` — 2 s, 200 ms — and **speed 10**
+`(15, 200, 75, 50)` — 4 s, 200 ms. Neither is reachable: `speed_id` is a local of
+`communicate_v2`, the block above is the only place it is assigned, and `COMM_SPEED` is read
+nowhere else in the image (`espnow_conn_v2.dis:3197`, `:3202`, `:3567`, `:3572` are its only
+four reads). **Confirmed.**
+</Note>
+
+Speed 3's period is real — the timer still fires every 4 s — but `radio_on_ms` is 0, so
+`communicate_v2` calls `power_off()` instead of scheduling `ping_peers`. A Totem upright with
+no clock and no peers therefore transmits nothing.
+
+No status goes out while the Totem is in the bonding UI: `ping_peers` awaits
+`modes.evt_bonded` and returns early (setting `evt_comms_sent`) when it is clear.
+
+### Light sleep between windows
+
+Between radio windows `communicate_v2` can put the SoC into `machine.lightsleep`. All of
+this is **Confirmed** from `espnow_conn_v2.dis` (`communicate_v2` at `:3330-3470`,
+`smart_sleep` at `:3556-4198`).
+
+The budget is `hpt.ms_until_radio_on - 100`, or a flat **3500 ms** when `radio_on_ms` is 0
+(speed 3). Sleep is then refused outright when, with the window scheduled and
+`radio_on_ms > 0`:
+
+- `hpt.ms_until_radio_on < 100` — `Not sleeping due radio needing to turn on soon`; or
+- `modes.evt_rtc_ready.is_set()` **and** `modes.rtc_method == 1` **and**
+  `ticks_diff(modes.next_rtc_sync, ticks_ms()) < -15000` — `Block sleep for GNSS RTC Sync`.
+  All three must hold: a clock borrowed from a peer is `rtc_method == 2` and never blocks.
+
+Inside `smart_sleep(sleep_duration_ms, speed_id)`:
+
+- `sleep_duration_ms < 10` returns immediately.
+- The per-call chunk is `COMM_SPEED[speed_id][2]`, trimmed to `remaining - COMM_SPEED[speed_id][3]`
+  when the window is closer than that. **A chunk below 50 ms abandons the sleep.** Speeds 0,
+  4 and 5 carry `-1` in both slots, so they never sleep at all.
+- The expected receive times of bonded peers (`peer.next_msg`, logged as `RX windows: {}`)
+  are collected first; stale entries whose time has already passed are cleared.
+- With a clock and a `modes.next_gnss_ticks` set, the time to the next GNSS message decides:
+  inside **−120 ms … +85 ms** of it the call yields to the scheduler and does not sleep;
+  further out, the chunk is cut to "time until the message, minus 120 ms", and a negative
+  result abandons the sleep.
+- Sleep is also skipped, with the missed milliseconds accumulated into `modes.dev_ls_missed`,
+  when: the VFS is busy; the Totem is lying flat (`evt_orien_horizontal`); GNSS messages are
+  being missed (`is_gnss_msg_miss`) or are invalid (`Lightsleep skipped due to invalid
+  messages`); `gnss_data.valid_time_counter < 2` with a satellite signal; BLE is active; a
+  peer burst is running; or the watchdog manager is blocking tasks or inactive.
+
+Waking logs `Awoke from lightsleep | Slept for: {} of {} | Total Sleep: {} | sleep duty: {:.3f}`.
 
 **Clock sync.** The status frame carries `itod` (ms since midnight) and the Unix time only
 when the sender's clock came from GNSS (`rtc_method == 1`); otherwise both are −1. A Totem
