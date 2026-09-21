@@ -1,0 +1,428 @@
+---
+title: "Hotspot server"
+description: "f_ota/hotspot.py is not an updater — it is an HTTP/1.0 and WebSocket server on a soft-AP the device raises itself. Nothing in v5.0.3 imports it."
+---
+
+`f_ota/hotspot.py` is the largest network surface in the image that **nothing can reach**.
+It is not a "hotspot updater": it is a small but complete web server — a soft-AP, a TCP
+listener on port 80, an HTTP/1.0 request parser that serves files off the filesystem, and
+an RFC 6455 WebSocket endpoint that accepts JSON commands. None of it runs on v5.0.3,
+because no module in the image imports it and the one dispatcher branch that used to start
+it now raises instead. Everything below is therefore dormant code: worth documenting
+because it describes what the device *did* do and what would come back if the import were
+restored, not because it is exploitable today.
+
+<Note>
+Everything on this page was read out of the frozen MicroPython bytecode in
+`re/v5.0.3/mpy/*.dis`; citations are `file.dis:line`. Claims that could **not** be read
+directly are marked **inferred** or **not recoverable**. The embedded web UI was
+additionally decompressed from the literal blobs in `f_ota_f_assets.dis:68`.
+</Note>
+
+## Reachability: nothing imports it — confirmed
+
+**CONFIRMED.** Grepping every `IMPORT_NAME` across all 94 disassembled modules, the only
+file that mentions `hotspot` at all is `f_ota_hotspot.dis` itself. There is no
+`IMPORT_NAME f_ota.hotspot` anywhere, and no string constant naming it, so it cannot be
+reached by a dynamic `__import__` either.
+
+**CONFIRMED.** The one historical entry point is gone. `f_ota.main.ota_mgr(cmd)` dispatches
+on the command ID, and command `2` — the hotspot command — is now:
+
+```python
+elif cmd == 2:
+    raise OtaErr('OTA Hotspot has been sunset', ErrCode.operation_failed)
+```
+
+(`f_ota_main.dis:1126`; see the [command IDs table](/subsystems/ota#command-ids).)
+
+**CONFIRMED.** The module's document root is never created either. Importing
+`f_ota/hotspot.py` is what would extract the web UI: the module body does
+`import f_ota.f_assets` (`f_ota_hotspot.dis:316`), and `f_ota/f_assets.py` runs
+`extract_fs(__name__, '/m_assets/web', 'always', True)` at *its* module scope
+(`f_ota_f_assets.dis:113`). `f_ota_f_assets.dis` is imported by nothing except
+`f_ota_hotspot.dis`, so on a v5.0.3 device `/m_assets/web` does not exist.
+
+So the correct reading is: a dead server, whose only caller was deliberately retired, whose
+content directory is never populated. See also the summary table on
+[WiFi (OTA updates)](/protocols/wifi-ota).
+
+## Module map
+
+Everything is defined at module scope and instantiated at import time
+(`f_ota_hotspot.dis:196`–`374`):
+
+| Name | Line | What it is |
+| --- | --- | --- |
+| `_MAX_CONN_ATTEMPTS = 3` | `:319` | used only as the `listen()` backlog |
+| `MIME_MAP` | `:320`–`330` | exactly three entries: `css`, `htm`, `js` |
+| `hs_wifi = WiFi(HOTSPOT)` | `:331`–`334` | `HOTSPOT` is `network.AP_IF` (`f_lib_wifi.dis:117`) |
+| `HotspotErr(Exception)` | `:378` | defined, never raised anywhere in the module |
+| `Client` | `:418` | wraps one accepted socket in a native `websocket` |
+| `Server` | `:475` | the listener, poller, and command loop |
+| `update_after_reboot(**kw)` | `:1496` | one line: `save_obj('perform.ota', kw)` |
+| `ws_handshake(headers, conn)` | `:1509` | the RFC 6455 upgrade |
+| `get_device_info()` | `:1662` | the unsolicited greeting payload |
+| `get_file` / `get_mime` / `parse_request` | `:1691` / `:1721` / `:1750` | the whole HTTP routing layer |
+| `server = Server()` | `:373`–`374` | a module-level singleton |
+
+Importing the module constructs `Server()` and `WiFi(HOTSPOT)` but starts nothing: the
+`Server.__init__` body is a single `self.is_running = 1` (`:513`), and `WiFi.__init__` only
+does `self.wlan = WLAN(mode)` when `self.wlan is None` (`f_lib_wifi.dis:260`). The radio
+comes up only inside `Server.start()`, which calls `hs_wifi.power_on()` (`:652`) →
+`wlan.active(True)` (`f_lib_wifi.dis:860`). That `network.WLAN(AP_IF)` construction
+alone does not activate the interface is **inferred** from MicroPython semantics, not read
+from this image.
+
+## The soft-AP
+
+All read from `Server.start()` (`f_ota_hotspot.dis:601`):
+
+| Setting | Value | Evidence |
+| --- | --- | --- |
+| Interface | `network.AP_IF` | `f_lib_wifi.dis:117`, `f_ota_hotspot.dis:332` |
+| SSID | `cfg.hostname` + `_` + the last 4 characters of `cfg.mac` | `:664`–`:675` |
+| `cfg.hostname` default | `mytotem` | `f_ota_config.dis:342` |
+| PSK | `totem1234` | `:682` |
+| `authmode` | **not passed** — driver default applies | `:676`–`:684` (the `config()` call takes exactly two keywords) |
+| `channel` | **not passed** — driver default applies | same call |
+| `max_clients` | **not passed** | same call |
+| `ifconfig` | `('10.9.8.7', '255.255.255.0', '192.168.0.1', '8.8.8.8')` | `:688` |
+| Listener | `socket.getaddrinfo('0.0.0.0', 80)[0][-1]`, `SO_REUSEADDR`, `listen(3)` | `:743`–`:788` |
+| Tasks launched | `hotspot_listener`, `hotspot_inactivity_check` | `:803`, `:810` |
+
+The SSID is built with a format string over `cfg.hostname` and `cfg.mac[-4:]`:
+
+```python
+ssid = '{}_{}'.format(cfg.hostname, cfg.mac[-4:])
+hs_wifi.wlan.config(ssid=ssid, key='totem1234')
+hs_wifi.wlan.ifconfig(('10.9.8.7', '255.255.255.0', '192.168.0.1', '8.8.8.8'))
+```
+
+Two notes on that. The gateway `192.168.0.1` is **not inside** the `10.9.8.0/24` the
+interface is given — read directly from the constant tuple at `:688`; whether the ESP-IDF
+driver rejects or silently ignores it is **not recoverable** from this image. And `cfg.mac`
+defaults to `None` (`f_ota_config.dis:377`); it is populated at the *module scope* of
+`f_ota/main.py` (`f_ota_main.dis:293`). Since `cfg` is a shared singleton, the SSID only
+formats if `f_ota.main` was imported first — which it always was on the old
+`ota_mgr(cmd=2)` path. Starting the server standalone would raise on the slice
+(**inferred**).
+
+`start()` also sets `hs_wifi.protocol = 7` and `hs_wifi.pm = 0` (`:660`, `:663`). **These
+have no effect here:** both attributes are read only inside `WiFi.connect`
+(`f_lib_wifi.dis:299`, `:310`, `:353`), which the hotspot never calls. `power_on()` does
+`wlan.active(True)` and nothing else.
+
+Before raising the AP, `start()` deletes and recreates `cfg.save_to` — the OTA staging
+directory, default `next` (`f_ota_config.dis:389`).
+
+### Shutdown
+
+`Server.stop()` (`:819`) unregisters and closes the listening socket, closes every client,
+stops both named tasks (swallowing `RuntimeError` per task), waits 200 ms, calls
+`hs_wifi.disconnect(power_off=True)`, and sets `ota_status.hotspot_disconn`.
+
+`_check_inactivity()` (`:555`) is meant to enforce a 5-minute idle timeout:
+
+```python
+while True:
+    if self.last_activity:
+        if time.ticks_diff(time.ticks_ms(), self.last_activity) >= 300000:
+            log.debug('Server max inactivity period reached...')
+            asyncio.create_task(self.stop())
+            break
+    await asyncio.sleep(15000)
+```
+
+The threshold constant is `300000` ms (`:573`) and the poll is
+`asyncio.sleep(15000)` (`:591`) — `sleep`, not `sleep_ms`, both read straight from the
+opcodes. MicroPython's `asyncio.sleep` takes **seconds**, and the module uses `sleep_ms`
+correctly everywhere else, so as written the first idle check happens after roughly four
+hours rather than fifteen seconds (**inferred** from the unit convention). The AP would
+stay up until then.
+
+## The HTTP request parser
+
+`Server.accept_conn()` (`:972`) is the whole front door:
+
+```python
+conn, addr = self.sock.accept()
+req = conn.recv(1024).decode()
+headers = req.split('\r\n')
+if 'Upgrade: websocket' in headers:
+    if ws_handshake(headers, conn):
+        ...                              # register the client, greet it
+    return                               # note: conn is NOT closed on either path
+else:
+    parts = req.split(' ')
+    if len(parts) > 1:
+        method, endpoint = parts[0], parts[1]
+        code, mime, file_path = parse_request(endpoint)
+        ...
+self.last_activity = time.ticks_ms()
+conn.close()
+```
+
+| Property | Behaviour | Evidence |
+| --- | --- | --- |
+| Methods accepted | **all of them.** `method` is only interpolated into a debug log line; it is never compared to anything | `:1112` |
+| Request size | a single `recv(1024)`. No read loop, no `Content-Length`, so a request body is never read and anything past 1024 bytes is dropped | `:1015` |
+| Path extraction | `req.split(' ')[1]` over the **whole request text**, not the request line | `:1084`–`:1103` |
+| Headers | parsed only for the WebSocket upgrade. No `Host`, `Origin`, `Referer` or `Authorization` handling on the file path | `:1026`, `:1509` |
+| Keep-alive | none — `conn.close()` after every response | `:1224` |
+| Status codes | `200` for everything except the literal string `/favicon.ico`, which gets `404` | `:1750`–`:1772` |
+
+`parse_request` is three lines and holds no policy:
+
+```python
+def parse_request(endpoint):
+    file_path = get_file(endpoint)
+    mime = get_mime(file_path)
+    code = 200
+    if endpoint == '/favicon.ico':
+        code = 404
+    return code, mime, file_path
+```
+
+Because the `200` header block is written to the socket *before* the file is opened
+(`:1125` sends the status line, `:1148` opens the file), a request for a file that does not
+exist still receives `HTTP/1.0 200 OK` followed by an empty body; the `OSError` is caught
+and logged unless `errno == 104` (`:1169`–`:1200`). `get_mime` returns **`False`** for any
+extension outside the three-entry `MIME_MAP` (`:1721`), and that value is interpolated
+straight into the header, so unknown types are served with a literal `Content-Type: False`.
+Files are opened in text mode and iterated by line (`open(file_path, 'r')`, then
+`conn.sendall(line)` per line, `:1148`–`:1161`), so only text-decodable files can be served
+at all; a decode failure on a binary file is not among the caught exceptions.
+
+### Path handling: no traversal guard
+
+This is the security-relevant finding, and it is short enough to quote whole
+(`f_ota_hotspot.dis:1691`):
+
+```python
+def get_file(endpoint):
+    endpoint = endpoint.lstrip('/')
+    if '?' in endpoint:
+        endpoint = endpoint.split('?')[0]
+    if not endpoint:
+        endpoint = 'index.htm'
+    return 'm_assets/web/' + endpoint
+```
+
+**CONFIRMED — there is no guard.** The complete set of transformations applied to a
+client-supplied path is: strip leading `/` characters, truncate at the first `?`, and
+substitute `index.htm` for the empty string. The result is string-concatenated onto the
+`m_assets/web/` prefix and handed to `open()`.
+
+What is *not* there, read by absence from those six lines:
+
+- no normalisation of `.` or `..` segments, and no rejection of them
+- no check that the resulting path is still under `m_assets/web/`
+- no percent-decoding — and equally no rejection of encoded input, which simply fails to
+  match a filename
+- no allow-list of extensions (`get_mime` labels unknown types, it does not refuse them)
+- no `realpath`-style containment check after resolution
+
+The `lstrip('/')` does neuter an absolute path: every leading slash is removed, so a path
+starting at the filesystem root collapses back under the prefix. Relative parent-directory
+segments are untouched. The class of weakness is therefore **directory traversal via
+unnormalised path concatenation** — the textbook shape of CWE-22.
+
+Whether traversal actually escapes the prefix depends on the filesystem, and that is
+**not recoverable from this module**: it hinges on whether the mounted VFS resolves `..`
+components, which is decided in the C VFS layer and not in any frozen module. `_boot.dis`
+performs the mount (`_boot.dis:42`) but names no filesystem class in its constant table.
+Treat the reachable-file set as "unknown, and not bounded by this code".
+
+The practical mitigations today are the ones outside the module: nothing imports it, so the
+server never listens; and if it did, `/m_assets/web` would not exist, so even `index.htm`
+would 200-with-empty-body.
+
+## The WebSocket handshake
+
+`ws_handshake(headers, conn)` (`:1509`) **is** a real RFC 6455 accept computation:
+
+```python
+key = None
+is_upgrade = False
+for line in headers:
+    parts = line.split(':', 1)
+    if len(parts) < 2:
+        continue
+    name, value = parts[0].strip(), parts[1].strip()
+    if name == 'Sec-WebSocket-Key':
+        key = value
+    elif name == 'Connection' and value == 'Upgrade':
+        is_upgrade = True
+if not key or not is_upgrade:
+    return False
+h = hashlib.sha1(key)
+h.update(b'258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+accept = binascii.b2a_base64(h.digest())[:-1]
+```
+
+The magic GUID is the RFC 6455 one, read literally at `:1601`; the digest is SHA-1 and the
+encoding is base64 with the trailing newline sliced off (`:1609`–`:1615`). So the *accept
+token* is correct.
+
+The response framing is not. The four response lines are joined with a **bare CR**, not
+CRLF — the constant at `:1641` is `b'\r'`, verified against the raw `.mpy` object table
+(the entry is a 1-byte bytes object holding `0x0d`). Only the final blank line uses
+`'\r\n\r\n'` (`:1653`). The status reason is also `Switching Protocol`, singular, where
+RFC 6455 says `Switching Protocols` (`:1621`). **Inferred:** a conforming client would
+reject that response, which is further evidence this path has not been exercised.
+
+Also absent, by absence in those lines: no `Sec-WebSocket-Version` check, no `Origin`
+check, no subprotocol or extension negotiation, and no validation that the key is 16 bytes
+of base64 — any non-empty `Sec-WebSocket-Key` value is hashed and echoed back.
+
+The upgrade is only attempted when the raw request contains the **exact line**
+`Upgrade: websocket` — an exact string match against the list produced by
+`req.split('\r\n')` (`:1026`), so case or spacing variants that RFC 6455 permits fall
+through to the file-serving path instead.
+
+### Frames
+
+Frame handling is **not in this module**. `Client.__init__` wraps the accepted socket in
+the firmware's native type: `self.ws = websocket(sock, True)` (`:443`), imported from the
+built-in `websocket` module (`:247`). Everything about opcodes, masking, fragmentation,
+control frames and length encoding lives in C. What this module does with the result:
+
+- `client.ws.read()` in a loop, non-blocking, driven by a per-client `select.poll`
+  registered for `POLLIN` (`:435`, `:1230`)
+- decodes the payload as UTF-8, catching `UnicodeError` and skipping that message (`:1304`)
+- `json.loads(...)` and then `data['cmd']` — **neither guarded** (`:1321`, `:1326`)
+
+That last point matters for robustness: a payload that is not JSON, or a JSON object with
+no `cmd` key, raises out of `websockets()`, out of `_run_listener()`, and kills the
+listener task. There is no `try` around either call.
+
+## The command vocabulary
+
+Five commands, dispatched by string compare in `Server.websockets()` (`:1230`). No
+authentication, no session, no ordering check — any connected client may send any of them
+at any time.
+
+| `cmd` | Effect | Evidence |
+| --- | --- | --- |
+| `conn_success` | `ota_status.hotspot_step = 1` | `:1330` |
+| `show_wifi` | replies with the scanned network list as `wifi_net` | `:1338` |
+| `save_wifi` | writes the client's `ssid` and `key` into `user-config.json` | `:1372`–`:1410` |
+| `update_nearby` | writes `perform.ota`, sets step 3, schedules `stop()` in 10 s | `:1435`–`:1456` |
+| `no_update_nearby` | writes `perform.ota`, sets step 4, stops immediately | `:1458`–`:1490` |
+
+`save_wifi` takes both values straight from the message:
+
+```python
+user_cfg.wifi_ssid = data['ssid']
+user_cfg.wifi_key = data['key'].strip() if data['key'] else ''
+from f_lib.file_mgr import save_obj
+save_obj('user-config.json', user_cfg)
+```
+
+Those are exactly the fields `f_ota.config.get_known_networks()` merges into the network
+list the device will later join — see
+[known networks](/protocols/wifi-ota#known-networks). Both keys are indexed, not `.get()`,
+so a `save_wifi` without them raises.
+
+Both update commands call the same one-line helper (`:1496`):
+
+```python
+def update_after_reboot(**kwargs):
+    save_obj('perform.ota', kwargs)
+```
+
+with `ota_cmd=3, max_retries=1`. `perform.ota` is the same handoff file every other OTA
+trigger writes, and command `3` is a firmware `.bin` update over WiFi — see
+[the `perform.ota` handoff](/subsystems/ota#the-performota-handoff). Note what this module
+does *not* do: it never reboots. It writes the file and stops the server; the update runs
+on whatever soft reset happens next.
+
+`show_wifi` reads `self.local_wifi.nearby_networks` (`:1342`). **CONFIRMED:**
+`local_wifi` is a class attribute set to `None` (`:489`) and there is no `STORE_ATTR
+local_wifi` anywhere in the module — the only other occurrence in the file is that one
+read. As shipped, `show_wifi` raises `AttributeError` on `None` every time.
+
+## What `get_device_info` discloses
+
+Sent **unsolicited**, immediately after a successful handshake, before the client has said
+anything (`:1067`–`:1075`, definition at `:1662`):
+
+```python
+def get_device_info():
+    d = {'cmd': 'dev_info', 'mac': cfg.mac, 'ver': syst.release_code or '--'}
+    return json.dumps(d)
+```
+
+Two fields: the device MAC address (`f_lib.bitwise.get_mac_addr()`, `f_lib_bitwise.dis:77` — 12 lowercase hex
+characters) and the firmware release code, falling back to the string `--`. Nothing else —
+no serial, no location, no keys, no user data. Anyone who has associated to the AP and
+completed the upgrade receives both.
+
+## Authentication
+
+**CONFIRMED: there is none beyond the WiFi PSK.** Across the whole module there is no
+comparison against any credential, token, cookie or nonce; the only secret in the file is
+the AP key at `:682`. Concretely:
+
+- the HTTP path never inspects a header other than for the upgrade probe, so any file the
+  path resolves to is served to any associated client
+- the WebSocket handshake accepts any non-empty `Sec-WebSocket-Key` with a `Connection:
+  Upgrade` header; there is no `Origin` check, which is what would normally stop a page in
+  a browser on the same network from opening this socket
+- the command dispatcher does not track which client sent what, and `ota_status.hotspot_step`
+  is a single global, not per-client state
+- clients accumulate in `Server.clients` with no cap; `listen(3)` sets a backlog, not a
+  connection limit
+
+The trust model is therefore exactly "whoever knows `totem1234` and is in radio range" —
+and that key is a hard-coded constant shared by every device, the same one that appears as
+the `totemupdate` password in `f_ota.config`'s `PERM_NETWORKS`
+(see [known networks](/protocols/wifi-ota#known-networks)).
+
+Given that model, the composition worth naming is that one unauthenticated WebSocket peer
+can both choose the network the device will join next (`save_wifi`) and queue a firmware
+update to run on the next reboot (`update_nearby`). The update itself still goes to the
+fixed S3 branch URL written by `project_main.perform_ota()`, and the integrity properties
+of that download are covered under [OTA & rollback](/subsystems/ota).
+
+## Defects that would prevent it working
+
+Collected because together they are the strongest evidence that this path was never
+finished, independent of the import grep:
+
+| Defect | Evidence |
+| --- | --- |
+| `show_wifi` dereferences `self.local_wifi`, which is always `None` | `:489`, `:1342` |
+| `close_client()` sets **`self.sock = None`** — the *server's* listening socket, not the client's | `:949`–`:950` |
+| `stop()` iterates `self.clients` while `close_client()` removes from it | `:854`–`:862`, `:952`–`:958` |
+| a failed `ws_handshake` returns without closing the accepted socket | `:1035`, `:1076`–`:1077` |
+| `asyncio.sleep(15000)` where `sleep_ms` was meant | `:591` |
+| the 101 response joins its header lines with a bare CR | `:1641` |
+| `json.loads` and `data['cmd']` are unguarded, so a malformed message kills the listener task | `:1321`, `:1326` |
+| `is_running` is written in three places and read in none | `:520`, `:894`, `:1264` |
+| `HotspotErr` is defined and never raised; `gc` is imported and never used | `:378`, `:211` |
+| `Client.file_meta` is set to `None` and never touched again | `:456` |
+
+## The embedded web UI
+
+`f_ota/f_assets.py` carries the entire front end as three zlib blobs in its object table,
+extracted to `/m_assets/web` on import (`f_ota_f_assets.dis:68`, `:113`). They decompress
+cleanly to the declared sizes:
+
+| File | Compressed | Uncompressed |
+| --- | --- | --- |
+| `/index.htm` | 2797 | 6200 |
+| `/esp32.min.js` | 1571 | 3652 |
+| `/style.min.css` | 1709 | 4776 |
+
+The module's constant table also carries the build stamp `2024/10/30 13:46:07`.
+
+The JavaScript is the mirror image of the server and confirms the protocol from the client
+side: it opens `ws://` + `location.hostname` + `:80`, sends `conn_success` 100 ms later,
+and has buttons that send `show_wifi`, `save_wifi` (with `ssid` and `key` read from a
+dropdown and a password field), `update_nearby` and `no_update_nearby`. It renders
+`dev_info` into two fields, the MAC and the version. It also handles two server messages —
+`err` and `success` — that the server in `f_ota/hotspot.py` never sends, and the page title
+is `Totem Hotspot`. There is no login, token or challenge anywhere in the UI, which matches
+the server having nothing to check.

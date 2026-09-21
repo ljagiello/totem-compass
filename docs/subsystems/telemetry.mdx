@@ -1,0 +1,667 @@
+---
+title: "Telemetry: the debug recorder"
+description: "debugger.py decoded from the v5.0.3 bytecode — a binary flight recorder that packs battery, sleep, GNSS and orientation counters into debug.bin and ships them to the cloud, the arming flag that nothing on a shipped device ever sets, the NameError that caps the file at one batch, and a second unused log writer sitting beside it."
+---
+
+`debugger.py` is not a set of debug hooks. It is a **binary telemetry recorder**: a
+coroutine that packs a fixed-width record of battery, sleep, GNSS and orientation counters
+once per second, batches three of them at a time, and appends them to `debug.bin` on the
+filesystem — a file that [`data_upload_v2`](/reference/networking) later uploads to the
+vendor's API. It also contains a second, entirely separate log-writer class, `WriteLog`,
+with its own queue and gzip rotation, which nothing in the image instantiates.
+
+Neither half runs on a shipped device. This page decodes both, and says exactly what
+stands between them and production.
+
+<Note>
+  **Evidence convention on this page.** Claims are **confirmed** when they were read
+  directly out of the v5.0.3 disassembly (cited as `file.dis:line`), **inferred** when they
+  are reasoned from strings or structure, and called out explicitly when they are **not
+  recoverable** from the frozen bytecode. Line numbers refer to `re/v5.0.3/mpy/*.dis`.
+
+  The Python shown below is **reconstructed**: the source is not in the image. The
+  operations, their order and the constants are exact; names of local variables that the
+  bytecode does not carry are ours, and are marked where it matters.
+</Note>
+
+## What is in the module
+
+`debugger.py` defines two unrelated classes and one module-level singleton (**confirmed**,
+`debugger.dis:243`–`255`):
+
+| Name | Kind | Line | What it is |
+| --- | --- | --- | --- |
+| `Debugger` | class | `:259` | The telemetry recorder — `generic`, `power_perf`, `start`, `save` |
+| `debug` | instance | `:250` | `debug = Debugger()`, the singleton both importers pull in |
+| `WriteLog` | class | `:796` | A generic queued log writer with gzip rotation — `add`, `_scheduled_rotation`, `rotate_logs` |
+
+The two classes share no code, no state and no file. `Debugger` writes `debug.bin` and
+rotates by renaming; `WriteLog` writes whatever filename it is constructed with and rotates
+by compressing. Only `Debugger` is reachable from outside the module, and only through the
+`debug` singleton.
+
+The module is **byte-identical between v5.0.2 and v5.0.3** (**confirmed**: `diff` of the
+two disassemblies is empty). Nothing here changed in the release.
+
+## `Debugger`: the recorder
+
+### Construction *(CONFIRMED, `debugger.dis:281`–`310`)*
+
+```python
+class Debugger:
+    def __init__(self):
+        self.interval_sec = 1
+        self.last_saved = time.ticks_ms()
+        self.is_generic = False
+        self.is_power_perf = False
+        self._generic_buff = None
+        self._pwr_prf_buff = None
+        self.temp = []
+
+
+debug = Debugger()
+```
+
+`interval_sec` is `LOAD_CONST_SMALL_INT 1` at `:286`. Both `is_` flags start `False`
+(`:295`, `:298`) and there is no argument to override them — `__init__` has a prelude of
+`(3, 0, 0, 1, 0, 0)`, one positional argument (`self`) and no defaults.
+
+### Arming: `generic` and `power_perf` *(CONFIRMED, `debugger.dis:312`–`377`)*
+
+```python
+    def generic(self):
+        if not self.is_generic:
+            size = struct.calcsize('<BiHbe')
+            self._generic_buff = memoryview(bytearray(size))
+            self.is_generic = True
+            modes.evt_debugger_active.set()
+
+    def power_perf(self):
+        if not self.is_power_perf:
+            size = struct.calcsize('<BihhHH3i')
+            self._pwr_prf_buff = memoryview(bytearray(size))
+            self.generic()
+            self.is_power_perf = True
+            modes.evt_debugger_active.set()
+```
+
+Both are plain methods, not coroutines — scope flags `0` in both preludes. `power_perf`
+calls `generic` (`:364`), so arming power telemetry always arms the generic record too;
+the reverse is not true.
+
+`modes.evt_debugger_active` is an `asyncio.Event` created in `project_data`
+(**confirmed**, `project_data.dis:1110`, `Event()` then `STORE_ATTR evt_debugger_active`).
+These two methods are the **only** places in the whole image that call `.set()` on it.
+
+### The two record formats *(CONFIRMED)*
+
+Both records are packed little-endian with no alignment padding, into a preallocated
+`memoryview` reused every cycle.
+
+**Generic record** — format `'<BiHbe'`, 10 bytes, packed at `debugger.dis:433`–`445`:
+
+| Offset | Code | Field | Source |
+| --- | --- | --- | --- |
+| 0 | `B` | record tag, literal `0` | `LOAD_CONST_SMALL_INT 0` at `:439` |
+| 1 | `i` | Unix seconds | `rtc.unix(precision=1)` (`:399`–`404`) |
+| 5 | `H` | seconds since boot | `int(time.ticks_diff(time.ticks_ms(), modes.booted) / 1000)` (`:405`–`417`) |
+| 7 | `b` | orientation | `fusion.orientation` (`:443`) |
+| 8 | `e` | battery volts, IEEE half-float | `modes.batt_volts`, see below |
+
+`rtc.unix(precision=1)` returns whole integer seconds, per the
+[`f_lib/rtc_v2` decode](/reference/f-lib). The battery value is chosen at `:418`–`432`:
+
+```python
+        volts = modes.batt_volts
+        if modes.is_charging:
+            volts = modes.batt_volts_max
+        if volts is None:
+            volts = 0
+```
+
+That is, **while the charger is attached the record carries the learned maximum, not the
+live cell voltage** — `modes.batt_volts_max` is the learned ceiling described on the
+[power page](/subsystems/power). A telemetry series taken across a charge cycle therefore
+flatlines at the learned maximum rather than tracking the charge curve. **Confirmed** from
+the `LOAD_ATTR is_charging` branch at `:422`.
+
+**Power-performance record** — format `'<BihhHH3i'`, 25 bytes, packed at
+`debugger.dis:570`–`585`:
+
+| Offset | Code | Field | Source |
+| --- | --- | --- | --- |
+| 0 | `B` | record tag, literal `2` | `LOAD_CONST_SMALL_INT 2` at `:576` |
+| 1 | `i` | `modes.lightsleep_ms` | `:460` |
+| 5 | `h` | `modes.rtc_sync_sec`, or `-1` if `None` | `:461`–`470` |
+| 7 | `h` | `modes.gnss_ttfl`, or `-1` if `None` | `:471`–`480` |
+| 9 | `H` | `modes.gnss_rx` | `:483` |
+| 11 | `H` | `modes.gnss_rx_errs` | `:486` |
+| 13 | `i` | `fusion.sec_horizontal` | `:489` |
+| 17 | `i` | `fusion.sec_vertical` | `:492` |
+| 21 | `i` | `modes.eco_mode_sec` | `:495` |
+
+The last three are **cumulative second counters that the recorder tops up in-place before
+packing**, without writing the result back to `modes` or `fusion` (**confirmed**,
+`:497`–`569`):
+
+```python
+        eco_sec = modes.eco_mode_sec
+        if modes.eco_mode_start is not None:
+            eco_sec += round(time.ticks_diff(time.ticks_ms(), modes.eco_mode_start) / 1000)
+        if fusion.orientation == 1:
+            if fusion.orientation_start > 0:
+                sec_vertical += round(
+                    time.ticks_diff(time.ticks_ms(), fusion.orientation_start) / 1000)
+        elif fusion.orientation == 2:
+            if fusion.orientation_start > 0:
+                sec_horizontal += round(
+                    time.ticks_diff(time.ticks_ms(), fusion.orientation_start) / 1000)
+```
+
+So each record reports the counter *plus the currently open interval*, which is the right
+thing for a sampled series and means consecutive records are not independent deltas. The
+orientation values `1` and `2` are the vertical and horizontal states described on the
+[navigation page](/subsystems/navigation).
+
+<Note>
+  **The record tag is `0` and `2`, not `0` and `1`.** Both are literal small-int constants
+  in the `pack_into` calls, not derived from anything. Whether a tag `1` record type once
+  existed is **not recoverable** — there is no trace of one in this image.
+</Note>
+
+### The loop: `start` *(CONFIRMED, `debugger.dis:378`–`622`)*
+
+```python
+    async def start(self):
+        log.debug('Starting debug logging')
+        await modes.evt_debugger_active.wait()
+        while True:
+            if self.is_generic:
+                ...                                   # pack the 10-byte record
+                self.temp.append(bytes(self._generic_buff))
+            if self.is_power_perf:
+                ...                                   # pack the 25-byte record
+                self.temp.append(bytes(self._pwr_prf_buff))
+            if len(self.temp) >= 3:
+                self.save()
+            gc.collect()
+            await asyncio.sleep(self.interval_sec)
+```
+
+`start` is a coroutine (scope flags `1`). The `len(self.temp) >= 3` test is **outside**
+both `if` blocks — the `POP_JUMP_IF_FALSE 225` guarding `is_power_perf` lands exactly on
+the `LOAD_GLOBAL len` that begins it (byte 397 of the function, `:596`). So the flush runs
+every cycle regardless of which record types are armed.
+
+With both types armed and `interval_sec = 1`, `self.temp` reaches three entries after two
+cycles, so `save()` is called roughly every two seconds; with only the generic record, every
+three seconds.
+
+### The writer: `save` *(CONFIRMED, `debugger.dis:624`–`794`)*
+
+`save` is **not** a coroutine — scope flags `0`, and the function contains no `YIELD_FROM`.
+It does blocking filesystem work on whatever task calls it, which is why it takes the
+watchdog blocker around itself.
+
+```python
+    def save(self):
+        log.debug('Writing debug logs to VFS')
+        self.last_saved = time.ticks_ms()
+        try:
+            modes.evt_vfs_not_busy.clear()
+            wdt_mgr.set_block(WdtBlockers.VFS_WRITE, True)
+            if statvfs('/')[3] < 39:                       # free blocks
+                log.warn('VFS free space too low to safely write log')
+                remove_oldest_log('debug-')
+                remove_oldest_log('debug-')
+                return False
+            count = 0
+            for _ in get_files(prefix='debug-'):
+                count += 1
+            if count > 10:
+                remove_oldest_log('debug-')
+            if exists('debug.bin') and stat(log_path)[6] > 7100:
+                ts = rtc.unix(precision=1)
+                rename('debug.bin', 'debug-{}.bin'.format(ts))
+            with open('debug.bin', 'ab') as f:
+                for buff in self.temp:
+                    f.write(buff)
+                    f.write(b'\n')
+            self.temp.clear()
+        except Exception as e:
+            log.err('Error in debugger logs', exc=e, is_write=False)
+        finally:
+            wdt_mgr.set_block(WdtBlockers.VFS_WRITE, False)
+            modes.evt_vfs_not_busy.set()
+```
+
+The constants are all literal: `39` at `:660`, `10` at `:693`, `7100` at `:709`. The
+`statvfs('/')[3] < 39` free-block guard is the **same check, with the same warning string**,
+that `nav_logger` uses before writing `events.bin` — see the
+[navigation page](/subsystems/navigation). The block size behind `39` is **not recoverable**
+from the bytecode; it depends on the VFS the image is mounted on.
+
+`remove_oldest_log('debug-')` really is called **twice in a row** in the low-space branch
+(`:668` and `:672`, identical argument). The `POP_JUMP_IF_FALSE 25` at `:662` skips exactly
+the 25 bytes that cover the warning, both calls and the `return False`, so both are inside
+the branch. Whether that is a deliberate "free two files" or a duplicated line is
+**inferred at best** — the bytecode cannot distinguish them.
+
+<Warning>
+  **`save` raises `NameError` on every call after the first, and `debug.bin` never grows
+  past one batch.** *(CONFIRMED)*
+
+  The size check reads a global named `log_path`:
+
+  ```text
+  debugger.dis:701   23:05       LOAD_CONST_OBJ 'debug.bin'
+  debugger.dis:702   34:01       CALL_FUNCTION 1          # exists('debug.bin')
+  debugger.dis:704   12:09       LOAD_GLOBAL stat
+  debugger.dis:705   12:79       LOAD_GLOBAL log_path
+  ```
+
+  **`log_path` is never defined.** The qstr appears exactly twice in the whole module — once
+  in the qstr table at `debugger.dis:126`, and once as that `LOAD_GLOBAL` at `:705`. There
+  is no `STORE_NAME log_path` anywhere in the module, no `IMPORT_FROM` that binds it, and
+  the qstr does not appear in any of the other 93 disassemblies. It is not a MicroPython
+  builtin, so `LOAD_GLOBAL` raises `NameError`.
+
+  The branch is guarded by `exists('debug.bin')`, so the failure is not immediate:
+
+  - **First call**, on a device with no `debug.bin`: `exists` is false, the second test is
+    skipped, the file is created and the batch is written. This works.
+  - **Every later call**, for the life of the file: `exists` is true, `LOAD_GLOBAL log_path`
+    raises, and `except Exception` catches it and logs `'Error in debugger logs'`. The
+    `with open(...)` block is never reached, and **`self.temp.clear()` is never reached
+    either**.
+
+  So `debug.bin` contains exactly one batch of three records, forever, while `self.temp`
+  grows without bound at one or two entries per second until the device runs out of memory.
+  `debug.bin` also persists across reboots, so a device only gets that one good write once.
+
+  This is also why the rename-based rotation to `debug-{}.bin` at `:718`–`:724` can never
+  fire: it sits on the far side of the same `NameError`. No `debug-*.bin` file can ever be
+  produced by this code, which makes the `get_files(prefix='debug-')` count at `:680` and
+  both `remove_oldest_log('debug-')` calls permanent no-ops.
+
+  (Whether the source wrote this as one `and` or as two nested `if`s is **not
+  recoverable** — both `POP_JUMP_IF_FALSE`s resolve to the same target, 39 bytes on from
+  `:703` and 25 bytes on from `:711`. The behaviour is identical either way.)
+
+  Whether `log_path` was a module constant that an edit removed is **not recoverable**.
+  Nothing outside the module could supply it either — the only two importers do
+  `from debugger import debug` and never touch the module object, so only a REPL user
+  could inject `debugger.log_path`.
+</Warning>
+
+Note that the `log.err` call passes `is_write=False` (`:768`–`:769`), so this failure is a
+**console line only**. It never reaches `errors.log`. See
+[the logger decode](/reference/f-lib) for why that matters.
+
+## Is any of this reachable?
+
+**No. Not on a shipped device.** *(CONFIRMED)*
+
+Two modules import `debugger`, and both import only the singleton:
+
+| Importer | Site | What it does |
+| --- | --- | --- |
+| `compass` | `compass.dis:912` | `from debugger import debug` |
+| `device_power` | `device_power.dis:146` | `from debugger import debug` |
+
+Between them they reference the `debug` global five times, and every reference is behind
+the same flag:
+
+```python
+# compass.dis:2894-2913, inside Compass.backend_checks (compass.dis:1898)
+if debug.is_generic:
+    since = time.ticks_diff(time.ticks_ms(), debug.last_saved)
+    if since >= 60000:
+        debug.save()
+
+# device_power.dis:259-265, inside shut_down_tasks (device_power.dis:203)
+if debug.is_generic:
+    debug.save()
+```
+
+`is_generic` is set `True` in exactly one place: `Debugger.generic` (`:334`). And
+`Debugger.generic` is called from exactly one place: `Debugger.power_perf` (`:364`).
+`Debugger.power_perf` is called from nowhere at all.
+
+<Warning>
+  **Nothing in the image arms the recorder.** *(CONFIRMED)*
+
+  - **No module calls either arming method.** There is no `LOAD_METHOD generic` or
+    `LOAD_METHOD power_perf` anywhere outside `debugger.dis` — the only one in the image is
+    `power_perf`'s own call to `generic` at `:364`. More broadly, `generic` as a whole word
+    occurs in no other disassembly (`grep -w`, all 94 files), and `power_perf` occurs in no
+    other disassembly at all. The flag name `is_generic` does appear in `compass` and
+    `device_power`, but only in the read-only guards above; neither module can set it.
+  - `modes.evt_debugger_active` appears only in `project_data.dis` (where the `Event` is
+    created, `:1110`) and in `debugger.dis`. Nothing else sets, clears or waits on it.
+  - `debug.start` is never referenced. The five `debug` loads in `compass` and
+    `device_power` are the only ones in the image, and none of them is `start`. The
+    coroutine is never created as a task, so even if the event were set, the loop would not
+    be running to observe it.
+
+  The consequence chain is total: `is_generic` is `False` for the life of the device, so
+  `compass` and `device_power` never call `save()`, `start()` never runs, `evt_debugger_active`
+  is never set, and `debug.bin` is never created. The `NameError` above is therefore a
+  latent bug, not an observed one — it would bite the first person to arm the recorder
+  from the REPL.
+</Warning>
+
+That the intended arming route is the **REPL** is **inferred**, but the surrounding evidence
+is consistent: `project_main` exposes a matching REPL reader (below), the two arming methods
+are public and idempotent, and `start` opens by awaiting an event rather than by checking a
+config field. A developer connected to the serial console would call
+`from debugger import debug`, then `debug.power_perf()`, then arrange for `debug.start()` to
+be scheduled. Nothing in the image does the third step for them.
+
+## Where `debug.bin` would go
+
+Even though it is never written in practice, `debug.bin` is wired into both the REPL and the
+cloud upload path. **Confirmed**, two consumers:
+
+**`project_main.show_debug_logs(f_name='debug.bin')`** (`project_main.dis:865`–`910`) — a
+REPL helper with `debug.bin` as its default argument (`:381`–`385`). It opens the file in
+`'rb'` mode and prints each newline-delimited chunk raw:
+
+```python
+def show_debug_logs(f_name='debug.bin'):
+    from f_lib.file_mgr import exists
+    if not exists(f_name):
+        print('No {} file on device'.format(f_name))
+        return
+    with open(f_name, 'rb') as f:
+        for line in f:
+            print(line)
+```
+
+It does no unpacking at all — the operator sees `bytes` repr, not decoded fields.
+
+**`data_upload_v2.device_logs(root_log='debug.bin', max_files=99)`**
+(`data_upload_v2.dis:912`–`919`) — `debug.bin` is one of four log families the WiFi uploader
+ships, alongside `events.bin`, `commslog.bin` and `hotcold.bin`. Its endpoint is
+`API_ENDPOINT + '/debug/{}'.format(mac_addr)` (`:619`–`629`), and the uploader globs
+`get_files(prefix=root_log.split('.')[0])`, so it would collect `debug.bin` and any
+`debug-*` siblings.
+
+<Note>
+  **The newline separator is not a reliable record delimiter.** `save` writes each packed
+  record followed by `b'\n'` (`:744`), but the records are raw binary — a `0x0A` byte can
+  and will occur inside a timestamp, a counter or a half-float. A parser must use the
+  leading tag byte and the fixed record lengths (10 bytes for tag `0`, 25 for tag `2`) and
+  skip one separator byte, rather than splitting on newlines. That the tag plus fixed
+  length makes the stream unambiguously parseable is **inferred** from the two formats;
+  no decoder for this file exists in the image.
+</Note>
+
+## `WriteLog`: the second writer, never instantiated
+
+The other half of the module is a general-purpose queued log writer. It is **confirmed**
+dead: the qstr `WriteLog` appears in no other disassembly in the image, and nothing inside
+`debugger.py` constructs one either.
+
+### Construction *(CONFIRMED, `debugger.dis:822`–`854`)*
+
+```python
+class WriteLog:
+    def __init__(self, file_name=None, **kwargs):
+        self._file_name = file_name
+        self._queue_sz = kwargs.get('queue_sz', 5)
+        self._max_logs = kwargs.get('max_logs', 10)
+        self._is_err = False
+        self._next_save = None
+        self._queue = []
+```
+
+The `**kwargs` is the var-keyword scope flag `2` in the prelude `(7, 0, 2, 2, 0, 1)`; the
+defaults `5` and `10` are at `:833` and `:840`.
+
+### `add` *(CONFIRMED, `debugger.dis:856`–`982`)*
+
+```python
+    def add(self, buff=None):
+        if not buff or self._is_err:
+            return
+        self._queue.append(bytes(buff))
+        if len(self._queue) >= self._queue_sz:
+            try:
+                wdt_mgr.set_block(WdtBlockers.VFS_WRITE, True)
+                with open(self._file_name, 'ab') as f:
+                    for b in self._queue:
+                        f.write(b)
+                        f.write(b'\n')
+                self._queue.clear()
+            except Exception as e:
+                log.err('Error writing: {}'.format(self._file_name), exc=e, is_write=False)
+                self._is_err = True
+            finally:
+                wdt_mgr.set_block(WdtBlockers.VFS_WRITE, False)
+        if self._next_save is None:
+            self._next_save = time.ticks_ms()
+            tasks.schedule(self._scheduled_rotation, delay_ms=60000)
+```
+
+Two details worth pinning down, both **confirmed** by resolving the jump targets:
+
+- `_is_err` is a **one-way latch**. Once a write fails it is set `True` (`:946`) and the
+  early return at the top of `add` drops every subsequent record silently. Nothing in the
+  module ever sets it back to `False`.
+- The rotation scheduling is **outside** the flush block. The `POP_JUMP_IF_FALSE 124` that
+  guards `len(self._queue) >= self._queue_sz` lands on byte 188 of the function, which is
+  `LOAD_FAST 0 / LOAD_ATTR _next_save` (`:963`–`964`) — so the `_next_save` check runs on every
+  accepted record, not only on flushes.
+
+`tasks.schedule(cb, delay_ms=60000)` creates a task that sleeps 60 seconds and then launches
+`cb()`; see the [`f_lib/task_mgr` decode](/reference/f-lib). `_scheduled_rotation`
+(`:984`–`1000`) simply awaits `rotate_logs()`, resets `_next_save = None` and returns `True`,
+so the next `add` after a rotation arms another 60-second timer. **Rotation is therefore at
+most once per minute, and only while records keep arriving.**
+
+### `rotate_logs` *(CONFIRMED, `debugger.dis:1002`–`1192`)*
+
+```python
+    async def rotate_logs(self):
+        log.debug('Saving logs for {}'.format(self._file_name))
+        try:
+            wdt_mgr.set_block(WdtBlockers.VFS_WRITE, True)
+            if not exists(self._file_name):
+                return True
+            if statvfs('/')[3] < 39:
+                log.warn('Not enough VFS free space too low to write log')
+                self._is_err = True
+                return False
+            if stat(self._file_name)[6] < 7100:
+                return True
+            base = self._file_name.split('.')[-2]
+            if self._max_logs > -1:
+                count = 0
+                for _ in get_files(prefix='{}-'.format(base)):
+                    count += 1
+                    if count % 10 == 0:
+                        await asyncio.sleep_ms(1)
+                if count > self._max_logs:
+                    log.warn('Too many {} logs on VFS'.format(self._file_name))
+                    self._is_err = True
+                    return False
+            ts = rtc.unix(precision=1)
+            out = '{}-{}.gz'.format(base, ts)
+            wdt_mgr.set_block(WdtBlockers.VFS_WRITE, True)
+            await compress_file(file_path=self._file_name, output_path=out)
+        except FileErr as e:
+            log.exc(e.msg, exc=e, is_write=False)
+            return False
+        finally:
+            wdt_mgr.set_block(WdtBlockers.VFS_WRITE, False)
+        return True
+```
+
+Three things this shows:
+
+- **The rotation threshold is the same `7100` bytes** as `Debugger.save` (`:1058`, and
+  `:709` for the other), so the two writers were sized against the same budget.
+- **It compresses rather than renames.** `compress_file` defaults to `is_delete=True`, per
+  the [`f_lib/file_mgr` decode](/reference/f-lib), so the original is removed and only
+  `<base>-<unix>.gz` survives. `Debugger.save` instead renames to `debug-<unix>.bin` and
+  leaves it uncompressed. The two halves of this one module rotate incompatibly.
+- **`self._max_logs > -1` is the disable switch.** A `WriteLog` constructed with
+  `max_logs=-1` skips the counting loop entirely and rotates without any cap on how many
+  archives accumulate. **Confirmed** from the `LOAD_CONST_SMALL_INT -1` / `__gt__` at
+  `:1072`–`1074`.
+- The `wdt_mgr.set_block(..., True)` at `:1138`–`1143` is **redundant** — the blocker was
+  already set at the top of the same `try`, and `set_block` is not a counter. Harmless, but
+  it means reading this function as "the blocker is taken just for the compression" would
+  be wrong.
+
+The warning string `'Not enough VFS free space too low to write log'` is a garbled merge of
+two phrasings; the `Debugger.save` copy reads `'VFS free space too low to safely write log'`.
+Both are in `obj_table` (`debugger.dis:131`), so the difference is in the source, not the
+decode.
+
+## How this relates to `f_lib/logger.py`
+
+`debugger.py` is a **second, independent writer**, and understanding the split matters for
+anything recovered off a device.
+
+| | `f_lib/logger.py` | `debugger.py` |
+| --- | --- | --- |
+| File | `errors.log` | `debug.bin` (`Debugger`), caller's choice (`WriteLog`) |
+| Content | Text records, five pipe-separated fields | Fixed-width little-endian binary |
+| What reaches flash | `ERR` and `EXC` only | Every sampled record |
+| Size behaviour | Hard stop at 8000 bytes, no rotation | Rotate at 7100 bytes — rename (`Debugger`) or gzip (`WriteLog`) |
+| Cleared by | A successful OTA, or `show_logs(True)` | Nothing automatic |
+| Reachable in v5.0.3 | Yes, on every device | **No** |
+
+`debugger.py` imports `log` from `f_lib.logger` (`:193`–`:197`) and uses it for its own
+diagnostics, but every one of those calls is either a `debug`/`warn` level — which
+[never reaches flash](/reference/f-lib), because `_write_lvl` is fixed at 4 — or an
+`err`/`exc` with an explicit `is_write=False`. **Confirmed** at `:765`–`:770`, `:933`–`:947`
+and `:1163`–`:1171`.
+
+<Warning>
+  **`debugger.py` writes nothing to `errors.log`, ever.** Every path that could have —
+  the three `log.err`/`log.exc` calls — passes `is_write=False`. So a post-mortem taken off
+  a device gets no trace of the recorder having failed, and no trace of it having run.
+  Combined with the fact that nothing arms it, the practical answer for field recovery is:
+  **`debug.bin` will not be on the device, and `errors.log` will not mention why.**
+</Warning>
+
+## Dead code: `peer_auto_bond.py`
+
+`peer_auto_bond.py` (190 lines of disassembly) is a single coroutine, `bond_to_group`. It is
+**dead**, and it is an abandoned earlier draft of the Smart Group bonding that
+[`peer_management.auto_bond_to_peers`](/protocols/espnow-mesh) performs today.
+
+### Nothing imports it *(CONFIRMED)*
+
+Grepping `IMPORT_NAME peer_auto_bond` across all 94 v5.0.3 disassemblies returns nothing.
+Grepping the bare string `peer_auto_bond` across all 94 returns only `peer_auto_bond.dis`
+itself — it appears in no other module's qstr table, which it would have to if any module
+named it. The same is true in v5.0.2, and the two versions' disassemblies are byte-identical.
+
+### It could not run if it were called *(CONFIRMED)*
+
+```text
+peer_auto_bond.dis:162   12:1d       LOAD_GLOBAL get_next_peer_pixel
+```
+
+`get_next_peer_pixel` is loaded as a global inside `bond_to_group`, but the module never
+binds that name. The module-level code performs exactly nine `STORE_NAME` operations
+(`:44`, `:48`, `:54`, `:61`, `:71`, `:73`, `:75`, `:77`, `:84`) — `asyncio`, `time`, `log`,
+`tasks`, `colors`, `config`, `modes`, `Peer`, `bond_to_group` — and `bond_to_group`'s own
+two function-level imports bring in `delete_all_peers` and `bin_to_str` (`:93`–`:106`).
+`get_next_peer_pixel` is in none of them.
+
+The function is defined in `peer_helpers.py` (`peer_helpers.dis:166`) and imported explicitly
+by the four modules that actually use it — `peer_management` (`:186`), `compass` (`:834`),
+`ble_manager` (`:5218`) and `espnow_conn_v2` (`:9307`). `peer_auto_bond` is the one place
+that reaches for it without importing it.
+
+So the first loop iteration that got past the `mac != config.mac` test would raise
+`NameError`, after having already awaited `delete_all_peers()` — meaning a call would wipe
+the friend list and then fail before adding anything back. That is **inferred** only in the
+sense that the code never runs; the missing binding is confirmed.
+
+Four of its eight module-level imports are unused: `asyncio`, `time`, `log` and `tasks`
+never appear as a `LOAD_GLOBAL` in the only function the module defines. The complete set of
+globals `bond_to_group` loads is `colors`, `config`, `modes`, `Peer` and the undefined
+`get_next_peer_pixel`.
+
+### What it would have done *(CONFIRMED, reading the body)*
+
+```python
+async def bond_to_group(bond_group=None, cb_add_peer=None):
+    from peer_management import delete_all_peers
+    from f_lib.bitwise import bin_to_str
+    await delete_all_peers()
+    for mac in bond_group:
+        mac_str = bin_to_str(mac)
+        if mac_str != config.mac:
+            rgb = colors.rgb(bond_group[mac][3], brt=1)
+            peer = Peer(mac_str)
+            peer.lat = bond_group[mac][0]
+            peer.lon = bond_group[mac][1]
+            peer.p_acc = bond_group[mac][2]
+            peer.pixel = get_next_peer_pixel()
+            peer.rgb = rgb
+            config.peers[mac_str] = peer
+            if cb_add_peer:
+                await cb_add_peer(mac=mac_str)
+    modes.is_save_config = True
+```
+
+`bond_group` is a dict keyed by binary MAC, whose values are 4-element sequences of
+latitude, longitude, position accuracy and a colour index.
+
+### It is superseded, not merely unused *(CONFIRMED)*
+
+`peer_management.auto_bond_to_peers(bond_group, pause_ms)` is the same algorithm, statement
+for statement, over the same data shape — same `delete_all_peers()` preamble, same
+`bin_to_str`/`config.mac` skip, same four attribute assignments in the same order, same
+`config.peers[mac_str] = peer`, same `modes.is_save_config = True` at the end. The live
+version differs in exactly the ways you would expect from a later revision:
+
+| | `peer_auto_bond.bond_to_group` | `peer_management.auto_bond_to_peers` |
+| --- | --- | --- |
+| Second parameter | `cb_add_peer`, an injected callback | `pause_ms`, a settle delay |
+| Adding the ESP-NOW peer | `await cb_add_peer(mac=mac_str)` | `await enow_v2.add_peer(mac=mac_str)` directly |
+| `get_next_peer_pixel` | **unbound** — `NameError` | imported at `peer_management.dis:186` |
+| Cancels the join timeout | no | `tasks.stop('auto_bond_client_timeout')` first |
+| Sets `config.is_bond_group` | no | yes, to `1` |
+| Trailing settle | none | `await asyncio.sleep_ms(pause_ms)` |
+| Clears group state | no | `smart_grp_ticks`, `smart_grp_last_nearby`, `auto_bond_timeout` all set to `None` |
+| Logging | none | `'Autobonding to Peers'`, `'Smart Group completed'` |
+
+The callback parameter is the tell: `bond_to_group` was written to be handed an
+`add_peer` function so it would not have to import the ESP-NOW layer, and the surviving
+version dropped that indirection and called `enow_v2` directly. **Confirmed** by reading
+both function bodies; the conclusion that one is the ancestor of the other is **inferred**
+from their structural identity.
+
+<Note>
+  The live Smart Group behaviour — including the fact that joining one wipes every existing
+  peer — is documented on the [ESP-NOW mesh page](/protocols/espnow-mesh). Nothing on this
+  page changes it. `peer_auto_bond.py` is recorded here only so the module is no longer
+  undecoded; it has no effect on any device.
+</Note>
+
+## Not recoverable from this image
+
+- **Why `log_path` is undefined.** Whether it was a module-level constant, a parameter, or
+  an attribute that an edit removed is gone with the source. Only the dangling
+  `LOAD_GLOBAL` survives.
+- **The block size behind `statvfs('/')[3] < 39`.** The threshold is in blocks; the block
+  size is a property of the mounted filesystem, not of this module.
+- **Whether `debug.bin` was ever populated in the field.** Nothing in this image arms the
+  recorder, but a factory or development image built from the same source with a different
+  `boot.py` or `main.py` could have. Those files are not frozen into the image this decode
+  is taken from.
+- **What consumes `/debug/{mac}` server-side.** The endpoint and the record layouts are
+  confirmed; the decoder on the other end is not in the image.
+- **Whether a record tag `1` ever existed.** The tags `0` and `2` are literals with no
+  named constant behind them.
+- **What `WriteLog` was built for.** It takes an arbitrary filename and has no caller, so
+  the file family it was meant to manage is unknowable. Its `7100`-byte threshold matching
+  `Debugger.save` is suggestive of `debug.bin`, but that is the only hint.

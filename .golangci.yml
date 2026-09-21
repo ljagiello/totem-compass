@@ -33,6 +33,14 @@ linters:
         - name: unused-parameter
         - name: context-as-argument
 
+  exclusions:
+    rules:
+      # gocritic reads the code cgo generates around a C call, not what is
+      # written here, and reports pointer arithmetic that is not in the file.
+      - path: cmd/totememu/ring/ring\.go
+        linters:
+          - gocritic
+
 formatters:
   enable:
     - gofmt

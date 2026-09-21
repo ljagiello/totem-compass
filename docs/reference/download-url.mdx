@@ -1,28 +1,109 @@
 ---
 title: "Firmware download URL & API"
-description: "How the release API and S3 download URL are constructed, recovered from the mobile app."
+description: "How the release API and S3 download URL are constructed — on the phone app, and on the device."
 ---
 
-The firmware image analyzed here is publicly downloadable. The URL is built
-deterministically from release metadata. This was recovered by decompiling the Android
-app's Hermes bytecode (functions `getS3FirmwareUrl` and `getFileName`).
+The firmware image analysed here is publicly downloadable. Two *different* URL
+constructions reach the same bytes: the phone app's direct S3 download, recovered by
+decompiling the Android app's Hermes bytecode, and the device's own OTA fetch, recovered
+from the frozen MicroPython bytecode in `re/v5.0.3/mpy/*.dis`. They do not share a single
+string.
 
-## Release API
+<Note>
+App-side facts below come from decompiled Hermes bytecode and from observing the live
+API — they cannot be verified against the firmware image. Device-side facts carry
+`file.dis:line` citations into the disassembly.
+</Note>
 
-The app fetches release metadata from:
+## Device-side: how the firmware builds its own URLs
+
+Everything the device fetches hangs off `cfg.ota_url` and `cfg.version`.
+
+### Where `cfg.ota_url` comes from
+
+1. `project_main.perform_ota()` sets it from the branch named in `perform.ota`
+   (`project_main.dis:446`):
+
+   ```python
+   branch = d.get('ota_branch', 'totem_compass/totem') or 'totem_compass/totem'
+   url = 'http://datapeak-developer.s3.us-east-1.amazonaws.com/{}'.format(branch)
+   ```
+
+2. Failing that, `f_ota.main.start_ota` assembles the same default by concatenation
+   (`f_ota_main.dis:1221`):
+
+   ```python
+   if not cfg.ota_url:
+       cfg.ota_url = ('http://datapeak-developer.s3.us-east-1.amazonaws.com'
+                      + '/' + 'totem_compass' + '/' + 'totem')
+   ```
+
+3. If the release poll succeeds, **the API overwrites it** with its `body.endpoint`
+   string and `cfg.version` with `body.release_code`
+   (`get_release_from_api`, `f_ota_install_ota.dis:672`). The server therefore chooses the
+   download host; the on-device S3 URL is only the fallback.
+
+All three host literals are in the image at `re/v5.0.3/rodata_strings.txt:1816`, `:1837`
+and `:2123` — `http://datapeak-developer.s3.us-east-1.amazonaws.com`, the `…/{}` template
+of it, and `http://api.totemportal.com`. No `https://` Totem host appears anywhere; the
+only `https://` literals in the image are upstream MicroPython defaults
+(micropython.org, raw.githubusercontent.com, gitlab.com).
+
+### The fetches
+
+`_get_endpoints(file_path, s3_dir_url, dest_dir)` is the whole of the URL builder
+(`f_ota_install_ota.dis:1214`):
+
+```python
+return [s3_dir_url + '/' + file_path, dest_dir + '/' + file_path]
+```
+
+with `s3_dir_url = cfg.ota_url + '/' + cfg.version` and `dest_dir = cfg.save_to`
+(default `'next'`). So:
+
+```text
+{cfg.ota_url}/{cfg.version}/contents.json[?uid=XXXXXXXX]   # index, is_cached==False adds the uid
+{cfg.ota_url}/{cfg.version}/{name picked from contents.json}
+```
+
+The `?uid=` cache-buster is `rand_key(length=8)`, 8 characters from `A–Za–z0–9` seeded by
+`os.urandom` (`f_lib_helpers.dis`).
+
+The name is **not** a template — it is whichever entry of the `contents.json` array
+satisfies `entry[-4:] == '.bin'` (or `'.tgz'`). The device then *reverse-engineers* the
+version from the resulting URL (`f_ota_install_ota.dis:1017`):
+
+```python
+version = firmware_url.split('_v')[-1].lower()
+ota_status.version = '.'.join(version.split('.')[:-1])
+```
+
+which is the only place the firmware ever assumes a `…_v<code>.<ext>` naming convention —
+and it assumes it about a string the server supplied, with no validation.
+
+<Note>
+The literal `firmware_v` appears **nowhere** in the image: zero matches across all seven
+segments `seg0`–`seg6` and zero across the 94 frozen modules. The filename is a
+server-side/app-side convention that the device only parses, never constructs.
+</Note>
+
+## App-side: the releases API
+
+The phone app fetches release metadata from an endpoint the firmware never mentions:
 
 ```text
 https://api.totemportal.com/releases
 ```
 
 <Note>
-`/releases` is the **phone app's** API endpoint; no `releases` literal appears in the
-firmware. The device itself resolves releases through the templates
-`{base}/package/{}/{}/{}.json` (package manifest) and `{base}/devices/{mac}/ota`.
+No `releases` literal exists in the firmware (`grep -l releases *.dis` → no matches). The
+device's only API endpoints are `{API_ENDPOINT}/devices/{mac}/ota` and
+`…/devices/{mac}/ota?updated`, plus `{API_ENDPOINT}/events/{mac}` and
+`{API_ENDPOINT}/debug/{mac}` for log upload after an update (`ota_callback.dis:497`).
 </Note>
 
-Response (abridged) at time of analysis. The API lists one current release per branch; after
-the 5.0.3 rollout release 335 (v5.0.2) was no longer listed:
+Response (abridged) at time of analysis. The API lists one current release per branch;
+after the 5.0.3 rollout, release 335 (v5.0.2) was no longer listed:
 
 ```json
 {
@@ -51,20 +132,7 @@ the 5.0.3 rollout release 335 (v5.0.2) was no longer listed:
 }
 ```
 
-Device-side OTA endpoints are templated as `{base}/devices/{mac}/ota` and
-`{base}/devices/{mac}/ota?updated`.
-
-<Note>
-The `s3_bucket` / `s3_product_dir` / `s3_branch_dir` / `size_bytes` split is how the
-**phone app** parses the release JSON — none of those field names appear in the firmware.
-On-device the firmware instead consumes a single pre-composed `s3_dir_url`, with the
-product/branch paths baked in as the constant strings `totem_compass`,
-`totem_compass/totem` and `totem_compass/pre_alpha`. The release fields actually referenced
-by the firmware are `release_code`, `release_id`, `sha256_hash`, `s3_dir_url`,
-`package_json_url`, `ota_branch` and `branch_name`.
-</Note>
-
-## URL construction
+### URL construction (app)
 
 ```text
 filename = "firmware_v" + release_code + ".bin"
@@ -82,42 +150,54 @@ For release 339 (v5.0.3):
 https://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.3/firmware_v5.0.3.bin
 ```
 
-Release 335 (v5.0.2) followed the same pattern (`…/totem/5.0.2/firmware_v5.0.2.bin`).
-
-The construction order was confirmed from the raw Hermes opcodes (a `HermesInternal.concat`
-call of exactly ten operands ending in the filename), not only the decompiler output.
+Release 335 (v5.0.2) followed the same pattern (`…/totem/5.0.2/firmware_v5.0.2.bin`). The
+construction order was confirmed from the raw Hermes opcodes (a `HermesInternal.concat`
+call of exactly ten operands ending in the filename), not only from decompiler output.
 
 <Warning>
-The `https://` scheme above is the phone app's URL construction. The firmware image itself
-embeds only the **plaintext `http://`** variants of both Totem hosts —
-`http://api.totemportal.com` and `http://datapeak-developer.s3.us-east-1.amazonaws.com`
-(the S3 host also appears as the template `http://datapeak-developer.s3.us-east-1.amazonaws.com/{}`).
-Whether the app rewrites `http://` to `https://` before use is not verifiable from the
-firmware. The only `https://` literals in the image are upstream MicroPython defaults
-(micropython.org, raw.githubusercontent.com, gitlab.com), none Totem-related.
+The `https://` scheme above is the app's. The firmware embeds only the plaintext `http://`
+variants of both hosts. Whether the app rewrites `http://` to `https://` before use is not
+verifiable from the firmware.
 </Warning>
+
+### Which release fields the firmware actually knows about
+
+Earlier revisions of this page listed `s3_dir_url` and `package_json_url` among the
+"release fields referenced by the firmware." Both were wrong:
+
+| Name | Where it really comes from |
+| --- | --- |
+| `s3_dir_url` | a **parameter name of `_get_endpoints`** in `f_ota/install_ota.py` — a local variable holding `cfg.ota_url + '/' + cfg.version`, never a JSON key |
+| `package_json_url`, `{base}/package/{}/{}/{}.json` | upstream **`mip`**, MicroPython's own package installer (`mip___init__.dis`). Nothing in `f_ota/` touches it, and no Totem code path calls `mip` |
+| `sha256_hash` | appears only in `f_ble_chunking.dis` and `f_ble_file_upload.dis` — the **BLE** transfer's per-file digest. The WiFi release path never reads a hash |
+| `endpoint`, `release_code`, `release_id`, `product_name`, `branch_name`, `device_id` | the six keys the firmware really does read, out of `resp['body']` (`f_ota_install_ota.dis:672`) |
+| `ota_branch` | not an API field at all — a **`perform.ota` key**, produced by `ble_manager.handle_ota` (`ble_manager.dis:5727`), `espnow_conn_v2` and `project_main.force_ota` |
+| `s3_bucket`, `s3_product_dir`, `s3_branch_dir`, `size_bytes` | app-side only; none of these names appear in the firmware |
+
+The product/branch directory names *are* on-device, as plain strings: `totem_compass` and
+`totem` in `f_ota/main.py` and `f_ota/system.py`, `totem_compass/totem` as
+`perform_ota()`'s `ota_branch` default, and `totem_compass/pre_alpha` as the default first
+argument of the REPL helper `project_main.force_ota()` (`project_main.dis:386`).
 
 ## On-device OTA vs app download
 
-The URL above is the **phone app's** direct-download construction. The device's own OTA
-flow is materially different: it fetches a package manifest and installs a package into a
-local "repo" rather than pulling a single `firmware_v<code>.bin` by URL.
-
 | Aspect | Phone app | On-device firmware |
 | --- | --- | --- |
-| Release lookup | `GET /releases` | `{base}/package/{}/{}/{}.json`, `{base}/devices/{mac}/ota` |
-| Artifact | direct S3 `firmware_v<code>.bin` | package (`.tgz` / `.bin`) described by a JSON manifest |
-| Manifest | (none) | `package.json` / `contents.json` |
-| Install target | download only | local repo (`Firmware: {} found in repo`) |
+| Release lookup | `GET /releases` | `POST {API}/devices/{mac}/ota`, else fall back to the built-in S3 URL |
+| Artifact naming | builds `firmware_v<code>.bin` itself | reads `contents.json` and picks the first entry whose last 4 characters are `.bin` / `.tgz` |
+| Index | (none) | `contents.json` — a bare JSON array of filenames |
+| Where it lands | a file on the phone | `.bin` streams straight from the socket into the inactive OTA slot and is **never** written to the filesystem; only the `.tgz` preview is saved, under `next/`, then unpacked over the filesystem root |
+| Integrity | `sha256_hash` from the releases API | none on the WiFi path beyond `bytes written == Content-Length` |
 
-The `firmware_v<code>.bin` filename does **not** appear anywhere in the firmware image (no
-`firmware_v` literal in any segment or the ELF); it is a phone-app construction. It is
-corroborated instead by the actual downloaded artifact — the downloaded `firmware_v5.0.3.bin`
-(and earlier `firmware_v5.0.2.bin`) is byte-identical to the object at the constructed URL.
+<Warning>
+`Firmware: {} found in repo` is a log line about the **remote** `contents.json` listing,
+not a local repository. Earlier revisions of this page read it as an on-device artifact
+store; there is no such store for firmware images.
+</Warning>
 
 ## Verification
 
-The downloaded object matched the API's own integrity fields exactly:
+The object at the app-constructed URL matched the API's own integrity fields exactly:
 
 | Field | API value | Downloaded file |
 | --- | --- | --- |
@@ -125,15 +205,16 @@ The downloaded object matched the API's own integrity fields exactly:
 | SHA-256 | `bfe1f5a4…23450dc4` | `bfe1f5a4…23450dc4` |
 
 The v5.0.2 download (release 335) matched its record the same way (1,692,352 B,
-`a6d05597…c7bf8896`).
+`a6d05597…c7bf8896`). The image begins with `0xE9` and carries the ESP-IDF app-descriptor
+magic `0xABCD5432`, confirming a genuine ESP32 application image.
 
-The image begins with `0xE9` and carries the ESP-IDF app-descriptor magic `0xABCD5432`,
-confirming a genuine ESP32 application image.
+Since the device never sees `sha256_hash`, this check confirms that the *app's* download
+is intact — it says nothing about what the device flashes. See
+[OTA integrity](/subsystems/ota#integrity).
 
 <Note>
 The path is scoped by `release_code` (the `/5.0.3/` segment), but the object is a plain
-static S3 key with no content-hash or immutable prefix — so that fixed per-version URL
-keeps serving whatever bytes currently sit at the key (it is mutable) until the object is
-replaced. Release metadata (including the `pre_alpha` branch) is served openly by the app's
-releases API.
+static S3 key with no content hash or immutable prefix — that fixed per-version URL keeps
+serving whatever bytes currently sit at the key until the object is replaced. Release
+metadata, including the `pre_alpha` branch, is served openly by the app's releases API.
 </Note>

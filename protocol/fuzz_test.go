@@ -111,6 +111,14 @@ func FuzzParseMAC(f *testing.F) {
 				t.Fatalf("ParseMAC(%q) = %v, but %q parses as %v, %v", s, m, form, back, err)
 			}
 		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back MAC
+		if err := json.Unmarshal(b, &back); err != nil || back != m {
+			t.Fatalf("JSON %s decodes as %v, %v; want %v", b, back, err, m)
+		}
 	})
 }
 

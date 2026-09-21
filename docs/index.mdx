@@ -8,8 +8,9 @@ This is independent, unofficial reverse-engineering documentation produced by st
 analysis of publicly downloadable firmware images. It is not affiliated with or
 endorsed by Totem Labs. No services were attacked. Findings come from reading the firmware
 binaries and the companion mobile app. The BLE protocol was additionally exercised with the
-`totemctl` client against the author's own device (firmware 4.1.3 and 5.0.3); where that
-changed a conclusion, the page says so.
+`totemctl` client against the author's own device (firmware 4.1.3 and 5.0.3), and the ESP-NOW
+mesh with an [ESP32 emulator](/reference/esp32-emulator) that bonded with that device; where
+that changed a conclusion, the page says so.
 </Note>
 
 ## What this documents
@@ -63,6 +64,20 @@ from v5.0.2; [What changed in 5.0.3](/firmware/changes-5.0.3) lists the differen
 | App ELF SHA-256 | `97a29359fa06661ac57840a7d041650ed1fdb08aca8712ec2373d91ea37b5777` (`esp_app_desc_t.app_elf_sha256`, pins the source ELF; a distinct value from the image-file hash above) |
 | Flash | 4 MB, DIO @ 40 MHz (read from the image header via `esptool`) |
 | Segments | 7 (see [memory map](/firmware/memory-map)) |
+
+## How complete is this?
+
+The **inventory** is complete: all 94 frozen modules are identified and every one of them
+appears in these docs. The **analysis** is not.
+
+Of the 68 modules that are Totem's own code (the other 26 are stock MicroPython and empty
+package inits), 28 have had their behaviour read out of the bytecode, 27 are partly
+decoded, and **13 are documented by name only and have never been read** — including
+`f_lib/logger.py`, which 41 of the other modules import. By volume of disassembly, that is
+roughly 55% decoded, 35% partial, 10% untouched.
+
+The [module reference](/reference/modules) rates every module individually and ranks what
+is left, so you can tell a verified claim from a plausible guess before relying on it.
 
 ## How to read this documentation
 

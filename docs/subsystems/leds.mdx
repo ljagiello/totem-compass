@@ -1,145 +1,429 @@
 ---
 title: "LEDs & animations"
-description: "The halo ring and Touch Crystal: APA106 driver, animation set, and status colors."
+description: "The halo ring and Touch Crystal: the NeoPixel driver, the animation set, and status colors."
 ---
 
 The Totem's visible output is a ring of addressable RGB LEDs (the **halo**) plus the
-**Touch Crystal**. Driven by `apa106.py` / `neopixel.py` / `f_lib/neopixel_v2.py`, with
-behavior in `leds.py` and `animations.py`.
+**Touch Crystal**. Both are driven by `f_lib/neopixel_v2.py` through the `LightStrip`
+subclass in `leds.py`, wired up in `peripherals.py`, with the animation library split
+between `peripherals.py` and `animations.py`.
+
+The [ESP32 emulator](/reference/esp32-emulator#the-rest-of-the-device) models this: the
+60-pixel ring, the 7-pixel crystal, the palette below, and the animation each event plays.
+
+<Note>
+Everything on this page was read out of the v5.0.3 frozen bytecode (`re/v5.0.3/mpy/*.dis`).
+Claims are graded **confirmed** (read in the disassembly), *inferred*, or called out as
+unverifiable. `leds.py`, `animations.py` and `f_lib/neopixel_v2.py` are **byte-identical
+between v5.0.2 and v5.0.3**; `peripherals.py` differs only in the battery lookup table.
+No LED behavior changed in this release.
+</Note>
 
 ## Driver
 
 | Element | Evidence |
 | --- | --- |
-| LED type | **APA106** (`APA106`, `apa106.py`) — WS2812-like, single-wire; `APA106` subclasses `NeoPixel` with byte `ORDER = (0, 1, 2, 3)` (**confirmed**) |
-| Transport | RMT bit-stream via `machine.bitstream` — imported as `bitstream` in `neopixel.py` / `f_lib/neopixel_v2.py` (**confirmed**; there is no `bitstream_channel` symbol) |
-| Pixel count | **`RING_PX_COUNT` = 60**, **`CRYSTAL_PX_COUNT` = 7** — module-level ints in `project_data.py` (**confirmed**). The ring/crystal split matches the `_ring_leds`/`is_ring` and `_crystal_leds`/`is_crystal` symbol pairs |
-| Palette | `Colors` class (13 named colors, `project_data.py`). `COLOR_LIST` is a *separate*, OTA-BLE-only 3-color gradient `((200,0,200),(100,0,200),(0,0,200))` in `ota_ble.py`, not the main palette |
-| Controller | `DeviceLeds` (`peripherals.py`) owns `_ring_leds` / `_crystal_leds`; the low-level strip driver class is `LightStrip` (`leds.py`). Rotation uses `_spin_deg`, which is defined in `imu_fusion_auto` (the fusion engine), not an LED-module symbol |
+| Driver class | **`f_lib/neopixel_v2.NeoPixel`** (**confirmed** — `leds.dis:135-139` does `from f_lib.neopixel_v2 import NeoPixel`). `leds.LightStrip` subclasses it (`leds.dis:141-146`) |
+| Wire order | **GRB**, hardcoded, not configurable (**confirmed**) — `__setitem__` writes `buf[3i]=rgb[1]`, `buf[3i+1]=rgb[0]`, `buf[3i+2]=rgb[2]` (`f_lib_neopixel_v2.dis:144-180`); `fill` and `__getitem__` match (`:181-270`), as do `peripherals.fill_led_buff` / `set_led_buff` (`peripherals.dis:1374-1466`) |
+| Bytes per pixel | Fixed **3** — `self.buf = bytearray(n * 3)` (`f_lib_neopixel_v2.dis:104-110`). There is no `bpp` attribute and no white channel |
+| Transport | `machine.bitstream` (**confirmed**) — `write()` is exactly `bitstream(self.pin, 0, self.timing, self.buf)` (`f_lib_neopixel_v2.dis:271-287`), the only `write` path for either strip. The `0` is MicroPython's high/low-pulse-duration encoding mode (*from the stdlib API, not from this bytecode*). There is no `bitstream_channel` symbol |
+| Bit timing | `timing=1` (the default) → **`(400, 850, 800, 450)` ns** T0H/T0L/T1H/T1L; `timing=0` → `(800, 1700, 1600, 900)` ns (**confirmed**, `f_lib_neopixel_v2.dis:118-131`). Nothing passes `timing`, so every strip runs the 800 kHz WS2812-style timings |
 
-APA106 is driven via the ESP32 RMT peripheral as a precise bit-stream, the standard
-technique for these single-wire addressable LEDs.
+### APA106 is dead code
+
+The page previously claimed the LEDs are APA106 parts driven by `apa106.py` with
+`ORDER = (0, 1, 2, 3)`. That is **wrong for v5.0.3**:
+
+- `apa106.py` imports `NeoPixel` from the generic `neopixel.py` and defines
+  `class APA106(NeoPixel): ORDER = (0, 1, 2, 3)` — that is its entire body
+  (`apa106.dis`, 49 lines).
+- Nothing imports `apa106`, and nothing imports the generic `neopixel` except `apa106`
+  itself (**confirmed** — the only `IMPORT_NAME neopixel` in all 94 modules is
+  `apa106.dis:23`, and no module names `apa106`).
+
+Both files are frozen into the image but unreachable. The live path is
+`f_lib/neopixel_v2.py`, whose order is **GRB**, so `ORDER = (0, 1, 2, 3)` describes
+nothing the hardware ever sees. The physical part number is **not recoverable** from the
+bytecode — only that it is a single-wire chain clocked at WS2812 800 kHz timings.
+
+### Geometry and pins
+
+| Strip | Pin | Pixels | Power gate |
+| --- | --- | --- | --- |
+| Ring (halo) | **GPIO 18** | **60** | **GPIO 19**, opened as `Pin(19, Pin.OUT, Pin.PULL_UP)` |
+| Crystal | **GPIO 21** | **7** | none |
+
+All **confirmed**: `_ring_leds = const(18)` / `_crystal_leds = const(21)`
+(`peripherals.dis:173-181`), and `DeviceLeds.__init__` builds
+`LightStrip(Pin(21), 7, 'rgb')` and `LightStrip(Pin(18), 60, 'rgb', pwr_gate_pin=19)`
+(`peripherals.dis:268-295`). A single module-level instance `leds = DeviceLeds()` is the
+device-wide handle (`peripherals.dis:187-189`), so every module refers to `leds.ring` and
+`leds.crystal`.
+
+Two details worth knowing:
+
+- **The pixel counts are hardcoded at the call site.** `project_data.py` defines
+  `RING_PX_COUNT = 60` and `CRYSTAL_PX_COUNT = 7` (`project_data.dis:521-524`), but
+  `DeviceLeds.__init__` passes the literals `60` and `7` instead of importing them. The
+  constants are used elsewhere; the strips do not depend on them.
+- **The `mode='rgb'` argument is accepted and discarded.** `LightStrip.__init__` never
+  stores it and calls `super().__init__(pin, n)` with two arguments
+  (`leds.dis:239-274`). Changing it would not change the wire order.
+- **Only the ring is power-gated.** `off(pwr_off=True)` drives GPIO 19 low and clears
+  `is_powered`; `power_on(is_force=False)` drives it high (`leds.dis:677-730`,
+  `:980-1003`). The crystal has no gate, so it can only be blanked, not de-powered.
+
+### `LightStrip` primitives
+
+Every animation in the firmware is built from these seven coroutines plus `fill`/`off`
+(**confirmed**, `leds.dis:152-238` for the signatures, bodies at the cited lines):
+
+| Method | Signature (defaults as compiled) | Behavior |
+| --- | --- | --- |
+| `blink` | `(pixels=None, pause_ms=250)` | `leds.dis:275-394`. With no `pixels`, blinks only the pixels that are currently non-black. Snapshots the strip first and **restores it on `CancelledError`**, so killing the task never leaves the strip dark |
+| `fade` | `(pixels=None, rgb=None, start=1, end=0, steps=5, pause_ms=None, event=None)` | `leds.dis:410-512`. Linear ramp of `step = (start-end)/steps`, rounded to 2 dp per step. `start < end` ramps *up*. Sets `event` when done |
+| `set_color_v2` | `(pixels=None, rgb=None, bright=0.6, pause_ms=0, is_rand=False, event=None)` | `leds.dis:513-633`. Writes one pixel per frame (a wipe). `is_rand=True` consumes the pixel list in random order via `random.randrange` |
+| `breathe_v2` | `(rgb=None, interval=1200, steps=10)` | `leds.dis:774-962`. Builds `[1.0, 0.9 … 0.1, 0.0]`, frame pause `int(interval/(steps*2))` = 60 ms at the defaults, ramps down then back up forever |
+| `progress` | `(px_range=None, rgb=None, brightness=1, pause_ms=0, event=None)` | `leds.dis:1004-1122`. Fills `px_range` one pixel at a time, ascending or descending depending on which end is larger. This is the OTA progress ring |
+| `twinkle` | `(bright=1.0, width=1, colors=None, per_ms=40, fade_step=0, single=True, min_brt=5)` | `leds.dis:1123-1297`. Gaussian-ish `exp()` falloff around a randomly drifting centre, colors drawn with `random.randint`. `fade_step > 0` starts at `min_brt` and ramps up by `fade_step/100` per frame |
+| `cache_colors` / `restore` | — | `leds.dis:649-676`, `:731-773`. Snapshot the strip into `color_cache`, then write it back and clear the cache. Used by `compass.crystal_blink` to flash a color for 200 ms and put the previous frame back (`compass.dis:10320-10345`) |
+
+`off()` swallows every exception and logs `LED err` with `is_write=False`
+(`leds.dis:706-720`), so a failing strip never takes down the caller.
+
+`fade_step` is a **parameter of `twinkle`**, not a function — the earlier claim that it was
+an effect primitive was wrong.
 
 ### Colors
 
-The `Colors` class (`project_data.py`) defines **13 named colors** (**confirmed**): `red`,
-`orange`, `yellow`, `yl_green`, `green`, `bl_green`, `teal`, `white`, `aqua`, `blue`,
-`indigo`, `magenta`, `hot_pink`. That is also the order of the internal 13-tuple the class
-uses as its color→id table, so it doubles as the module's `COLOR_LIST`-style index order.
-(There is no `pink` or `cyan` qstr; `hot_pink` and `teal` fill those roles. There *is* a
-`red` and a `green` qstr — the earlier claim that these were absent was wrong.) The
-name→RGB pairings are **confirmed**: the class binds each name to its tuple with an explicit
-`STORE_ATTR` in the disassembly, so these are no longer inferred:
+The `Colors` class (`project_data.py`) defines **13 named colors** (**confirmed**,
+`project_data.dis:1881-1944`). The same 13-tuple, in this order, is the palette that
+integer color IDs index into (`project_data.dis:1890`):
 
-| Name | RGB | Grade |
+| Index | Name | RGB |
 | --- | --- | --- |
-| `red` | (255, 0, 0) | confirmed |
-| `orange` | (255, 128, 0) | confirmed |
-| `yellow` | (255, 255, 0) | confirmed |
-| `yl_green` | (128, 255, 0) | confirmed |
-| `green` | (0, 255, 0) | confirmed |
-| `bl_green` | (0, 255, 128) | confirmed |
-| `teal` | (0, 255, 255) | confirmed |
-| `white` | (255, 255, 255) | confirmed |
-| `aqua` | (0, 128, 255) | confirmed |
-| `blue` | (0, 0, 255) | confirmed |
-| `indigo` | (128, 0, 255) | confirmed |
-| `magenta` | (255, 0, 255) | confirmed |
-| `hot_pink` | (255, 0, 128) | confirmed |
+| 0 | `red` | (255, 0, 0) |
+| 1 | `orange` | (255, 128, 0) |
+| 2 | `yellow` | (255, 255, 0) |
+| 3 | `yl_green` | (128, 255, 0) |
+| 4 | `green` | (0, 255, 0) |
+| 5 | `bl_green` | (0, 255, 128) |
+| 6 | `teal` | (0, 255, 255) |
+| 7 | `white` | (255, 255, 255) |
+| 8 | `aqua` | (0, 128, 255) |
+| 9 | `blue` | (0, 0, 255) |
+| 10 | `indigo` | (128, 0, 255) |
+| 11 | `magenta` | (255, 0, 255) |
+| 12 | `hot_pink` | (255, 0, 128) |
 
-Note: the disassembly settles the earlier `teal`/`aqua` ambiguity — `teal` is `(0, 255, 255)`
-and `aqua` is `(0, 128, 255)` (the previous table had these two swapped). There is **no**
-named `OFF` color; the "off" / clear state is the literal `(0, 0, 0)` used by
-`LightStrip.off` / `fill`, not a palette entry.
+All 13 name→RGB bindings are **confirmed**: the class binds each with an explicit
+`STORE_ATTR`. There is **no** named `OFF` color — the clear state is the literal
+`(0, 0, 0)`.
 
-When Totems auto-bond, peers are assigned colors by `shuffle_bond_colors`, invoked right
-after the log `Setting new auto-bond colors` (**confirmed** — the log immediately precedes
-the call). It shuffles a **9-color** subset given as color indices
-`[12, 4, 9, 2, 10, 1, 6, 7, 11]` — i.e. hot_pink, green, blue, yellow, indigo, orange, teal,
-white, magenta (**confirmed**; the earlier "8-color: …, orange, aqua, indigo, teal" list was
-wrong on both count and order).
+Two helpers do all the color math (**confirmed**):
+
+- `dim_leds(rgb, brt)` → `(int(r*brt), int(g*brt), int(b*brt))` (`project_data.dis:2151-2178`).
+- `colors.rgb(color, brt=None)` (`project_data.dis:2097-2149`) — **`brt` defaults to
+  `config.led_brt`, not to `GLOBAL_BRT`.** `color` may be a tuple (used directly) or an
+  integer palette index. Any exception logs `Invalid color provided` and returns
+  `(0, 0, 0)`, so a bad color id silently blacks out a strip rather than raising.
+- `GLOBAL_BRT = 0.6` (`project_data.dis:515-516`) is the *compile-time* default that
+  `config.led_brt` also starts at (`project_data.dis:1353-1355`).
+
+#### Peer and bond colors
+
+Three different color sources exist; they are easy to confuse.
+
+| Source | What it is |
+| --- | --- |
+| `shuffle_bond_colors(n)` (`compass.py`) | Draws from the fixed 9-index list `[12, 4, 9, 2, 10, 1, 6, 7, 11]` — hot_pink, green, blue, yellow, indigo, orange, teal, white, magenta — and returns a random permutation of the first `n`. Invoked right after the log `Setting new auto-bond colors` |
+| `Colors.next_peer_clr` (`project_data.dis:1956-1978`) | A **separate 8-tuple** — hot_pink, green, blue, yellow, orange, teal, indigo, aqua — indexed by `len(config.peers)`, with magenta as the past-the-end fallback |
+| `PEER_CRYSTAL_MAP = (1, 2, 4, 6)` (`project_data.dis:519-520`) | **Crystal pixel indices, not colors** — see below |
+
+`Colors.next_peer_clr` has a **confirmed off-by-one**: the guard is
+`if len(config.peers) > len(tuple)` (i.e. `> 8`), so a peer count of exactly 8 falls
+through to `tuple[8]` and raises `IndexError`; the magenta fallback is only reachable at 9
+or more. `config.max_bonds = 8` and `config.max_peers = 9`
+(`project_data.dis:964-969`), so the boundary is reachable in principle. Whether any
+caller hits it in practice is *not determined here*.
+
+## Peer pixels on the crystal
+
+`PEER_CRYSTAL_MAP = (1, 2, 4, 6)` was previously documented as "a 4-tuple of color-list
+indices (→ orange, yellow, green, teal)". That is **wrong**. They are the four **crystal
+pixel slots** handed out to bonded peers:
+
+- `peer_helpers.py` (`get_next_peer_pixel` / `update_peer_pixels`) allocates one slot per
+  bonded peer from that tuple.
+- `compassing.collect_all_peers` then does
+  `leds.crystal[peer.pixel] = colors.rgb(peer.rgb, brt=led_brt)`
+  (`compassing.dis:1273-1310`).
+
+So each peer lights **its own bonded color** on **its own assigned pixel**. The tuple
+fixes *where* on the 7-pixel crystal a peer shows up, never *what color* it is.
 
 ## Animation set
 
-Animations are event-driven — subsystems raise events and the LED task plays the
-matching effect:
+Most of the names previously listed as "animations" are not functions. Three categories
+(**confirmed**):
 
-| Animation | Trigger |
+**`asyncio.Event()` objects on `modes`** (`project_data.dis:1018-1037`) —
+`anim_add_peer`, `anim_bonding_ctdwn`, `anim_boot_batt_pct`, `anim_peer_del_ctdwn`,
+`anim_gnss_search`. These are signals, not effects; something else waits on or sets them.
+
+**Task names** passed to `tasks.launch(coro, 'name')`, which is how the code stops an
+effect later:
+
+| Task name | What actually runs |
 | --- | --- |
-| `boot_animation`, `powerup_animation` | boot / power-up |
-| `anim_boot_batt_pct` | boot battery-percentage indicator |
-| `anim_gnss_search` | acquiring a GNSS fix |
-| `pairing_animation` | pairing |
-| `anim_add_peer`, `add_peer_animation`, `bonded_animation` | a new Totem bonded |
-| `anim_bonding_ctdwn` | bonding countdown |
-| `anim_peer_del_ctdwn` | peer removal countdown |
-| `disconn_animation` | peer / link disconnect |
-| `wifi_animation` | WiFi activity |
-| `crystal_sos`, `crystal_sos_blink`, `sos_led`, `start_sos`, `enable_sos`, `toggle_sos` | SOS alert blink; peer-in-SOS event (`evt_peer_in_sos`); mute/unmute (logs `Muting SOS` / `Un-muting SOS`) |
-| `demi_god_blink`, `demi_god_countdown` | a [demi-god](/protocols/demigod) command landed |
-| downloading / progress ring (`PROGRESS_RGB`) | OTA in progress |
-| spin / rotation (`_spin_deg`, `Dial rotation`) | dial/heading feedback |
-| Vibe Mode (`new_vibe.new_vibe`, task `'sound_react'`) | sound-reactive ring effect: microphone samples (`mic.read_u16`) written straight into the ring buffer (`ring.buf`) — see [Vibe Mode](/subsystems/power#vibe-mode-sound-reactive-leds) |
+| `wifi_animation` | `search_for_wifi` — launched by `ota_callback` during a WiFi OTA and stopped (followed by `ring.off()`) the moment WiFi connects (`ota_callback.dis:684-687`, `:665-692`). It is **not** a general "WiFi activity" indicator |
+| `disconn_animation` | `Compass.power_conn_new` — a charger-*connect* debounce, despite the name (`compass.dis:2737-2749`). It waits for `v_in` to read high across three 100 ms samples and then launches `powerup_animation` |
+| `crystal_sos`, `pairing_animation`, `bonded_animation`, `demi_god_blink`, `sound_react` | launch/stop handles used across `compass.py`, `espnow_conn_v2.py`, `device_power.py`, `ble_manager.py` |
 
-All rows above are **confirmed symbol names**; the exact frame data and timings live in
-undisassembled frozen bytecode. The underlying effect primitives (confirmed qstrs) are
-`breathe_effect` / `breathe_gen` / `breathe_v2`, `twinkle` / `twinkle_crystal`, and
-`fade_step`. Vibe Mode's v5.0.3 tuning (`newvibe-1.10`) lowers its brightness base from
-0.1 to 0.07 — about 30% dimmer (inferred) — and raises the auto-gain up rate from 13 to 25.
+**Real coroutines.** `peripherals.py` (`peripherals.dis:253`):
 
-The compass heading itself is rendered as a lit point on the ring that rotates to point
-toward the target (`_spin_deg`, `Dial rotation cancelled`).
+| Function | Signature | Behavior |
+| --- | --- | --- |
+| `crystal_default` | `(brt=None)` | `crystal.fill(colors.rgb(config.color_id, brt=brt), True)` — restores the crystal to the user's stored color (`:480-500`) |
+| `boot_animation` | `(boot_clr=None, duration_ms=2000)` | Crystal-only sparkle: each pixel flips between `boot_clr` at 0.6 and at 0.2 under a random bitmask (`randint(2,4)` XOR-flips of `1 << randint(0,6)`), 50 ms frames, ending on a solid 0.6 fill (`:501-621`) |
+| `powerup_animation` | `(volts=None)` | The `anim_boot_batt_pct` battery gauge — see below (`:830-1001`) |
+| `collapse_px` | `(start_px=None, event=None)` | Two pointers walk in opposite directions from `start_px` around the 60-ring blanking pixels; the frame delay is `30 - 2i`, clamped at 0, so the collapse accelerates and finishes hard (`:622-703`) |
+| `crystal_sos_blink` | `()` | Morse SOS — see below (`:704-829`) |
+| `device_error` | `(rgb=None, repeats=5)` | Fills the ring, then blanks pixels 5-10, 20-25, 35-40 and 50-55, leaving four lit arcs; holds 1000 ms, blanks, repeats (`:1002-1066`) |
+| `peer_bonded` | `(peer_color=None, brt=0.6)` | The bond celebration — see below (`:1067-1373`) |
+| `blink_all_leds` | `(rgb=None, duration_ms=100, pause_ms=200, is_crystal=True, is_ring=True, max_blinks=None)` | `blinks = max(duration_ms // (pause_ms*2), 1)`, capped by `max_blinks`. Each cycle goes **off first, then on**. Ends with `ring.off()` and the crystal restored to `config.color_id` (`:1467-1585`) |
+| `bond_shuffle` | `(per_ms=100)` | Cycles hot_pink → yellow → blue → green at full brightness, with the **ring trailing one color behind the crystal** (`:1626-1689`) |
+
+`animations.py` (`animations.dis:89`) holds five more:
+
+| Function | Signature | Behavior |
+| --- | --- | --- |
+| `fill_all_leds` | `(rgb_clr=None)` | Fills ring and crystal and writes both (`:90-111`) |
+| `shuffle_countdown` | `()` | A 60-step wipe; every 4th step advances the color and re-fills pixels `0..i` (`:112-217`) |
+| `bond_shuffle` | `(per_ms=100)` | Byte-for-byte the same effect as `peripherals.bond_shuffle` — the firmware carries two copies (`:248-311`) |
+| `crystal_led_effect` | `(rgb_clr=None, per_ms=None, brt_generator=None)` | Blanks the crystal, then loops `brt = next(gen)` → sleep → `crystal.fill(colors.rgb(rgb_clr, brt), True)`. The generator is created **once**, before the loop (`:312-351`) |
+| `search_for_wifi` | `()` | A white comet on the ring: a 7-pixel tail at brightnesses `[0.6, 0.3, 0.25, 0.2, 0.15, 0.07, 0.02]` advancing one pixel every 50 ms — one revolution every 3 s (`:352-426`) |
+
+### `shuffle_countdown` has an off-by-one
+
+`shuffle_countdown` builds four colors — hot_pink, yellow, blue, **green** — but its
+inner `change_clr` generator wraps with `if i >= len(clrs) - 1: i = 0`
+(`animations.dis:229-238`). The index resets one iteration early, so index 3 is never
+yielded: **green is constructed and never displayed.** The effective cycle is
+hot_pink → yellow → blue (**confirmed**).
+
+### Boot battery gauge (`powerup_animation`)
+
+**Confirmed**, `peripherals.dis:830-1001`:
+
+1. Clear `modes.evt_led_override_off` (the "an animation owns the LEDs" flag).
+2. `volts` defaults to `4.0`; `pct = get_batt_pct(max_volts=config.batt_max_volts, cur_volts=volts)`.
+3. `n_lit = int(60 * pct / 100)`.
+4. Colors — body / leading tip:
+
+   | Condition | Body | Tip |
+   | --- | --- | --- |
+   | `pct >= 50` | green @ 0.3 | white @ 0.6 |
+   | `pct < 50` | yellow @ 0.3 | yellow @ 0.1 |
+   | `pct < 10` | red @ 0.3 | red @ 0.1 |
+
+5. Sweep pixel by pixel, writing every frame and sleeping 1 ms on even indices.
+6. Hold **2000 ms**, `ring.off()`, then set `modes.anim_boot_batt_pct` and
+   `modes.evt_led_override_off`.
+
+`powerup_animation` *is* the `anim_boot_batt_pct` implementation — the event is what it
+raises on completion, not a separate effect.
+
+### SOS blink
+
+`crystal_sos_blink` (`peripherals.dis:704-829`) is **confirmed** to be real Morse code,
+not a plain repeating flash:
+
+```
+if modes.is_sos_mute: return True          # mute is checked once, on entry
+gen = sos_timing()                         # yields 300, 900, 300 forever
+crystal.off()
+while True:
+    pause = next(gen)                      # 300 → 900 → 300 → 300 → 900 → 300 …
+    for _ in range(3):                     # three flashes per group
+        clr = colors.rgb(config.color_id)
+        crystal.fill(clr, True)
+        await sleep_ms(pause)
+        await modes.evt_brt_adjusted.wait()
+        if not modes.evt_ble_cntg_done.is_set():
+            await modes.evt_ble_cntg_done.wait()
+        else:
+            await crystal.fade(rgb=clr, start=1, end=0, steps=2, pause_ms=1)
+            await sleep_ms(300)
+```
+
+Three flashes at 300 ms, three at 900 ms, three at 300 ms — **· · · — — — · · ·**. The
+timing generator is duplicated: once as `f_lib.generators.sos_timing`
+(`f_lib_generators.dis:100-117`), once nested inside `crystal_sos_blink` itself
+(`peripherals.dis:812-829`), and a third identical copy is the module-level generator
+`leds.toggle_sos` (`leds.dis:1325-1342`) — despite the name, it yields `300, 900, 300`
+and toggles nothing.
+
+Each flash also **blocks on two events**: `evt_brt_adjusted` (so a brightness change
+pauses the blink) and `evt_ble_cntg_done`. Mute/unmute is handled by the caller (logs
+`Muting SOS` / `Un-muting SOS` in `compass.py`); a running blink does not re-check
+`is_sos_mute`.
+
+### Bond celebration (`peer_bonded`)
+
+**Confirmed**, `peripherals.dis:1067-1373` — a four-act sequence:
+
+1. Blank both strips, 50 ms pause.
+2. Ring and crystal fade **up** together to `brt` over 6 steps × 50 ms (two tasks, both
+   awaited).
+3. Hold 1000 ms, then run two tasks at once: `collapse_px(start_px=0)` on the ring and a
+   crystal fade-out over 5 steps × 80 ms — on `pixels=(0, 1, 2, 3, 4, 6)`, deliberately
+   **skipping crystal pixel 5**.
+4. Pixel 5 and ring pixel 30 (the point opposite the seam) then cross-fade in 5 steps of
+   0.2 at 100 ms: the ring dims 1.0 → 0.0 while the crystal brightens 0.0 → 1.0, so the
+   peer color visibly *moves from the halo into the crystal*. Ends with `ring.off()`.
+
+### Breathing generators
+
+The page previously listed `breathe_effect`, `breathe_gen` and `breathe_v2` as three
+primitives. They are two duplicate generators plus one strip method (**confirmed**):
+
+- `f_lib.generators.breathe_effect` (`f_lib_generators.dis:55-99`) and
+  `compassing.breathe_gen` (`compassing.dis:1192-1234`) are the same generator written
+  twice: start at 1.0, step ±0.1, bounce off 0.8 at the top and 0.2 at the bottom,
+  yielding a value rounded to 2 dp. They produce brightness levels; they touch no pixels.
+- `LightStrip.breathe_v2` is the method that actually drives a strip (see the primitives
+  table).
+
+`twinkle_crystal` is a **`Compass` method**, not an animation-module function
+(`compass.dis:4635-4828`): an eco-mode-only crystal shimmer that wakes every 400 ms,
+waits on `evt_orien_vertical`, `evt_brt_adjusted` and `evt_battery_charged`, skips while
+BLE is connected (`ble_conn.status_id == 2`) or a peer is in SOS, then fills the crystal
+at 0.5 and drops `randrange(3, 6)` pixels to either black or 0.05. The whole effect is
+scaled by 1.0 when `config.led_brt >= 0.5` and by 0.2 below that.
 
 ## Status colors
 
 <Note>
 Identifying the **firmware version** by the power-up Touch Crystal color (e.g. "5.0 →
 Sparkly Pink") comes from the official update guide, **not** from firmware evidence. No
-version→color table was found in the binary, and no `sparkly` or `pink` string exists
+version→color table exists in the binary, and no `sparkly` or `pink` string exists
 (only `hot_pink` is a defined color), so this mapping cannot be verified here.
 </Note>
 
-What the firmware *does* show is that the crystal color is a **configurable default that is
-also mapped per bonded peer**, not derived from `__version__`:
+The crystal color is a **stored, user-changeable setting**, not a function of
+`__version__`:
 
 | Symbol / string | Evidence |
 | --- | --- |
-| `crystal_default`, `powerup_crystal_clr` | the power-up crystal color is a stored default |
-| `Change default crystal color: {}` | that default is user-changeable (log string) |
-| `PEER_CRYSTAL_MAP` = (1, 2, 4, 6) | crystal color is mapped per bonded peer — a 4-tuple of color-list indices (→ orange, yellow, green, teal), **value confirmed** |
-| `Can't change color - in bond group` | color changes are blocked while in a bond group |
+| `config.color_id` | An integer index into the 13-color palette. **Confirmed**: `Compass.read_config` coerces it with `if not isinstance(config.color_id, int): config.color_id = 9`, so the fallback crystal color is **index 9 = blue** (`compass.dis:4902-4910`) |
+| `crystal_default(brt=None)` | Repaints the crystal from `config.color_id` (`peripherals.dis:480-500`). Called from eight sites in `compass.py` plus `ble_manager`, `compassing`, `new_vibe` and `peer_management` |
+| `Change default crystal color: {}` | The log emitted when the user changes it |
+| `Can't change color - in bond group` | Color changes are blocked while in a bond group |
+| `compassing.default_rgb` | Cached rendering of `colors.rgb(config.color_id)`, refreshed by `update_brightness` (`compass.dis:10302-10319`) |
 
-In v5.0.3, when `compass.start_peer_management` runs while the device is vertical it now
-sleeps 300 ms and then restores the default crystal colour (`crystal_default()`).
+In v5.0.3, `compass.start_peer_management` gained a tail that `sleep_ms(300)`s and then
+calls `crystal_default()` when `modes.evt_orien_vertical` is set (**confirmed** —
+`compass.dis:7795-7813`; the v5.0.2 build of the same function ends without it).
 
-OTA/update state→color mappings are described in the [WiFi OTA](/protocols/wifi-ota) guide.
-The disassembly of `ota_callback.py` resolves the two color constants (previously "values
-undetermined"), so two of the four guide claims are now **confirmed in firmware** and two
-remain guide-only:
+### OTA colors
+
+OTA/update state→color mappings are described in the [WiFi OTA](/protocols/wifi-ota)
+guide. `ota_callback.py` defines three constants at import time
+(**confirmed**, `ota_callback.dis:250-267`):
+
+| Constant | Definition | Rendered |
+| --- | --- | --- |
+| `PROGRESS_RGB` | `dim_leds(colors.white, 0.3)` | (76, 76, 76) |
+| `ERROR_RGB` | `dim_leds(colors.orange, GLOBAL_BRT)` | (153, 76, 0) |
+| `LOG_RGB` | `dim_leds(colors.white, GLOBAL_BRT)` | (153, 153, 153) |
 
 | Guide claim | Firmware evidence |
 | --- | --- |
-| white progress ring while downloading | **confirmed** — `PROGRESS_RGB = dim_leds(colors.white, 0.3)` (white at 30% brightness) |
-| orange blink on update failure | **confirmed** — `ERROR_RGB = dim_leds(colors.orange, GLOBAL_BRT)`, applied via `ring.fill(ERROR_RGB, True)` |
+| white progress ring while downloading | **confirmed** — `ring.progress(px_range=…, rgb=PROGRESS_RGB)` (`ota_callback.dis:744-752`); log upload uses the same call with `LOG_RGB` |
+| orange blink on update failure | **confirmed** — two blinks: fill `ERROR_RGB`, 200 ms, off, 200 ms, fill, 400 ms, off, after stopping the `wifi_animation` and `pairing_animation` tasks (`ota_callback.dis:600-660`) |
 | full white fill on success | guide only — no matching literal or state→color binding found |
 | pink spinning when hotspot can't be reached | guide only — no `pink` / `spinning` literal found |
 
-`dim_leds(rgb, brt)` returns the RGB tuple with each channel scaled by `brt`. A third
-constant, `LOG_RGB = dim_leds(colors.white, GLOBAL_BRT)`, is defined alongside these.
+The purple-to-blue gradient `((200, 0, 200), (100, 0, 200), (0, 0, 200))` shows up twice
+(**confirmed**):
+
+- `ota_callback` twinkles it on the crystal during a WiFi OTA:
+  `crystal.twinkle(colors=[…], per_ms=80, fade_step=1, bright=0.3, single=False, min_brt=10)`
+  (`ota_callback.dis:545-560`).
+- `ota_ble.COLOR_LIST` (`ota_ble.dis:286-287`) is the same three colors as a tuple, used
+  to paint each of the 7 crystal pixels with `colors.rgb(COLOR_LIST[randrange(3)], 0.6)`
+  during a BLE OTA (`ota_ble.dis:1352-1385`). This is a separate constant from the main
+  palette.
 
 ## Power interaction
 
-LEDs are one of the largest current draws, so the LED task is **likely** gated by power
-state. A general `lightsleep` mechanism exists (`dev_total_lightsleep_ms`, log `Awoke from
-lightsleep …`), but no LED-task-specific sleep-gating symbol was found, so the LED-task
-suspension is an inference rather than a confirmed binding.
+Brightness is a single persisted value, `config.led_brt`, which defaults to `0.6`
+(`project_data.dis:1353-1355`) and is what `colors.rgb()` uses when no `brt` is passed.
+`update_brightness(brt)` writes it and refreshes `compassing.default_rgb`
+(**confirmed**, `compass.dis:10302-10319`).
 
-Brightness is independently controllable: `GLOBAL_BRT`, `dim_leds`, `toggle_brightness`
-(with `toggle_brightness_timeout`), `update_brightness`, and the log `Revert to full
-brightness`. `toggle_brightness` is wired to a single tap of the physical power button
-(`sw_power.cb_single_tap`, **confirmed**; see
-[physical buttons](/subsystems/power#physical-buttons-power--sos)). Note that the binary's
-**low-battery mode is evidenced for touch sensitivity, not LED brightness** — the
-low-battery symbols (`_low_batt_sensitivity`, `_LOW_BATT_FLOOR`, `_LOW_BATT_MULTIPLIER`)
-and logs (`[touch] Low battery mode ON | base_sens: {:.3f}`) all
-tie to touch, with nothing linking low-battery state to LED brightness in the evidence.
+**Eco mode blanks the ring.** `Compass.change_power_mode(power_mode)`
+(**confirmed**, `compass.dis:8446-8639`):
+
+| `power_mode` | Effect |
+| --- | --- |
+| `1` (eco) | `brt = 0.1`; `modes.is_eco_mode` and `config.is_eco_mode` set; `evt_non_eco_mode.clear()`; starts the eco timer; **`leds.ring.off()`** — the halo goes dark entirely |
+| `2` (normal) | `brt = 0.6`; eco flags cleared; `evt_non_eco_mode.set()`; `ring.fill(clr, True)` |
+
+Either way it also clears `evt_brt_adjusted`, re-runs `init_touch(False)`, **stops the
+`sound_react` task** (Vibe Mode does not survive a brightness change), launches
+`toggle_brightness_timeout`, repaints the crystal from `config.color_id`, and calls
+`update_brightness(brt=…)`.
+
+`Compass.toggle_brightness` (**confirmed**, `compass.dis:8386-8445`) is the single-tap
+handler on the power button (`sw_power.cb_single_tap`; see
+[physical buttons](/subsystems/power#physical-buttons-power--sos)). It:
+
+- returns immediately if `modes.is_power_down` **or** if `modes.evt_battery_charged` is
+  not set — so the tap does nothing on a device that has not reported a charged battery;
+- XOR-toggles the current mode (`cur = 2 if is_eco_mode else 0`; `nxt = cur ^ 2`) and
+  delegates to `change_power_mode(power_mode=…)`.
+
+`toggle_brightness_timeout(timeout_ms=2500, original_val=…)` polls every 300 ms against
+`self.last_brt_adjusted` and, once the window lapses, blanks both strips, sets
+`evt_brt_adjusted`, and restores either `crystal_default()` (if vertical) or touch plus
+the `sound_react` task. Logs `Toggle Brightness Timeout Started: {}` /
+`Completed: {}`.
+
+The log **`Revert to full brightness` does not belong to `toggle_brightness`.** It is
+emitted by `compassing.crystal_brightness()` (**confirmed**, `compassing.dis:1235-1261`),
+which returns `0.2` until `modes.evt_touch_active` fires and `1` thereafter — a
+touch-gated crystal dimmer, latched by `modes.is_touch_ready_blink`.
+
+`modes.evt_led_override_off` is the mutual-exclusion flag: `powerup_animation` and
+`blink_all_leds` clear it on entry and set it on exit (`peripherals.dis:835-839`,
+`:993-998`, `:1478-1482`, `:1578-1582`), marking the window in which an animation owns
+both strips.
+
+A general `lightsleep` mechanism exists (`dev_total_lightsleep_ms`, log `Awoke from
+lightsleep …`), but **no LED-task-specific sleep gating was found** — LED suspension
+during lightsleep remains an inference. Separately, the binary's **low-battery mode is
+evidenced for touch sensitivity, not LED brightness**: `_low_batt_sensitivity`,
+`_LOW_BATT_FLOOR`, `_LOW_BATT_MULTIPLIER` and the log
+`[touch] Low battery mode ON | base_sens: {:.3f}` all tie to touch, with nothing linking
+low-battery state to LED brightness.
+
+### Vibe Mode writes the raw buffer
+
+Vibe Mode (`new_vibe.py`, task `'sound_react'`) caches `leds.ring`, `leds.ring.buf` and
+`leds.ring.write` as locals and writes bytes **straight into the pixel buffer**,
+bypassing `__setitem__` (**confirmed**, `new_vibe.dis:449-457`). It therefore has to
+handle the GRB byte order itself. Its v5.0.3 tuning (`newvibe-1.10`) lowers the
+brightness base from `0.1` to `0.07` — about 30 % dimmer — which is **confirmed** by
+comparing the module constant tables across versions (`new_vibe.dis:70` vs the v5.0.2
+build). See [Vibe Mode](/subsystems/power#vibe-mode-sound-reactive-leds).
+
+## Not LED symbols
+
+- `_spin_deg` is defined only in `imu_fusion_auto.py` (**confirmed** — it appears in no
+  other module). It is fusion-engine state, not an LED symbol. The compass heading is
+  rendered as a lit point that rotates toward the target, but the rendering code was not
+  located in this pass and the mapping from `_spin_deg` to a pixel index is **not
+  recovered**.
+- `apa106.py` and `neopixel.py` — dead code, see above.

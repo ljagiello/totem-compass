@@ -5,8 +5,10 @@ go 1.27.1
 require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
+	go.bug.st/serial v1.8.0
 	golang.org/x/term v0.46.0
 	tinygo.org/x/bluetooth v0.16.0
+	tinygo.org/x/espradio v0.3.0
 )
 
 require (
@@ -32,5 +34,4 @@ require (
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	tinygo.org/x/espradio v0.3.0 // indirect
 )

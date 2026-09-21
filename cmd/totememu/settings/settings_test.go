@@ -1,0 +1,466 @@
+package settings
+
+import (
+	"bytes"
+	"errors"
+	"log/slog"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ljagiello/totem-compass/emulator"
+	"github.com/ljagiello/totem-compass/mesh"
+	"github.com/ljagiello/totem-compass/store"
+)
+
+var (
+	self  = mesh.MAC{0x20, 0x9b, 0xa9, 0x70, 0xab, 0xb0}
+	totem = mesh.MAC{0x8c, 0x94, 0xdf, 0x7b, 0x04, 0x78}
+	t0    = time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+)
+
+// memSector is a flash sector in memory: bits only clear on a write, and
+// only an erase sets them back, exactly as flash behaves.
+type memSector struct {
+	b      []byte
+	writes int
+	erases int
+	// failWrite makes every write fail, which is a driver that has gone.
+	failWrite bool
+	// onWrite and onErase run inside the two operations that block, so a
+	// test can see what the device's own state looks like while the
+	// flash is busy. The erase is the long one.
+	onWrite, onErase func()
+}
+
+// sectorSize is the smallest region the ESP32 can erase, which is what
+// the board gives the journal.
+const sectorSize = 4096
+
+func newMemSector() *memSector {
+	s := &memSector{b: make([]byte, sectorSize)}
+	for i := range s.b {
+		s.b[i] = 0xff
+	}
+	return s
+}
+
+func (s *memSector) Size() int { return len(s.b) }
+
+func (s *memSector) ReadAt(p []byte, off int) error {
+	if off < 0 || off+len(p) > len(s.b) {
+		return errors.New("read out of range")
+	}
+	copy(p, s.b[off:])
+	return nil
+}
+
+func (s *memSector) WriteAt(p []byte, off int) error {
+	if s.onWrite != nil {
+		s.onWrite()
+	}
+	if s.failWrite {
+		return errors.New("no flash driver")
+	}
+	if off < 0 || off+len(p) > len(s.b) {
+		return errors.New("write out of range")
+	}
+	s.writes++
+	for i, v := range p {
+		s.b[off+i] &= v
+	}
+	return nil
+}
+
+func (s *memSector) Erase() error {
+	if s.onErase != nil {
+		s.onErase()
+	}
+	s.erases++
+	for i := range s.b {
+		s.b[i] = 0xff
+	}
+	return nil
+}
+
+type testWriter struct{ t *testing.T }
+
+func (w testWriter) Write(b []byte) (int, error) {
+	w.t.Helper()
+	w.t.Log(string(b))
+	return len(b), nil
+}
+
+func testLog(t *testing.T) *slog.Logger {
+	return slog.New(slog.NewTextHandler(testWriter{t}, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+// node is a device with the given name, bonded to the owned Totem when
+// asked, which is what there is to save.
+//
+// The logger is separate from the T on purpose: the fuzzer has a T and
+// must fail on a bond it cannot make, but it runs millions of times, and
+// formatting every node's boot lines into t.Log for nobody to read cost
+// it two thirds of its throughput.
+func node(t *testing.T, name string, bond bool) *emulator.Node {
+	t.Helper()
+	return nodeLogged(t, testLog(t), name, bond)
+}
+
+// nodeLogged is the same with a logger of the caller's choosing, and a
+// T that may be nil: the fuzzer's seed corpus is built where there is an
+// F and no T, and there is nothing there to fail.
+func nodeLogged(t *testing.T, log *slog.Logger, name string, bond bool) *emulator.Node {
+	if t != nil {
+		t.Helper()
+	}
+	n := emulator.New(emulator.Config{
+		MAC: self, Owned: []mesh.MAC{totem}, Name: name,
+		BattVolts: 4.1, BattPct: 90, Logger: log,
+	}, t0)
+	if bond {
+		err := n.AddBond([6]byte(totem), "Lukasz", t0)
+		if err != nil && t != nil {
+			t.Fatal(err)
+		}
+	}
+	return n
+}
+
+// TestASaveComesBack is the whole point of the sector: what a device was
+// running with is what it comes up with.
+func TestASaveComesBack(t *testing.T) {
+	sec := newMemSector()
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	n.SetColor(emulator.ColorBlue, t0)
+	s.Save(n)
+
+	// A reboot: a new store over the same sector, into a fresh node.
+	again := Open(testLog(t), sec)
+	fresh := node(t, "", false)
+	again.Restore(fresh, t0)
+	if got := fresh.BondCount(); got != 1 {
+		t.Errorf("bonds after a reboot = %d", got)
+	}
+	if got := fresh.Config().Name; got != "lcfs_spare" {
+		t.Errorf("name after a reboot = %q", got)
+	}
+	if got := fresh.LEDs().DefaultColor(); got != emulator.ColorBlue {
+		t.Errorf("colour after a reboot = %s", got)
+	}
+	if got := again.State().BootCount; got != 1 {
+		t.Errorf("boot count = %d, want the second boot", got)
+	}
+}
+
+// TestReopenDoesNotWriteOverWhatItJustRead: `store open` is the path a
+// board takes when its flash driver is being brought up and the sector
+// was not read at boot. It copied the freshly-read journal into the live
+// store but not the flag saying a record had been found, so Restore was
+// handed no record where there was one — and the save that follows wrote
+// the running defaults over every bond and setting on the device.
+func TestReopenDoesNotWriteOverWhatItJustRead(t *testing.T) {
+	sec := newMemSector()
+	// A device that has been used: bonded, named, and blue.
+	was := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	n.SetColor(emulator.ColorBlue, t0)
+	was.Save(n)
+
+	// It comes up without reading the sector, as the bring-up const does.
+	s := Unread(testLog(t))
+	fresh := node(t, "", false)
+	s.Restore(fresh, t0) // nothing to restore: nothing was read
+
+	// Then someone types `store open`.
+	s.Reopen(fresh, t0, sec)
+	if got := fresh.BondCount(); got != 1 {
+		t.Errorf("bonds after store open = %d, want the saved one", got)
+	}
+	if got := fresh.Config().Name; got != "lcfs_spare" {
+		t.Errorf("name after store open = %q", got)
+	}
+	if got := fresh.LEDs().DefaultColor(); got != emulator.ColorBlue {
+		t.Errorf("colour after store open = %s", got)
+	}
+
+	// And the sector still holds it, rather than the defaults the node
+	// was running with a moment ago.
+	after := Open(testLog(t), sec)
+	if got := after.State().Name; got != "lcfs_spare" {
+		t.Errorf("the sector says %q: store open wrote over what it read", got)
+	}
+	if got := len(after.State().Peers); got != 1 {
+		t.Errorf("the sector holds %d peers after store open", got)
+	}
+}
+
+// TestForgetLeavesNothingToComeBackTo: a factory reset has to wipe the
+// node as well as the flash, or the save that follows writes the live
+// bonds straight back.
+func TestForgetLeavesNothingToComeBackTo(t *testing.T) {
+	sec := newMemSector()
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	s.Save(n)
+
+	if err := s.Forget(n, t0); err != nil {
+		t.Fatal(err)
+	}
+	if got := n.BondCount(); got != 0 {
+		t.Errorf("%d bonds survived the reset", got)
+	}
+	// A save right afterwards must not put them back.
+	s.Save(n)
+	after := Open(testLog(t), sec)
+	if got := len(after.State().Peers); got != 0 {
+		t.Errorf("%d bonds came back after a reset", got)
+	}
+	// The record a reset writes says nothing about the run that ended.
+	if after.State().SleepMs != 0 || after.State().LearnedMaxVolts != 0 {
+		t.Errorf("the reset record still carries the last run: %+v", after.State())
+	}
+}
+
+// TestASaveThatChangesNothingCostsNoWrite: an erase stalls the radio, so
+// a save nobody asked for is not free.
+func TestASaveThatChangesNothingCostsNoWrite(t *testing.T) {
+	sec := newMemSector()
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	s.Save(n)
+	was := sec.writes
+	for range 20 {
+		s.Save(n)
+	}
+	if sec.writes != was {
+		t.Errorf("%d writes for settings nobody changed", sec.writes-was)
+	}
+	// And a real change still lands.
+	n.SetColor(emulator.ColorHotPink, t0)
+	s.Save(n)
+	if sec.writes == was {
+		t.Error("a colour someone chose was not written")
+	}
+}
+
+// TestABoardWithNoFlashStillRuns: the device has to boot whatever the
+// sector says, and a save that cannot land is reported rather than lost
+// silently or fatal.
+func TestABoardWithNoFlashStillRuns(t *testing.T) {
+	s := Unread(testLog(t))
+	n := node(t, "lcfs_spare", true)
+	s.Restore(n, t0)
+	s.Save(n)
+	s.Report()
+	if err := s.Forget(n, t0); err == nil {
+		t.Error("a reset on a board with no sector reported success")
+	}
+
+	// And one whose driver refuses every write.
+	sec := newMemSector()
+	sec.failWrite = true
+	s = Open(testLog(t), sec)
+	s.Save(n)
+	if got := len(s.State().Peers); got != 0 {
+		t.Errorf("a save that failed was recorded as having %d peers", got)
+	}
+}
+
+// TestNoiseInTheSectorIsNotSettings: the sector holds whatever a torn
+// write, a bad block or a previous firmware left.
+func TestNoiseInTheSectorIsNotSettings(t *testing.T) {
+	sec := newMemSector()
+	for i := range sec.b {
+		sec.b[i] = byte(i*31 + 7)
+	}
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	s.Restore(n, t0)
+	if got := n.Config().Name; got != "lcfs_spare" {
+		t.Errorf("noise in the sector renamed the device to %q", got)
+	}
+	if got := n.BondCount(); got != 1 {
+		t.Errorf("noise in the sector left %d bonds", got)
+	}
+	// A save over the noise has to land, or the device can never save
+	// again.
+	s.Save(n)
+	after := Open(testLog(t), sec)
+	if got := after.State().Name; got != "lcfs_spare" {
+		t.Errorf("the save over the noise did not stick: %q", got)
+	}
+}
+
+// TestARecordFromAnotherVersionIsIgnored: the format can change, and a
+// board flashed with a new build reads the old one's bytes.
+func TestARecordFromAnotherVersionIsIgnored(t *testing.T) {
+	sec := newMemSector()
+	j, err := store.Open(sec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := j.Save([]byte("not a State of any version")); err != nil {
+		t.Fatal(err)
+	}
+	s := Open(testLog(t), sec)
+	if got := s.State().Name; got != "" {
+		t.Errorf("a record this build cannot read was used anyway: %q", got)
+	}
+	n := node(t, "lcfs_spare", true)
+	s.Restore(n, t0)
+	if got := n.Config().Name; got != "lcfs_spare" {
+		t.Errorf("an unreadable record renamed the device to %q", got)
+	}
+}
+
+// TestStateHandsOutACopy: the struct alone is a copy, but the slice
+// header in it points at the Store's own peers. A caller writing through
+// it changes the record this Store compares against to decide whether a
+// save is needed, and the save that was needed then does not happen.
+func TestStateHandsOutACopy(t *testing.T) {
+	sec := newMemSector()
+	s := Open(testLog(t), sec)
+	n := node(t, "lcfs_spare", true)
+	s.Save(n)
+
+	st := s.State()
+	if len(st.Peers) != 1 {
+		t.Fatalf("saved %d peers", len(st.Peers))
+	}
+	st.Peers[0].Name = "written through"
+
+	if got := s.State().Peers[0].Name; got == "written through" {
+		t.Error("a caller wrote through State() into the Store's own record")
+	}
+	// And the flash still holds what it held.
+	again := Open(testLog(t), sec)
+	if got := again.State().Peers[0].Name; got != "Lukasz" {
+		t.Errorf("the sector says the peer is called %q", got)
+	}
+}
+
+// TestNoSectorDoesNotPanic: Open and Reopen take a sector from a caller,
+// and a board has none while its flash driver is being worked on. A
+// journal asked for the size of a sector that is not there brings the
+// board down in a boot loop, which is the outcome Unread exists to
+// avoid.
+func TestNoSectorDoesNotPanic(t *testing.T) {
+	n := node(t, "lcfs_spare", true)
+
+	s := Open(testLog(t), nil)
+	if s.Found() {
+		t.Error("a board with no sector reported a record")
+	}
+	s.Restore(n, t0)
+	s.Save(n)
+	s.Report()
+
+	// And the console path, which takes one from a caller too.
+	u := Unread(testLog(t))
+	u.Reopen(n, t0, nil)
+	if u.Found() {
+		t.Error("store open on a board with no sector reported a record")
+	}
+}
+
+// TestReopenAlwaysReports: `store open` exists to say what is in the
+// sector, and it has three ways out — already open, opened now, and
+// nothing to open. A deferred report placed after the first of them
+// left the path a working board takes printing nothing at all.
+func TestReopenAlwaysReports(t *testing.T) {
+	// A sector with something in it, so there is something to report.
+	filled := newMemSector()
+	Open(discard(), filled).Save(node(t, "lcfs_spare", true))
+
+	for _, tc := range []struct {
+		name string
+		open func(*slog.Logger) *Store
+		sec  store.Sector
+		want string
+	}{
+		// Each case has one right answer, not either of two: a store
+		// that holds a record has to report the record, and one that
+		// holds nothing has to say so. Accepting both would pass a
+		// Reopen that read the sector and then reported it empty.
+		{"already open", func(l *slog.Logger) *Store { return Open(l, filled) }, filled, `msg=settings `},
+		{"opened now", Unread, filled, `msg=settings `},
+		{"nothing to open", Unread, nil, "settings unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var logged bytes.Buffer
+			s := tc.open(slog.New(slog.NewTextHandler(&logged, nil)))
+			logged.Reset() // only what Reopen itself says
+			s.Reopen(node(t, "", false), t0, tc.sec)
+			got := logged.String()
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("store open did not say %q:\n%s", tc.want, got)
+			}
+			// And the record it reports is the one that is there.
+			if tc.sec != nil && !strings.Contains(got, `name=lcfs_spare`) {
+				t.Errorf("store open reported settings that are not the saved ones:\n%s", got)
+			}
+		})
+	}
+}
+
+// TestBothWritersHoldTheBlocker: a flash write is the firmware's 'vfs
+// write' blocker, and while it runs nothing feeds the watchdog. A reset
+// is the write that needs it most, being the one that erases, and it
+// went without for as long as it had its own copy of the save path.
+func TestBothWritersHoldTheBlocker(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  func(*Store, *emulator.Node) error
+	}{
+		{"a save", func(s *Store, n *emulator.Node) error { s.Save(n); return nil }},
+		{"a reset", func(s *Store, n *emulator.Node) error { return s.Forget(n, t0) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sec := newMemSector()
+			s := Open(testLog(t), sec)
+			n := node(t, "lcfs_spare", true)
+
+			// Written over, so the write under test has to erase first:
+			// the journal appends only into bytes that are still
+			// erased, and anything else in the tail sends it to Erase —
+			// the longest the driver holds the cache off and the
+			// interrupts down, and the case the blocker exists for. On
+			// a clean sector a save just appends and never erases.
+			for i := range len(sec.b) {
+				sec.b[i] = byte(i)
+			}
+
+			// Watched from inside the flash, which is the only place the
+			// question means anything: the blocker is taken and given
+			// back around the write, so nothing outside can see it held.
+			var sawBlocked, ops, erases int
+			watch := func() {
+				ops++
+				if !n.Power().WatchdogFeeding() {
+					sawBlocked++
+				}
+			}
+			sec.onWrite = watch
+			sec.onErase = func() { erases++; watch() }
+			if err := tc.run(s, n); err != nil {
+				t.Fatal(err)
+			}
+			if ops == 0 {
+				t.Fatal("the flash was not touched")
+			}
+			if erases == 0 {
+				t.Error("the sector was full and nothing erased it")
+			}
+			if sawBlocked != ops {
+				t.Errorf("%d of %d flash operations ran with the watchdog still being fed", ops-sawBlocked, ops)
+			}
+			if !n.Power().WatchdogFeeding() {
+				t.Error("the blocker was not given back")
+			}
+		})
+	}
+}

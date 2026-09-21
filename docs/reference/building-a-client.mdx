@@ -30,6 +30,11 @@ authenticated or encrypted (**Confirmed**).
   only crypto in the image is the bundled (and, on the app path, unused) mbedTLS stack plus
   the OTA SHA-256. `ble_keys.bin` holds optional BLE reconnect secrets — not required to
   connect.
+
+  On the BLE side this is checkable directly: `BleLite.enable` calls `ble.active(True)` and
+  nothing else, and the **only** `ble.config()` call anywhere in the 94 frozen modules is
+  `ota_ble`'s `mtu=512` — no `bond`, `mitm`, `le_secure` or `io` option is ever set, and the
+  IRQ handler has no encryption or passkey branch (**Confirmed**).
 </Note>
 
 ## BLE client
@@ -41,29 +46,47 @@ firmware 4.1.3 and 5.0.3.
 
 ### Connect
 
-Bluetooth is off until the user **double-presses the power button**, which toggles
-advertising; the crystal breathes blue while it advertises. The device advertises the name
-`totem` and the service UUID, so either can be matched.
+Bluetooth is off until the user **double-presses the power button**; the crystal breathes
+blue while it advertises. The primary advertisement carries the flags, the 128-bit service
+UUID and the local name `totem`; the appearance spills into the **scan response**, so a
+passive scan sees the name and UUID but not the appearance (**Confirmed** — see
+[advertising](/protocols/ble#advertising)). Advertising interval is 50 ms.
 
 | Item | Value |
 | --- | --- |
 | Service UUID | `7913b588-0000-4635-b066-baa2cfc197cf` |
-| Advertised name | `totem` (appearance 1361) |
+| Advertised name | `totem` (appearance 1361, in the scan response) |
 | Pairing / bonding | not required |
 
 `ble_core.py` registers these characteristics under the service, all with GATT flags
 `0x3E` (READ | WRITE | WRITE_NO_RESP | NOTIFY | INDICATE):
 
-| Characteristic UUID | Name | Role |
-| --- | --- | --- |
-| `7913b588-0001-4635-b066-baa2cfc197cf` | `chars__conn_status` | control / handshake: the client writes here, and the device announces handoffs and disconnects here |
-| `7913b588-0002-4635-b066-baa2cfc197cf` | `chars__data_transfer` | application data |
-| `7913b588-0003-4635-b066-baa2cfc197cf` | `chars__on_demand` | **v5.0.3+ only**: file-upload chunks, used only if the client announced upload support |
+| Characteristic UUID | Name | Role | Value buffer |
+| --- | --- | --- | --- |
+| `7913b588-0001-4635-b066-baa2cfc197cf` | `chars__conn_status` | control / handshake: the client writes here, and the device announces handoffs and disconnects here | **84** B |
+| `7913b588-0002-4635-b066-baa2cfc197cf` | `chars__data_transfer` | application data | **185** B |
+| `7913b588-0003-4635-b066-baa2cfc197cf` | `chars__on_demand` | **v5.0.3+ only**: file-upload chunks, used only if the client announced upload support | device → client only |
 
 Direction is fixed: **client → device is a GATT write**; **device → client is
-notify/indicate** (on connection handle 0). Subscribe to **both** `…-0001` and `…-0002`. The
-data characteristic's GATT value buffer is **185 bytes**, so a single write must fit in it.
-MTU is client-negotiated; macOS negotiates 256 with the device.
+notify/indicate** (on connection handle 0 — the firmware passes a literal `0` to both
+`gatts_notify` and `gatts_indicate`, so it only ever serves one central). Subscribe to
+**both** `…-0001` and `…-0002`; a single write must fit the target characteristic's value
+buffer above, whatever the MTU (**Confirmed**, `ble_manager.dis:4308-4400`).
+
+<Warning>
+  **Do not poll with GATT reads.** `Characteristic.write` only ever calls
+  `gatts_notify(0, handle, data)` — the `gatts_write` branch that would update the readable
+  attribute value is unreachable in this build. The characteristic you read back is
+  whatever *you* last wrote. All device data arrives as notifications or indications
+  (**Confirmed**, `f_ble_ble_data.dis:528-563`).
+</Warning>
+
+MTU is client-negotiated: the device never calls `gattc_exchange_mtu` and sets no preferred
+MTU on the app path, so it starts at 23 and adopts whatever `_IRQ_MTU_EXCHANGED` reports
+(**Confirmed**). macOS negotiates 256 (observed on hardware, not derivable from the image).
+
+Right after connecting the device asks for a 10–20 ms connection interval, slave latency 0
+and a 12 s supervision timeout via `gap_conn_param_update(0, 10000, 20000, 0, 12000)`.
 
 ### Handshake (ConnStatus-Ready)
 
@@ -76,35 +99,77 @@ MTU is client-negotiated; macOS negotiates 256 with the device.
     bit3 isUiClosed, bit4 isService, bit5 lets the device drop BLE on its own schedule.
   </Step>
   <Step title="Write the Ready frame">
-    Write `[0x00, 0x01, 0x01, 0x00]` to `…-0001` **within 15 s** of connecting (v5.0.3 drops
-    silent links). A last byte of `0x00` selects the **legacy full-duplex** transmit loop,
-    which works on every platform. A nonzero `frame_schema_id` selects the half-duplex loop,
-    which [stalls on macOS/iOS](/protocols/ble#transmit-modes). v5.0.3 accepts an optional 5th
+    Write `[0x00, 0x01, 0x01, 0x00]` to `…-0001` **within 15 s** of connecting (v5.0.3
+    schedules a disconnect for silent links). A last byte of `0x00` selects the **legacy
+    full-duplex** transmit loop, which works on every platform. A nonzero `frame_schema_id`
+    selects the half-duplex loop, which
+    [stalls on macOS/iOS](/protocols/ble#transmit-modes). v5.0.3 accepts an optional 5th
     byte whose bit 0 announces file-upload support; leave it out unless you implement uploads.
   </Step>
   <Step title="Request and acknowledge records">
     Write `(0x01, 0x01)` to `…-0002` to request Static Data. In the legacy loop the device
     repeats Static Data, the WiFi list and Peer Sync until you acknowledge them with
-    `(0x01, 0x00)`, `(0x02, 0x00)` and a cat-6 command such as `(0x06, 0x08)`. Live Data then
-    arrives every ~3 s, and Peer Pings whenever a peer changes. Read them with the `gen_*`
+    `(0x01, 0x00)`, `(0x02, 0x00)` and a cat-6 command such as `(0x06, 0x08)` — any command
+    in the category clears its pending flag, because `recv_data_msgs` just assigns
+    `controller.<cat>_cmd_id = cmd_id`. **Peer Sync is pending from the start**
+    (`Controller.__init__` leaves `peer_cmd_id = 1`), but the device withholds it until
+    Static Data has been acknowledged (`Static data not yet sent, skipping BLE Peer Sync`).
+    Live Data then arrives every ~3 s, and Peer Pings whenever a peer changes — one per loop
+    pass, and only while the last Live Data was under 10 s ago. Read them with the `gen_*`
     layouts below.
   </Step>
   <Step title="Send commands, then disconnect">
     Write commands to `…-0002` at any time; the full list is in the
     [command map](/protocols/message-format#categories). To disconnect gracefully, write
-    `[0x00, 0x03]` to `…-0001`.
+    `[0x00, 0x03]` to `…-0001` — that sets `is_graceful_disconn`, so the device does *not*
+    auto-reconnect afterwards. Drop the link without it and the device silently re-advertises
+    for 45 s.
   </Step>
 </Steps>
 
 <Info>
-  `recv_status_msgs` applies these gates (**Confirmed**): `conn_mode == 1` sets TX owner and
-  clears pending static/peer requests; `frame_schema_id > 0` sets TX ready and makes the
-  legacy loop exit in favour of `send_data_v2`. The ids **25, 45, 59, 72** are real `EXTENDED`
-  schema variants, but no BLE record layout depends on the schema id. In the half-duplex
-  loop the device waits for the ATT confirmation of every indication (500 ms timeout), hands TX
-  to the app with `[0x04, 0x02, 0x02, …]` on `…-0001`, and expects `[0x04, 0x03, 0x02]` to
-  take it back. See [Half-duplex & comms handoff](/protocols/ble#half-duplex--comms-handoff).
+  `recv_status_msgs` applies these gates (**Confirmed**, `ble_manager.dis:2753-3119`):
+  `conn_mode == 1` clears pending static/peer requests; `frame_schema_id > 0` sets TX ready
+  and makes the legacy loop exit in favour of `send_data_v2`; TX **owner** is set only when
+  both hold — the `evt_is_tx_owner.set()` lives inside the `frame_schema_id > 0` branch.
+  A short frame is not an error: `conn_mode` and `frame_schema_id` default to `0` when the
+  write is under 3 or 4 bytes, and `is_upload_supported` to `0` under 5. The ids
+  **25, 45, 59, 72** are real `EXTENDED` schema variants, but no BLE record layout depends
+  on the schema id. In the half-duplex loop the device waits for the ATT confirmation of
+  every indication (500 ms timeout), hands TX to the app with a 12-byte
+  `[0x04, 0x02, 0x02] + 00×9` **indication** on `…-0001`, and expects `[0x04, 0x03, 0x02]`
+  (bit 1) to take it back; `[0x04, 0x03, 0x01]` (bit 0) revokes it instead. See
+  [Half-duplex & comms handoff](/protocols/ble#half-duplex--comms-handoff).
 </Info>
+
+### Keeping the link alive
+
+The device watches `controller.status__conn`. If it is anything but `1` for **15 s** it
+counts a stall, logs `App never sent ConnStatus within {} ms - link treated as hung`, and
+raises `evt_ble_schedule_disconn`; the scheduled-disconnect manager then drops the link and
+parks BLE for 30 s (90 s, and with no fast-reconnect bursts, after two hung links in a row).
+Sending the Ready frame promptly is the whole fix. (**Confirmed**,
+`ble_manager.dis:3840-3890` and `compass.dis:5747-6039`.)
+
+Before it goes away the device announces its intent on `…-0001`, **three times, 50 ms
+apart**, as a 10-byte frame (**Confirmed**, `ble_manager.dis:4934-5084`):
+
+| Frame | Meaning |
+| --- | --- |
+| `[0x00, 0x02]` + `00×8` | plain disconnect |
+| `[0x00, 0x05]` + `<ii` | scheduled: `(reconn_start_ms, reconn_duration_ms)` — reconnect in N ms, advertising for M ms (M ≥ 10 000) |
+
+A client that handles `[0x00, 0x05]` can schedule its own rescan instead of hunting blind.
+During the off window the device also advertises a connectable **1.2 s burst every ~8 s**,
+so a client that keeps scanning will usually reconnect before the window ends.
+
+Setting bit 5 of the app-runtime byte (`[0x03, 0x00, bits]`) is what *permits* the routine
+version of this cycle: `espnow_conn_v2` only requests a scheduled disconnect when
+`modes.is_ble_auto_reconn` is set **and** the app has reported itself inactive (bit 0 clear)
+for more than 10 s (`[ESP-NOW] | App allows BLE Auto Reconnect` → `[ESP-NOW] | Requesting
+BLE Scheduled Disconnect`). Leave bit 5 clear and the device stays connected — the 15 s
+hung-link guard is the only other thing that raises the event (**Confirmed**,
+`espnow_conn_v2.dis:3030-3160`).
 
 ### Messages to read (BLE `gen_*` layouts)
 
@@ -196,20 +261,23 @@ coordinates for 2 h (v5.0.3; 4 h in v5.0.2).
 ## ESP-NOW mesh client
 
 To join the mesh peer-to-peer instead of going through a phone, send/receive raw ESP-NOW
-frames on the fleet's channel.
+frames on the fleet's channel. The repository's Go `mesh` package encodes and decodes these
+frames, and the `emulator` package plus `cmd/totememu` run a complete Totem on an ESP32 with
+TinyGo: see [ESP32 emulator](/reference/esp32-emulator).
 
 ### Radio setup
 
 | Item | Value |
 | --- | --- |
-| Channel | **6** (`self.channel = 6` default; also settable at runtime via `set_channel`) |
-| PHY | `WIFI_PROTOCOL_LR` (Espressif Long Range, protocol bit 8) in ESP-NOW-only / BLE modes |
+| Channel | **6** (`self.channel = 6`, the only write to it; there is no `set_channel`) |
+| Interface | WiFi station; the ESP-NOW address is the STA MAC (`machine.unique_id()`) |
+| PHY | `WIFI_PROTOCOL_LR` only (protocol bitmap `0x08`), in every mode 5.0.3 uses |
 | LR rate | **250 K**: `EspConn` calls `e.config(rate=41)` (`WIFI_PHY_RATE_LORA_250K`) |
+| TX power | `txpower=21` dBm (the driver caps it at 20) |
 | Encryption | none — `add_peer(mac)` with no `lmk` |
 
-The fleet is pinned to a single channel; ESP-IDF drops off-channel frames, so a mesh client
-**must** match it. Channel 6 is the built-in default (**Confirmed**), but the live value can
-be changed at runtime (**Partial**) — see [what to confirm on-device](#still-missing--confirm-on-device).
+The fleet is pinned to channel 6 (**Confirmed**, and on hardware); ESP-IDF drops off-channel
+frames, so a mesh client **must** match it.
 
 ### Frame layout
 
@@ -253,9 +321,10 @@ Every payload leads with the echoed `(cat_id, cmd_id)` as `BB`.
 | `(7,0)` | `<BBffbbbHbbH` | 19 B |
 | `(7,1)` | `<BBHbffb` | 14 B |
 
-`EXTENDED` schema-versioned variants — `(cat, cmd) → {schema_id → fmt}`:
+`EXTENDED` longer variants — `(cat, cmd) → {frame length → fmt}`. The keys are total frame
+lengths including the SyncWord, not schema ids (for `(0,0)`, 72 means "72 bytes or more"):
 
-| `(cat, cmd)` | Schema id | Format | Size |
+| `(cat, cmd)` | Frame length | Format | Size |
 | --- | --- | --- | --- |
 | `(0,0)` | 25 | `<BBffbbhbbb6B` | 23 B |
 | `(0,0)` | 59 | `<BBffbbhbbb6Bhii4BhHehhffbB` | 57 B |
@@ -264,9 +333,10 @@ Every payload leads with the echoed `(cat_id, cmd_id)` as `BB`.
 | `(1,6)` | 29 | `<BBbb9BBB3i` | 27 B |
 | `(2,0)` | 45 | `<BB6BffbbHbbbhhBBiffh` | 43 B |
 
-The `(0,*)` 23-byte family is the mesh peer beacon: two floats (lat/lon), flags, and a
-6-byte MAC. Field-by-field mesh semantics beyond the struct layout are **Partial** — the
-byte layouts are recovered, but individual fields are not fully labelled.
+Every field is now labelled (**Confirmed**): see the peer, locate and Smart Group tables in
+[message format](/protocols/message-format#peer-frame-0-cmd). The 6-byte MAC in the `(0,*)`
+frames is a target MAC that 5.0.3 always leaves zero; the sender is identified by its ESP-NOW
+source address. Bonding and timing are in [ESP-NOW mesh](/protocols/espnow-mesh#pairing-p2p-bond).
 
 ## Custom OTA server
 
@@ -302,26 +372,45 @@ plain HTTP). The contract (**Confirmed**):
 
 Only needed if your client accepts the device's **log uploads** (v5.0.3) or does BLE OTA.
 A client that sends the plain 4-byte Ready frame never receives uploads. Layouts
-(**Confirmed**; details in [chunking](/protocols/message-format#chunking)):
+(**Confirmed**, `f_ble_chunking.dis:383-492` and `f_ble_file_upload.dis:591-745, 1165-1300`;
+details in [chunking](/protocols/message-format#chunking)):
 
-- **Transfer header** (announce / finish), indicated on `…-0001`: `[0x02, 0x02]` +
+- **Transfer header** (announce / finish), **indicated** on `…-0001`: `[0x02, 0x02]` +
   `struct '<HBBBiHiB'` = file_id, status_id, action_id, file_type_id, byte_pos, chunk_no,
   file_size, flags (v5.0.3: bit0 last chunk, bit1 from compass). Then the 32-byte SHA-256 at
-  `buff[18:50]`, the name length at `buff[50]`, the name, and `err_no`.
-  `file_id = sha256[0] | sha256[1] << 8`.
-- **Chunk** (v5.0.3), notified on `…-0003`: `[0x00, 0x02]` + `struct '<HHiH'` = file_id,
-  length, byte_pos, chunk_no, then the data (`CHUNK_HDR_SZ = 12`).
+  `buff[18:50]`, the name length at `buff[50]`, the name from `buff[51]`, and `err_no` right
+  after it. `file_id = sha256[0] | sha256[1] << 8`.
+- **Chunk** (v5.0.3), **notified** on `…-0003`: `[0x00, 0x02]` + `struct '<HHiH'` = file_id,
+  length, byte_pos, chunk_no, then the data (`CHUNK_HDR_SZ = 12`). The payload size is
+  `min(mtu - 3, 247) - 12` — 235 bytes at MTU 256, and 8 bytes if the MTU is still 23. A
+  write that fails with `OSError` is retried up to 3 times, 160 ms apart.
 - **App reply**, written to `…-0001` (v5.0.3): `(0x02, 0x03)` + `struct '<HbBBiHiB'`, 18 bytes
-  in total. It is read as file_id, status, action, chunk: `status ∈ {2, 3, 4}` is terminal,
-  `action 4` = resume at `chunk`, `action 1` = ready.
+  in total — the device parses it as `'<BBHbBBiHiB'` from offset 0 and ignores anything
+  shorter than 18 bytes or carrying a `file_id` other than the one in flight. It reads
+  file_id, status, action, chunk: `status ∈ {2, 3, 4}` is terminal, `action 4` = resume at
+  `chunk` (or chunk 1 if `chunk` is 0), `action 1` = ready. A reply longer than 50 bytes may
+  carry `err_no` after the name, exactly as the device's own header does.
 
 | Field | Enum values |
 | --- | --- |
-| `status_id` | 1 = normal / in-progress, 4 = error / abort |
-| `action_id` | 0 = header / announce, 1 = last-chunk / complete |
-| `file_type_id` | 2 = upload-to-app (destinations `SAVE_TO_VFS = 1`, `SAVE_TO_OTA = 2`, `UPLOAD_TO_APP = 3`) |
+| `status_id` | 1 = normal / in-progress, 4 = error / abort (the device sends 1 for announce and completion, 4 to abort) |
+| `action_id` | 0 = header / announce, 1 = last-chunk / complete, 4 = resume (app → device) |
+| `file_type_id` | **2** for a log upload to the app |
 
-Overall result codes: `1 done, 2 no-app, 3 retry, 4 failed, 5 cancel, 6 abort`.
+<Note>
+  `file_type_id` is not the `save_to` enum. `SAVE_TO_VFS = 1`, `SAVE_TO_OTA = 2`,
+  `UPLOAD_TO_APP = 3` are internal destinations passed to `FileTransfer(save_to=…)` and
+  never appear on the wire; `_upload` separately sets `file.file_type_id = 2`, and that is
+  the byte you receive (**Confirmed**, `f_ble_file_upload.dis:1495-1530`).
+</Note>
+
+Overall result codes, from the uploader's own summary line
+(`result: {} (1=done 2=no app 3=retry 4=failed 5=cancel 6=abort)`):
+`1 done, 2 no-app, 3 retry, 4 failed, 5 cancel, 6 abort`.
+
+While an upload is streaming the uploader takes `ble.noncrit_owner = 'upload'`, which lets
+it delay the half-duplex TX handoff by up to 2 s
+(`[send_data_v2] Non-critical hold expired ({}); handing off`).
 
 ## Still missing / confirm on-device
 
@@ -330,10 +419,12 @@ before relying on them:
 
 | Item | Status | How to confirm |
 | --- | --- | --- |
-| Home channel | default 6 (**Confirmed**), runtime-settable (**Partial**) | sniff the fleet — the live channel can be changed via `set_channel` |
-| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop (works on macOS), `> 0` = half duplex (stalls on macOS/iOS) | `totemctl --trace info`, or add `--half-duplex` to compare |
+| Home channel | 6 (**Confirmed**, hardware-tested); no `set_channel` exists | — |
+| `frame_schema_id` / transmit mode | **Confirmed and hardware-tested**: `0` = legacy loop, which notifies (works on macOS), `> 0` = half duplex, which indicates (stalls on macOS/iOS) | `totemctl --trace info`, or add `--half-duplex` to compare |
+| Negotiated MTU | **Partial** — the device sets no preferred MTU, so this is the central's choice; 256 observed on macOS | watch `mtu_payload` effects on upload chunk size |
 | Half duplex on Linux / Android / Windows | **Untested** (those stacks confirm indications, so it should work) | `totemctl --half-duplex --trace watch` on such a host |
-| Mesh payload field semantics | struct layouts **Confirmed**, per-field meaning **Partial** | correlate captured frames against known device state |
+| Mesh payload field semantics | **Confirmed**; peer frames and the pairing handshake hardware-tested with the ESP32 emulator | — |
+| Locate relay and Smart Group on the air | **Confirmed** from bytecode, not yet hardware-tested | run the emulator with `pos` set, far enough from the Totem for its peer to go stale |
 | Demi-god OTA frame | **Partial / missing** | `(cat, cmd)` + struct not recovered — do not fabricate |
 | Runtime-only values | **Partial** | venue code, group id, and device name live in runtime state / bytecode, not the static image |
 

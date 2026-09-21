@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // GATT identifiers.
@@ -110,16 +111,42 @@ func (m MAC) Pretty() string {
 // MarshalText encodes the MAC as in String, for JSON output.
 func (m MAC) MarshalText() ([]byte, error) { return []byte(m.String()), nil }
 
+// UnmarshalText accepts any form ParseMAC does.
+func (m *MAC) UnmarshalText(b []byte) error {
+	v, err := ParseMAC(string(b))
+	if err != nil {
+		return err
+	}
+	*m = v
+	return nil
+}
+
 // ParseMAC accepts "a1b2c3d4e5f6", "A1:B2:C3:D4:E5:F6" or "a1-b2-...".
 func ParseMAC(s string) (MAC, error) {
 	var m MAC
-	clean := strings.NewReplacer(":", "", "-", "", " ", "").Replace(s)
-	b, err := hex.DecodeString(clean)
+	b, err := hex.DecodeString(CleanHex(s))
 	if err != nil || len(b) != 6 {
 		return m, fmt.Errorf("invalid MAC %q: want 6 hex bytes", s)
 	}
 	copy(m[:], b)
 	return m, nil
+}
+
+// CleanHex drops the separators hex is usually written with, so a MAC or
+// a frame can be pasted from anywhere: ":" and "-", and any space —
+// including the non-breaking and thin spaces that come with text copied
+// out of a document or a chat window.
+//
+// Shared, so the two places that read hex agree. They did not: one took
+// a Unicode space and the other did not, so the same address pasted from
+// the same document worked in one command and failed in the next.
+func CleanHex(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == ':' || r == '-' || unicode.IsSpace(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // RGB is a colour as used by the halo/crystal LEDs.

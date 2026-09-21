@@ -11,7 +11,10 @@ releases API and S3 objects are served openly. The BLE protocol was additionally
 end to end with the `totemctl` client (`cmd/totemctl` in this repository) against the
 author's own device on firmware 4.1.3 and 5.0.3. That test found the
 [transmit-mode](/protocols/ble#transmit-modes) behaviour on macOS, which static analysis
-alone had missed.
+alone had missed. The ESP-NOW mesh was checked the same way with the
+[ESP32 emulator](/reference/esp32-emulator) (`cmd/totememu`): it bonded with the author's
+Totem on 5.0.3 and exchanged peer status with it, which confirmed the radio settings, the
+peer frame layout and the pairing handshake.
 
 ### Tools
 
@@ -49,6 +52,53 @@ alone had missed.
     and the `{}`-style (Python `str.format`) log messages.
   </Step>
 </Steps>
+
+## Coverage audit
+
+Symbol recovery tells you what exists. It does not tell you what anyone has actually
+*read*, and the two are easy to confuse — a module can be named, categorised and given a
+confident one-line role on the strength of nothing but its filename.
+
+Every module was therefore audited against `re/v5.0.3/mpy/*.dis` and assigned one of four
+ratings, published per module on the [module reference](/reference/modules):
+
+| Rating | Bar |
+| --- | --- |
+| **DECODED** | Behaviour documented from the bytecode: named functions, constant *values*, control flow |
+| **PARTIAL** | Some verified internals documented, main logic not |
+| **NAME-ONLY** | Role is a hypothesis from the module name and a few strings; never read |
+| **STOCK** | Upstream MicroPython or `micropython-lib`; out of scope |
+
+### How the ratings were derived
+
+1. **Import graph.** Every `IMPORT_NAME` opcode in all 94 disassemblies was extracted and
+   resolved against the module list, giving each module's importers. This is what
+   identified `apa106.py` and `neopixel.py` as dead code, `chat_msg.py`, `f_ota/hotspot.py`
+   and `peer_auto_bond.py` as unreferenced, and `f_lib/logger.py` (41 importers) and
+   `f_lib/task_mgr.py` (28) as the load-bearing modules.
+2. **Distinctive-symbol coverage.** For each module, the identifiers in its `qstr_table`
+   that appear in at most two modules across the image — its *distinctive* symbols, which
+   excludes shared names like `config` or `Event` — were checked against the full text of
+   `docs/`. The fraction of them that appear is a mechanical proxy for decode depth.
+   When the audit ran, `f_lib/logger.py`, `f_lib/bitwise.py` and `f_lib/async_helpers.py`
+   each scored zero; all three have since been read and are written up on
+   [f_lib](/reference/f-lib).
+3. **Manual adjudication.** The proxy is unreliable for small modules (a module with one
+   distinctive symbol scores 0% or 100%), so every rating was set by reading what the docs
+   actually claim about that module and checking it against the disassembly. The proxy
+   ranked the candidates; it did not decide them.
+
+<Warning>
+  A "documented" module is not necessarily a *correct* one. This audit found several
+  confident claims that the bytecode contradicts: `apa106.py` presented as the LED driver
+  (it is unreachable; `leds.py` imports `f_lib/neopixel_v2.py`), a deep-sleep power state
+  (the firmware never calls `machine.deepsleep()`), `f_lib/rtc_v2.py` described as
+  RTC-memory storage (it is a `machine.RTC` subclass doing calendar maths), and `BleCtrl`
+  listed as a class (it is a log-line prefix; the class is `BleController`).
+
+  Each of those came from reading a name or a log string and not the code. That is exactly
+  the failure mode the NAME-ONLY rating exists to flag.
+</Warning>
 
 ## Why not a full source decompile?
 
@@ -213,9 +263,16 @@ by function:
   </Step>
   <Step title="Diff">
     Split each disassembly into functions, drop the byte-offset column, and compare
-    added, removed and changed functions plus the qstr and constant tables. 74 modules are
-    identical, 20 changed and 2 were removed. See
+    added, removed and changed functions plus the qstr and constant tables. **20 modules
+    changed, 74 are identical** and 2 were removed. See
     [What changed in 5.0.3](/firmware/changes-5.0.3).
+
+    That page says 21 changed, and both numbers are right: it compares the `.mpy` files
+    themselves, and a `.mpy` also carries the source line-number table, which moves
+    whenever a file is recompiled. `ble_controller.py` is the one module that differs
+    that way and no other — same qstrs, same constant table, same instructions, every
+    line-info entry shifted by exactly +2. Twenty-one modules were rebuilt; twenty had
+    their code changed.
   </Step>
 </Steps>
 
@@ -228,6 +285,27 @@ was shifted by one: `keys` stood for `len`, `find` for `format`, `sep` for `set`
 `Ellipsis` for `Exception`. Frozen and const-pool names were unaffected, and so were all
 constants, struct formats and control flow. The protocol findings on these pages were
 re-checked against the corrected disassembly.
+</Warning>
+
+<Warning>
+**Immediate-object mapping: `True` disassembled as `Ellipsis`.** In `REPR_A` an immediate
+object is `(v << 3) | 6`, and `py/obj.h` assigns `none = 0`, `false = 1`, **`true = 3`** —
+the gap at 2 is deliberate, so that `(v >> 3) & 1` is the boolean. The reconstructor read
+`0x16` (v = 2, unassigned) as `True` and `0x1E` (v = 3) as `Ellipsis`, so **every `True`
+in a constant table came out as `Ellipsis`**, in the rebuilt `.mpy` as well as the
+printed disassembly. Ellipsis is not an immediate at all; it is a ROM object pointer, and
+none occurs in these images.
+
+`compassing`'s constant table showed it plainly — a family of `(bool, int)` return tuples
+reading `(False, 3)`, `(False, 1)`, `(False, 0)` and `(Ellipsis, 0)` — and
+`f_lib/requests` carried the scheme table `(80, False)`, `(443, Ellipsis)`, where the
+second entry is the HTTPS branch.
+
+Fixed, and every version regenerated: across all four images only `compassing`,
+`f_lib/requests`, `f_ota/f_assets` and (in 3.2.12 and 4.1.3) `touch_button` changed, by
+ten lines or fewer each, and every other module came back byte-identical — which is also
+a check on the reconstructor being deterministic. Anything on these pages that turned on
+a `True` in a constant table was re-read against the corrected output.
 </Warning>
 
 ## Artifacts

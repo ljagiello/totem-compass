@@ -392,6 +392,12 @@ func (c *Client) writer() {
 			c.qmu.Lock()
 			q := c.queue
 			c.queue = nil
+			// The pending marks go with the queue they describe. The
+			// invariant elsewhere is that a key in pending means an
+			// unwritten ack for it is waiting, and dropping the queue
+			// without the marks makes that false — so an ack for one of
+			// those records would never be queued again.
+			clear(c.pending)
 			c.qmu.Unlock()
 			for _, r := range q {
 				if r.result != nil {
@@ -408,6 +414,10 @@ func (c *Client) writer() {
 				break
 			}
 			r := c.queue[0]
+			// The vacated slot is cleared: the queue is reused in place, so
+			// leaving the request there keeps its frame's bytes reachable
+			// through the backing array until an append happens to grow it.
+			c.queue[0] = writeReq{}
 			c.queue = c.queue[1:]
 			if r.result == nil {
 				// The record can be repeated while this ack is still on the

@@ -8,166 +8,1147 @@ The navigation stack turns GNSS position, IMU orientation, and magnetic heading 
 `ubx_gnss.py`, `imu_fusion_auto.py`, `mag_wmm_data.py`, `task_mag_declination.py`,
 `nav_helpers.py`, `nav_logger.py`, and `peer_helpers.py`.
 
+<Note>
+**Evidence convention.** Everything below is marked **confirmed** (read directly from the
+v5.0.3 frozen bytecode, with a `file.dis:line` citation), **inferred** (decoded against an
+external spec such as the u-blox interface description), or **not recoverable** (the code
+is not in the frozen modules). Two dependencies — `madgwick` and `c_stats` — have no `.mpy`
+in the firmware image, so they are native C modules and their internals are **not
+recoverable**.
+</Note>
+
 ## GNSS (u-blox)
 
-The receiver is a **u-blox** module spoken to over the **UBX** binary protocol.
+The receiver is a **u-blox** module spoken to over the **UBX** binary protocol on a UART.
 
-| Element | Evidence |
+`UBLOX_MSG_PREFIX` is a dict from the 2-byte class/ID pair to a name, and `UBLOX_MSG_SIZE`
+gives the expected *total framed* length (header 6 + payload + checksum 2) for the messages
+whose size is fixed — all confirmed at `ubx_gnss.dis:365-394`:
+
+| Name | Class/ID | Framed size | Handled in `parse_ubx`? |
+| --- | --- | --- | --- |
+| `ACK-NAK` | `05 00` | 10 | yes — stores class/ID of the nak'd message |
+| `ACK-ACK` | `05 01` | 10 | yes |
+| `NAV-PVT` | `01 07` | 100 (92-byte payload) | yes — the whole position solution |
+| `SEC-UNIQID` | `27 03` | — | **no** — named but never parsed |
+| `MON-VER` | `0A 04` | — | **no** — named but never parsed |
+| `MGA-ACK` | `13 60` | — | yes — AssistNow chunk acknowledgement |
+
+`calc_ubx_checksum` is the standard UBX 8-bit Fletcher pair (`CK_A`/`CK_B`), confirmed at
+`ubx_gnss.dis:2661-2690`. Frames that do not start `B5 62` are dropped; the `b'$G'` NMEA
+prefix appears in the module's constant table purely so NMEA lines can be recognised and
+discarded.
+
+### The parser only runs once the device is bonded
+
+`UbxGnss.parser` returns immediately unless `modes.evt_bonded.is_set()`
+(`ubx_gnss.dis:1599-1610`, present in v5.0.2 too). An unbonded totem streams UBX from the
+receiver but parses none of it, so it has no position, no time-to-first-lock and no
+declination until at least one bond exists. **Confirmed.**
+
+### Which NAV-PVT fields are actually used
+
+The payload is unpacked with `'<IHBBBBBBIiBBBBiiiiIIiiiiiIIHHBBBBihH'`
+(`ubx_gnss.dis:2023`), which is `struct.calcsize` 92 and matches the u-blox NAV-PVT layout
+field for field. Only a subset of the 36 fields is read (**confirmed**,
+`ubx_gnss.dis:2025-2160`):
+
+| Index | UBX field | Used as |
+| --- | --- | --- |
+| 0 | `iTOW` | verbose print only |
+| 1 | `year` | sanity gate — a fix with `year < 2024` is discarded outright |
+| 11 | `flags` | bit 0 `gnssFixOK`, bit 1 `diffSoln`, bits 2-3 `psmState`, via `unpack_bits` |
+| 13 | `numSV` | `gnss_data.sat_count` |
+| 14 / 15 | `lon` / `lat` | ÷ 1e7 → degrees |
+| 17 | `hMSL` | ÷ 1000 → `gnss_data.altitude` in metres |
+| 18 | `hAcc` | ÷ 1000 → `gnss_data.p_acc` in metres |
+| 23 | `gSpeed` | mm/s; feeds the odometer and `gnss_data.speed` |
+| 28 | `flags3` | bit 0 and bits 1-4 extracted via `unpack_bits` |
+
+<Warning>
+`gnss_data.p_acc` and the `pAcc: {:.2f}` log field are **misnamed in the firmware**: the
+value read is NAV-PVT's **`hAcc`** (horizontal accuracy), not `pAcc`. The accumulators
+around it are named honestly — `h_acc_min`, `h_acc_max`, `h_acc_sum` — and the phone
+fallback log line calls it `Compass hAcc`. **Confirmed**, `ubx_gnss.dis:2062-2095`.
+</Warning>
+
+NAV-PVT *does* carry `headMot` (index 24), `headVeh` (34) and `magDec` (35); the firmware
+simply never reads them. Course-over-ground is computed from successive fixes instead —
+see [Heading output](#heading-output).
+
+### Fix acceptance, quality tiers and smoothing
+
+All confirmed in `parse_ubx` (`ubx_gnss.dis:2154-2560`):
+
+1. **Plausibility warning.** `speedDist = Δt × gSpeed / 1000` is compared against
+   `coordDist = get_distance(new, previous_raw)`. If the position moved more than 10 m and
+   more than twice as far as the reported speed allows, it logs
+   `GNSS Validation | speedDist: {:.3f} | coordDist: {}`. This is a **warning only** — the
+   fix is not rejected.
+2. **Year gate.** `year < 2024` → return without using the fix.
+3. **Accuracy gate.** `hAcc > MIN_LOCK_ACCURACY` (**15 m**, `project_data.dis:518`) →
+   `GNSS accuracy too poor to use: {:.1f} meters | Sat count: {} | GNSS Time: {}`,
+   `solution_id = 0`, and the phone fallback is attempted.
+4. **Quality tier** — `gnss_data.solution_id`: `1` when `hAcc ≤ 3.5`, `2` when
+   `hAcc ≤ 15`, `0` otherwise.
+5. **Position smoothing.** `gnss_data.lat_q` / `lon_q` are `CSmoothQ(3)` — a 3-sample
+   rolling mean (`project_data.dis:1536-1546`; `CSmoothQ` itself comes from the native
+   `c_stats` module, so only the constructor argument and the `put`/`avg`/`reset` method
+   names are recoverable). A **strong** fix (`hAcc ≤ 3.5`) calls
+   `queue_reset()` and then uses the raw coordinates; anything weaker is averaged over the
+   queue before being published as `gnss_data.location` and mirrored into
+   `config.lat` / `config.lon`.
+6. **Derived values.** `speed = round(gSpeed / 277.8)` → km/h (277.8 mm/s = 1 km/h).
+   `odometer` accumulates `round(gSpeed × Δt_seconds)` and is therefore in **millimetres**.
+7. **Time to first lock.** On the first accepted fix, `modes.gnss_ttfl` =
+   seconds since `modes.booted`, `modes.is_take_snapshot = True`, and
+   `Time to first lock: {}` is logged.
+
+### Phone GNSS fallback
+
+When the on-board fix is rejected, the paired phone's position is used instead — but only
+if **all** of these hold (**confirmed**, `ubx_gnss.dis:2288-2350`):
+
+- `gnss_data.phone_last_lock` is set and `modes.evt_rtc_ready` is set,
+- `gnss_data.phone_h_acc > 0`,
+- the phone fix is **younger than 16 000 ms**, and
+- `phone_h_acc < MIN_LOCK_ACCURACY` (15 m).
+
+It then logs `Using Phone's GNSS location | phone hAcc: {} | Compass hAcc: {}`, sets
+`is_phone_gnss_used = 1`, overwrites `p_acc` with `phone_h_acc`, publishes
+`location = (phone_lat, phone_lon)` and sets `modes.evt_gnss_location`.
+
+### Receiver configuration (CFG-VALSET)
+
+`set_config(option)` writes one of four embedded `CFG-VALSET` (`06 8A`) frames
+(`ubx_gnss.dis:784-880`). Every frame's length field and Fletcher checksum verify, so the
+**bytes are confirmed**; the key→name mapping is **inferred** from the u-blox interface
+description.
+
+| Option | Layer | Difference |
+| --- | --- | --- |
+| 1 | `0x01` RAM | baseline, `CFG-RATE-MEAS` = 1000 ms |
+| 2 | `0x01` RAM | `CFG-RATE-MEAS` = 500 ms |
+| 3 | `0x01` RAM | key `0x2091038C` = 1, key `0x2091035A` omitted |
+| 4 | `0x02` **BBR** | same as the baseline, written to battery-backed RAM |
+
+Decoded key/value pairs of option 1:
+
+| Key | Value | Inferred meaning |
+| --- | --- | --- |
+| `0x10740002` | 0 | `CFG-UART1OUTPROT-NMEA` off (corroborated: the parser discards `$G…`) |
+| `0x20910007` | 1 | `CFG-MSGOUT-UBX_NAV_PVT_UART1` — NAV-PVT every epoch |
+| `0x10110025` | 1 | `CFG-NAVSPG-*` — item not identified |
+| `0x20110021` | 3 | `CFG-NAVSPG-DYNMODEL` = 3 (**pedestrian**) |
+| `0x30210001` | 1000 | `CFG-RATE-MEAS` = 1000 ms (corroborated by the MPM arithmetic below) |
+| `0x40520001` | 115200 | `CFG-UART1-BAUDRATE` (corroborated by the baud auto-detect) |
+| `0x2091038C` | 0 | a `CFG-MSGOUT` item — **not recoverable** which message |
+| `0x10A3002E` | 1 | `CFG-HW-*` — item not identified |
+| `0x10230001` | 1 | `CFG-ANA-USE_ANA` — AssistNow **Autonomous** enabled |
+| `0x10510003` | 0 | `CFG-I2C-ENABLED` off |
+| `0x2091035A` | 0 | a `CFG-MSGOUT` item — **not recoverable** which message |
+
+`Enabling Dev GNSS Printout` writes a 14-byte CFG-VALSET that sets **both** unidentified
+`CFG-MSGOUT` items (`0x2091035A`, `0x2091038C`) to 1 — they are developer-only diagnostic
+messages, gated on `config.is_dev_gnss`.
+
+After any config write, `set_config` re-inits the UART to 115200 if it is not already
+there. `UbxGnss.start` writes option 1, and **only if the baud had to change** logs
+`Saving GNSS config to BBR for faster reboots`, waits 500 ms and writes option 4 (the BBR
+layer), then launches `load_assist_now` (`ubx_gnss.dis:1297-1345`). **Confirmed.**
+
+### Nav rate throttling
+
+`modify_nav_rate(mpm)` writes a one-key CFG-VALSET setting `CFG-MSGOUT-UBX_NAV_PVT_UART1`
+to 4 for `mpm == 15` or 1 for `mpm == 60`, and logs `GNSS Rate changed to: {} MPM`
+(`ubx_gnss.dis:897-955`). With `CFG-RATE-MEAS` at 1000 ms that is one NAV-PVT every 4 s or
+every 1 s — i.e. **MPM is literally messages per minute**, corroborated by `parser`
+setting `gnss_data.msg_interval_ms` to 4000 for 15 MPM and 1000 for 60 MPM
+(`ubx_gnss.dis:1717-1750`).
+
+The rate is chosen in the once-a-minute branch of `Compass.backend_checks`
+(`compass.dis:3161-3230`, **confirmed**): 60 MPM by default, dropping to **15 MPM** when
+the totem is held **vertical** and the RTC is already set, or when it is horizontal but
+`gnss_data.is_sat_signal` has never been true. The change is only pushed once
+`modes.uptime_sec > 15`.
+
+### Receiver lifecycle & auto-reset
+
+| Concept | Evidence |
 | --- | --- |
-| UBX framing | `UBLOX_MSG_PREFIX`, `UBLOX_MSG_SIZE`, `calc_ubx_checksum` |
-| Position solution | `NAV-PVT` (`last_nav_pvt`, `last_nav_pvt_raw`); parsed with `<IHBBBBBBIiBBBBiiiiIIiiiiiIIHHBBBBihH` (calcsize 92) → u-blox M8/M9/M10-class receiver |
-| Version query | `MON-VER` |
-| Ack / nak | `ACK-ACK`, `ACK-NAK` |
-| Rate control | `modify_nav_rate` |
-| Fix quality | `pAcc` (position accuracy, metres) in log line below |
+| Baud auto-detection | cycles `(9600, 115200)` with a 3000 ms wait, up to 3 attempts, then raises `GnssErr('Cannot communicate with GNSS module', ErrCode.hardware_err)` — confirmed `ubx_gnss.dis:578-660` |
+| Message-cadence health | for each NAV-PVT, if the inter-message gap is within 100 ms of `msg_interval_ms`, `gnss_data.valid_time_counter` increments (capped at 100); otherwise it resets to 0 — confirmed `ubx_gnss.dis:1640-1685` |
+| Start modes | `CFG-RST` frames for cold (`navBbrMask` `0xFFFF`), warm (`0x0100`) and hot (`0x0000`) exist and all checksum correctly |
+| Auto-reset | `Auto-Reset GNSS` |
 
-A representative fix log:
+<Warning>
+Three long-standing claims about this area were wrong:
 
-```text
-{} | Gnss time: {} | {:.7f}, {:.7f} | pAcc: {:.2f} | 
-```
-
-(7-decimal latitude/longitude ≈ centimetre resolution; `pAcc` is the receiver's own
-accuracy estimate used to gate whether a fix is trusted.)
+- **Only the hot start is ever used.** `reset_cold_start` and `reset_warm_start` are
+  defined in `ubx_gnss.py` and referenced from nowhere else in the 94 frozen modules. The
+  single call site is `tasks.launch(ubx_conn.reset_hot_start)` at `compass.dis:2988-2992`.
+- **Nothing is power-cycled.** `Auto-Reset GNSS` fires when `gnss_data.p_acc` is set,
+  `ticks_diff(now, gnss_data.last_strong_lock) > 300000` (5 min), `p_acc > 30` m **and**
+  `gnss_data.last_gnss_reset is None` — so at most **once per boot**. `reset_hot_start`
+  stamps `last_gnss_reset`, writes the 12-byte hot-start `CFG-RST` frame and sleeps 500 ms
+  (`ubx_gnss.dis:725-755`). There is no power rail toggle and no re-initialisation.
+- **`hotcold.bin` is not a GNSS cache.** The name appears only in `data_upload_v2` as one
+  of the log files the device can upload (`data_upload_v2.dis:660, 934`). No frozen module
+  writes it and `ubx_gnss` never mentions it.
+</Warning>
 
 ## AssistNow (A-GNSS)
 
-To get a fast first fix, the device uses u-blox **AssistNow** (MGA) assistance data,
-delivered to the GNSS chip and cached in the filesystem.
+To shorten time to first fix the device feeds u-blox **AssistNow** (MGA) data to the
+receiver from the on-device filesystem. `load_assist_now` (`ubx_gnss.dis:956-1233`) is
+fully confirmed:
 
-| Element | Evidence |
-| --- | --- |
-| Assistance data file | `assist-now-b.bin`, `load_assist_now`, `Loading AssistNow from: {}` |
-| MGA acknowledgement | `MGA-ACK`, `assist_ack_received` |
-| Transfer | `AssistNow transfer completed successfully: {} chunks sent` |
-| Skip when unneeded | `A-GNSS file not needed. Location already known` |
-| Result | `Assistance used by GNSS - InfoCode: {}` / `NOT used` |
-| Phone GNSS fallback | with no on-board fix, the paired phone's location is used, chosen by hAcc (`Using Phone's GNSS location`, `is_phone_gnss_used`, `phone_h_acc`) |
+1. Waits for `modes.evt_rtc_ready`, logs `Starting Assist Now ingestion`.
+2. Logs `Checking VFS for assist now files` and enumerates `get_files(dir_path='',
+   prefix='agnss_')`. Each candidate must contain `_` and `.`; the substring after the last
+   `_` and before the `.` is parsed as an **expiry unix timestamp**. Files whose expiry is
+   in the past are logged as `Deleting invalid A-GNSS file: {}` and `os.remove`d; the newest
+   still-valid file wins.
+3. If no valid file survives, or if `modes.evt_gnss_location` is already set
+   (`A-GNSS file not needed.  Location already known`), it returns without sending anything.
+4. Otherwise `Loading AssistNow from: {}`, then the file is streamed in **250-byte chunks**,
+   `ceil(size / 250)` of them. Each chunk clears `assist_ack_received`, writes, and awaits
+   the MGA-ACK; up to **3 attempts** per chunk with a 50 ms gap
+   (`Sending AssistNow chunk {}/{} ({} bytes), attempt {}`,
+   `Chunk {} acknowledged successfully`).
+5. On completion: `AssistNow transfer completed successfully: {} chunks sent`. Any
+   exception logs `Error during AssistNow transfer` and returns `False`.
 
-Within the GNSS driver, assistance data is only ever loaded from the on-device filesystem
-(`Checking VFS for assist now files`) and streamed to the receiver in
-chunks (`Sending AssistNow chunk {}/{} ({} bytes), attempt {}`). Delivery of that data over BLE/mesh is
-covered by the [message-format subsystem](/protocols/message-format), not the GNSS driver.
+`MGA-ACK` handling in `parse_ubx` unpacks `'<BBBB4B'` and logs either
+`Assistance used by GNSS - InfoCode: {}` or `Assistance NOT used by GNSS - InfoCode: {}`
+before setting `assist_ack_received` either way (`ubx_gnss.dis:1975-2018`).
+
+<Warning>
+`assist-now-b.bin` is **not** the file the GNSS driver reads. That string exists only in
+two error messages inside `f_ble_chunking.download_vfs`
+(`f_ble_chunking.dis:718, 887`), and that function actually writes to `self.file_name`,
+whatever the transfer named it. The GNSS driver only ever looks for `agnss_*` files with an
+expiry timestamp in the name. No frozen module renames one into the other, so the link
+between the BLE-delivered blob and the `agnss_*` naming convention is **not recoverable**
+from the frozen bytecode.
+</Warning>
+
+Delivery of assistance data over BLE/mesh is covered by the
+[message-format subsystem](/protocols/message-format), not the GNSS driver.
 
 ## IMU fusion
 
-`imu_fusion_auto.py` fuses accelerometer and gyroscope data for orientation and motion.
-In v5.0.3 it is the **sole** fusion module (byte-identical to v5.0.2), imported by
-`compass`, `compassing`, `ble_manager`, `espnow_conn_v2`, `nav_logger`, and `debugger`.
-v5.0.2 also froze an older `imu_fusion.py` — an unused Madgwick `Fusion`/`Cal`
-implementation that nothing imported — which v5.0.3 removes. The fusion engine provides:
+`imu_fusion_auto.mpy` is **byte-identical between v5.0.2 and v5.0.3**
+(md5 `f6508f8d…`) and is the **sole** fusion module in v5.0.3, imported by `compass`,
+`compassing`, `ble_manager`, `espnow_conn_v2`, `nav_logger` and `debugger`. v5.0.2 also
+froze an older `imu_fusion.py` — an unused Madgwick `Fusion`/`Cal` implementation that
+nothing imported — which v5.0.3 removes.
 
-- **Orientation filter** is a Madgwick AHRS with an adaptive beta gain (`madgwick`,
-  `is_adaptive_beta`, `_BETA_MIN_SCALE`).
-- **Tilt/orientation** feeds the 2D↔3D compass mode switch.
-- **Shake detection** (`_SHAKE_ACCEL_DEV`, `_shake_count`, `_shake_start_ms`) triggers a
-  manual magnetometer bias reset (`Manual bias reset triggered via shake pattern`,
-  `is_shake_reset`).
-- Accel deviation bounds gate magnetometer calibration (`_CAL3D_MAX_ACCEL_DEV`).
+The orientation filter itself lives in a native `madgwick` module (`madgwick.reset()` and a
+14-argument update taking accel, gyro, mag, the 3-element bias, `dt` and `beta`, returning a
+quaternion — `imu_fusion_auto.dis:3207-3252`; `madgwick.reset()` at `:2662` and `:2959`). There is no `madgwick.mpy` in the image, so
+the filter's maths is **not recoverable** — but the caller identifies the algorithm: the
+gain is built as `sqrt(3/4) × radians(gyro_error_deg)`, which is Madgwick's own published
+beta formula. See [Sensor fusion decoded](#sensor-fusion-decoded).
+
+Module constants (**confirmed**, `imu_fusion_auto.dis:311-322`):
+
+| Constant | Value |
+| --- | --- |
+| `_CAL3D_MAX_ACCEL_DEV` | 0.3 |
+| `_CAL3D_FIELD_TOL` | 0.3 |
+| `_CAL3D_PLANAR_RATIO` | 0.2 |
+| `_SHAKE_ACCEL_DEV` | 1.0 |
+| `_RESET_BIAS_MAX_COS` | 0.7071 (cos 45°) |
+| `_BETA_MIN_SCALE` | 0.3 |
+
+- **Adaptive beta.** When `is_adaptive_beta` is set, the filter gain is multiplied by
+  `_BETA_MIN_SCALE` (0.3) while the gyro magnitude is ≤ 10 °/s, ramps linearly back toward
+  1.0 as it rises, and is unscaled above 50 °/s (`imu_fusion_auto.dis:3155-3185`).
+  **Confirmed**, including the ramp denominator — a literal `40` assigned at `:3025`.
+- **Calibration eligibility.** A sample only counts toward 3D calibration when the gyro
+  magnitude is < 280 °/s and the accel deviation is < `_CAL3D_MAX_ACCEL_DEV`
+  (`imu_fusion_auto.dis:3140-3152`).
+- **Shake detection.** `_SHAKE_ACCEL_DEV`, `_shake_count`, `_shake_start_ms` drive a manual
+  magnetometer bias reset (`Manual bias reset triggered via shake pattern`, `is_shake_reset`).
+- **Tilt/orientation** feeds the 2D↔3D compass mode switch and the orientation events below.
+
+### "Navigation ready" requires a full 360° spin
+
+`_spin_deg` integrates the gyro's yaw component projected through the current rotation
+matrix. Once `abs(_spin_deg) >= 360` **and** `_cal3d_count` is non-zero, the module sets
+`_cal3d_ready = True` **and `fusion.is_nav_ready = True`** (an instance attribute, not a
+`modes` flag) and logs
+`3D cal navigation-ready | cals={} | n={} | spin={:.0f}deg`
+(`imu_fusion_auto.dis:3481-3535`, log string at `:3522`). **Confirmed.** So `is_nav_ready`
+is not a logging flag — it means the wearer has physically rotated the totem through a
+complete turn since the last 3D calibration. A completed **2D** calibration sets the same
+flag without any spin integration — see [Which bias wins](#which-bias-wins).
+
+## Sensor fusion decoded
+
+The 4 392-line `imu_fusion_auto.dis` breaks down into a sample path, a single filter call,
+an orientation state machine and two independent magnetometer-calibration paths. This
+section is a line-by-line decode of all four; what is still missing is listed under
+[What is not recovered](#what-is-not-recovered).
+
+### The IMU is an ICM-20948 on I2C
+
+`Compass.start_fusion` is the only place the inertial hardware is built (**confirmed**,
+`compass.dis:6514-6648`):
+
+```python
+import c_icm20948_mag
+i2c = I2C(0, scl=Pin(26), sda=Pin(25))
+await asyncio.sleep_ms(100)
+try:
+    imu = c_icm20948_mag.Icm20948Mag(i2c, 0)
+    await asyncio.sleep_ms(150)
+    imu.start()
+    imu.mag().start()
+    await asyncio.sleep_ms(10)
+except (OSError, RuntimeError) as e:
+    modes.is_fusion_err = True
+    modes.hw_err_code = 2
+    config.hw_errors.append(2)
+    log.exc('IMU Unavailable', 'Cannot start fusion', e)
+    return 0
+self.imu = imu
+```
+
+| Fact | Value | Evidence |
+| --- | --- | --- |
+| Part | 9-axis gyro + accelerometer + magnetometer | module `c_icm20948_mag`, class `Icm20948Mag` — `compass.dis:6521`, `:6545`. **Confirmed** as the name; reading it as an InvenSense **ICM-20948** (whose on-die magnetometer is an AK09916) is **inferred** |
+| Bus | I2C bus 0, `scl=Pin(26)`, `sda=Pin(25)` | `compass.dis:6523-6534` — **confirmed** |
+| Bus clock | not passed, so the MicroPython default | **not recoverable** |
+| Second constructor argument | `0` | `compass.dis:6545-6548` — meaning **not recoverable** |
+| Accel + gyro read | `imu.read_accel_gyro_data()` → 6 values | `compass.dis:6681` — **confirmed** |
+| Magnetometer read | `imu.mag().measurement()` → 3 values | `compass.dis:6665` — **confirmed** |
+| Sample rate | one `asyncio.sleep_ms(40)` per sample → **25 Hz** | `compass.dis:6656` — **confirmed** |
+
+There is no `c_icm20948_mag.mpy` in the image, so it is a native C driver: the register
+writes, output data rate, full-scale ranges and the magnetometer's own conversion cadence
+are **not recoverable**.
+
+<Warning>
+The six floats in `compass.py`'s constant table — `1.064422876`, `0.5324427477`,
+`0.3160999346`, `0.006519494999999999`, `0.01682035088`, `0.01879789` — are **not filter
+gains**. They are two hard-coded **zero-offset vectors** subtracted from every raw sample
+(**confirmed**, `compass.dis:6615-6633`, each stored into a closure cell that `read_coro`
+then reads):
+
+| Vector | Value | Unit |
+| --- | --- | --- |
+| Accelerometer bias | `(0.006519494999999999, -0.01682035088, 0.01879789)` | g |
+| Gyroscope bias | `(-1.064422876, 0.5324427477, -0.3160999346)` | °/s |
+
+The units follow from how `_update` uses the corrected values: the accelerometer magnitude
+is compared against `1.0` (`imu_fusion_auto.dis:3100-3131`), the gyro magnitude against
+280 / 50 / 15 / 10 (`:3141`, `:3169`, `:3440`, `:3166`) and the magnetometer magnitude
+against `mag_gate_min` = 10 and `mag_gate_max` = 320 µT (`:562-568`, `:4086-4101`).
+</Warning>
+
+The closure `start_fusion` installs as `fusion.read_coro` (**confirmed**,
+`compass.dis:6649-6708`):
+
+```python
+async def read_coro():
+    await asyncio.sleep_ms(40)
+    mx, my, mz = imu.mag().measurement()
+    mag = (mx, my * -1, mz * -1)                   # axis remap: X kept, Y and Z negated
+    a0, a1, a2, g0, g1, g2 = imu.read_accel_gyro_data()
+    accel = (a0 - 0.006519494999999999, a1 + 0.01682035088, a2 - 0.01879789)
+    gyro  = (g0 + 1.064422876, g1 - 0.5324427477, g2 + 0.3160999346)
+    return (accel, gyro, mag)
+```
+
+`read_coro_cal` — the alternate reader `Fusion.calibrate` awaits — is set to `None` in
+`__init__` and **no frozen module ever assigns it** (`imu_fusion_auto.dis:540`, `:2860`,
+`:2882`), so `Fusion.calibrate` is dead code in v5.0.3. **Confirmed.**
+
+### The filter is Madgwick, and this is its gain
+
+`Fusion.__init__` derives both gains from Madgwick's published formula
+`beta = sqrt(3/4) · gyroMeasError` (**confirmed**, `imu_fusion_auto.dis:495-520`):
+
+| Attribute | Expression | Value |
+| --- | --- | --- |
+| `beta` | `sqrt(3.0 / 4.0) * radians(40)` | ≈ 0.60460 — a 40 °/s gyro-error model |
+| `beta_dirty` | `sqrt(3.0 / 4.0) * radians(80)` | ≈ 1.20920 — an 80 °/s gyro-error model |
+
+That the gain is literally `sqrt(3/4)` times a gyro measurement error in rad/s is a
+positive identification of **Madgwick's gradient-descent MARG filter**, not just an echo of
+the module's name. The quaternion integration itself still lives in the native `madgwick`
+module and remains **not recoverable**; what is recovered here is its full calling
+convention (**confirmed**, `imu_fusion_auto.dis:3205-3252`):
+
+```python
+q = madgwick.update(accel[0], accel[1], accel[2],
+                    gyro[0],  gyro[1],  gyro[2],
+                    mag[0],   mag[1],   mag[2],
+                    self.magbias[0], self.magbias[1], self.magbias[2],
+                    dt, beta)                          # returns a 4-element quaternion
+```
+
+`dt` is `ticks_diff(ticks_us(), prev_us) / 1_000_000`, or `0.0001` on the first pass
+(`:3186-3204`). The quaternion is seeded to `[1.0, 0.0, 0.0, 0.0]` before the loop
+(`:3013-3017`) and `madgwick.reset()` is called from `Fusion.start` (`:2959`) and from
+`_reset_bias` when `is_reset_fusion` is set (`:2662`).
+
+**Which gain is used, per sample** (**confirmed**, `imu_fusion_auto.dis:3155-3185`):
+
+```python
+beta = self.beta_dirty if self.is_dirty else self.beta
+if self.is_adaptive_beta:                              # True by default
+    if gyro_mag <= 10:
+        beta *= _BETA_MIN_SCALE                        # 0.3
+    elif gyro_mag < 50:
+        beta *= _BETA_MIN_SCALE + (1.0 - _BETA_MIN_SCALE) * (gyro_mag - 10) / 40
+```
+
+The ramp denominator, flagged as inferred in earlier revisions, is a plain `40` assigned
+once before the loop and read exactly once here (`:3025`, `:3182`) — so the ramp reaches
+1.0 precisely at 50 °/s and the gain is left unscaled above it. **Confirmed.**
+
+`is_dirty` is not set inside this module. `espnow_conn_v2.communicate_v2` writes
+`fusion.is_dirty = modes.evt_orien_vertical.is_set()` on every communication cycle
+(**confirmed**, `espnow_conn_v2.dis:2958-2967`), so the gyro-error model **doubles whenever
+the totem is held up** and the filter chases the magnetometer harder.
+
+### Euler angles out of the quaternion
+
+With `q = (q0, q1, q2, q3)`, `_update` computes four angles per cycle (**confirmed**,
+`imu_fusion_auto.dis:3253-3435`):
+
+| Assigned to | Formula |
+| --- | --- |
+| local yaw → `self.heading` | `degrees(atan2(2*(q1*q2 + q0*q3), q0*q0 + q1*q1 - q2*q2 - q3*q3)) + self.mag_offset` |
+| local pitch → `self.pitch` | `degrees(-asin(2*(q1*q3 - q0*q2)))` |
+| `self.roll` | `degrees(atan2(2*(q0*q1 + q2*q3), q0*q0 - q1*q1 - q2*q2 + q3*q3))` |
+| `self.heading_tilt_compensated` | `degrees(atan2(-2*(q1*q3 + q0*q2), -(q0*q0 - q1*q1 + q2*q2 - q3*q3))) + self.mag_offset` |
+
+`heading_tilt_compensated_deg` is that last value wrapped as `(h + 360) % 360`
+(`:3429-3435`), and `heading_deg` is the yaw wrapped the same way (`:3536-3545`).
+
+<Note>
+`heading_tilt_compensated` is **a different angle from `heading`** — the two are computed
+from different rotation-matrix elements, and only `heading` feeds `avg_azimuth`. Which body
+axis the tilt-compensated variant measures heading about cannot be settled without the
+native `madgwick` module's quaternion convention, so the geometric interpretation is
+**not recoverable**; the formula above is **confirmed** literally.
+</Note>
+
+### What downstream code actually reads
+
+Every `fusion.<attr>` access in the other 93 frozen modules (**confirmed**, by exhaustive
+search for `LOAD_GLOBAL fusion` — each one is immediately followed by an attribute access,
+so the list is complete):
+
+| Attribute | Read by |
+| --- | --- |
+| `avg_azimuth` | `compassing` ×2, `ble_manager` ×2, `espnow_conn_v2` ×1, `nav_logger` ×1 |
+| `heading` | `compassing` ×1 — only as a truthiness gate (`compassing.dis:688`) |
+| `orientation` | `compass`, `debugger`, `espnow_conn_v2`, `nav_logger`, `ble_manager` |
+| `orientation_start`, `sec_vertical`, `sec_horizontal` | `compass`, `debugger` |
+| `avg_pitch` | `compass` ×1 (`compass.dis:4457`) |
+| `mag_offset` | `compass` — written by `set_declination`, read back |
+| `read_coro`, `cb_orientation_change`, `is_orientation_lock` | written by `compass` |
+
+`heading_tilt_compensated`, `heading_tilt_compensated_deg`, `pitch`, `roll`,
+`is_nav_ready`, `peer_azimuth`, `bias_force`, `is_flash_3d`, `is_shake_reset`,
+`is_adaptive_beta`, `mag_gate_min`, `mag_gate_max`, `auto_cal_mag` and `cb_on_cal` are
+**never read or written by any other frozen module** — they are internal state or
+developer hooks. Likewise `Fusion.reset_bias`, `cb_reset_bias`, `cb_toggle_bias`,
+`force_bias` and `calibrate`, and the module-level `is_clockwise` and `toggle_mag_state`,
+have no call site outside `imu_fusion_auto.py`. **Confirmed.**
+
+`compassing.start_rotation` renders nothing at all until the first heading exists: it
+returns immediately when `modes.is_fusion_err` is set (`compassing.dis:657`) and skips the
+frame body while `fusion.heading` is falsy (`compassing.dis:688`).
+
+### The spin integrator
+
+`_spin_deg` is the totem's accumulated rotation **about the gravity vector**, not about a
+body axis (**confirmed**, `imu_fusion_auto.dis:3436-3535`):
+
+```python
+if not self._cal3d_ready and gyro_mag >= 15:          # 15 deg/s deadband
+    r31 = 2.0 * (q1*q3 - q0*q2)
+    r32 = 2.0 * (q0*q1 + q2*q3)
+    r33 = q0*q0 - q1*q1 - q2*q2 + q3*q3               # third row of the rotation matrix
+    self._spin_deg += (gyro[0]*r31 + gyro[1]*r32 + gyro[2]*r33) * dt
+    if self._cal3d_count and abs(self._spin_deg) >= 360:
+        self._cal3d_ready = True
+        self.is_nav_ready = True
+        log.info('3D cal navigation-ready | cals=...')
+```
+
+The third row of the rotation matrix is the vertical axis expressed in body coordinates, so
+the dot product with the gyro vector is the true yaw rate however the totem is tilted. The
+15 °/s deadband stops gyro noise integrating into a false "spin complete".
+
+### Orientation is a two-state machine with hysteresis
+
+`_update` tracks a candidate state, a committed state and two timers (**confirmed**,
+`imu_fusion_auto.dis:3606-3810`). Orientation id **1 is vertical**, **2 is horizontal**:
+
+| Candidate | Condition |
+| --- | --- |
+| 1 — vertical | `avg_pitch <= -35` **and** `0 < roll < 35` |
+| 2 — horizontal | `avg_pitch > -35` **and** `-35 < roll < 35` |
+
+If neither condition holds the candidate is simply left unchanged — there is no third
+state and no `else` branch.
+
+A candidate is only committed when two separate hold times have elapsed, indexed by the
+state (**confirmed**, `imu_fusion_auto.dis:3018-3021`, `:3712-3740`):
+
+| Tuple | Value | Role |
+| --- | --- | --- |
+| dwell | `(100, 100, 300)` | how long the new pose must persist — **100 ms** to claim vertical, **300 ms** to claim horizontal |
+| minimum hold | `(800, 2800, 800)` | how long the *previous* committed state must have lasted — **2 800 ms** after going vertical, **800 ms** after going horizontal or from the initial unknown state |
+
+On commit the module clears one `modes` event and sets the other
+(`modes.evt_orien_vertical` / `modes.evt_orien_horizontal`), writes `self.orientation`,
+banks the elapsed time into `sec_vertical` or `sec_horizontal`, and — only when going
+**horizontal** — calls `_auto_cal_reset()`, so every time the totem is laid down the 2D
+calibration run starts from empty buckets. It then
+stops the opposite task and launches `cb_orientation_change` as `orient_vert` or
+`orient_horiz` with `orientation_id=<state>`. `compass` installs
+`Compass.orientation_change` as that callback (`compass.dis:1349-1350`).
+
+The whole block is skipped while `fusion.is_orientation_lock` is set. `compass` sets it
+only in `restore_wdt_reboot`, alongside forcing `evt_orien_vertical`, and clears it 3 000 ms
+later from `unlock_orientation` (**confirmed**, `compass.dis:9443`, `:9484`).
+
+### Shake-to-reset
+
+While `is_shake_reset` is set **and** the totem is horizontal (**confirmed**,
+`imu_fusion_auto.dis:3812-3906`):
+
+```python
+if gyro_mag >= 250 and accel_dev > _SHAKE_ACCEL_DEV:      # 1.0 g away from 1 g
+    self._shake_count += 1
+    if self._shake_start_ms is None:
+        self._shake_start_ms = ticks_ms()
+if self._shake_start_ms is not None:
+    age = ticks_diff(ticks_ms(), self._shake_start_ms)
+    if self._shake_count >= 3 and age <= 2000:
+        log.warn('Manual bias reset triggered via shake pattern')
+        self._reset_bias()
+        self._shake_count, self._shake_start_ms = 0, None
+    elif age > 2000:
+        self._shake_count, self._shake_start_ms = 0, None
+```
+
+So: **three violent samples within 2 s**. `is_shake_reset` defaults to `False` and nothing
+turns it on, so this path is dormant in shipped firmware. **Confirmed.**
+
+### 2D calibration: six heading buckets, min/max hard-iron fit
+
+The 2D path runs **only while the totem is horizontal** and only after it has been settled
+in that pose for 200 ms (**confirmed**, `imu_fusion_auto.dis:3908-3999`).
+
+`_auto_cal_reset` builds six 60°-wide heading buckets — markers `0, 60, 120, 180, 240, 300`
+— each a `Cal(max_len=5)`, which is a `list` subclass whose `put` appends and drops the
+oldest past the limit (**confirmed**, `imu_fusion_auto.dis:708-764` and the `Cal` class at
+`:346-407`). Per sample:
+
+```python
+marker = min(self._cal_markers, key=lambda x: abs(x - heading_deg))
+direction = get_rotation_dir(marker, prev_marker)
+if direction and prev_direction and direction != prev_direction:
+    self._auto_cal_reset()                 # reversed mid-sweep: throw the run away
+else:
+    self._cal_data[marker].put(mag)
+    if marker in self._cal_remaining:
+        if len(self._cal_data[marker]) >= 5:
+            del self._cal_remaining[marker]
+    elif not self._cal_remaining:
+        await self._auto_cal_record()      # all six buckets filled
+```
+
+`get_rotation_dir` (`imu_fusion_auto.dis:4304-4347`) returns `0` for "no movement", and
+otherwise `1` or `2`. The monotonic cases are `cur > prev → 2`, else `1`; the two wrap cases
+are `0` after `300 → 1` and `300` after `0 → 2`. **Confirmed literally.** Note that the
+wrap cases are the mirror of the monotonic ones — `300 → 0` is a forward sweep yet returns
+the same code as a backward one. Whether that is deliberate or a sign slip is **not
+recoverable**; its only effect is to make one sweep direction spuriously "reverse" at the
+seam and discard the run.
+
+`_auto_cal_record` is the fit itself (**confirmed**, `imu_fusion_auto.dis:785-947`): it
+takes the per-axis minimum and maximum across all 30 retained samples (six buckets ×
+five) and returns their midpoint — a textbook **hard-iron bounding-box centre**:
+
+```python
+bias = tuple((lo + hi) / 2 for lo, hi in zip(axis_min, axis_max))
+self._auto_cal_reset()
+self._apply_2d(bias)
+tasks.launch(blink_all_leds, rgb=colors.rgb(colors.white, GLOBAL_BRT),
+             duration_ms=500, pause_ms=0)
+log.info('Mag calibrated (spin...) | bias=... | mag=...uT')
+```
+
+The `spin` field in that log line carries the literal text ` xy-only` when a 3D
+calibration already exists, and an empty string otherwise (`:896-910`).
+
+`_apply_2d` (`imu_fusion_auto.dis:948-1011`) then:
+
+- stores the fit as `magbias_2d`, and as `magbias_3d` too **only if no 3D fit has ever
+  succeeded**;
+- stamps `_last_cal_2d = ticks_ms()`, clears `_boot_bias`, sets `bias_src = 1` and
+  **`is_nav_ready = True`**;
+- calls `_refresh_active()` (which persists to `config.magbias`, since `is_persist`
+  defaults to `True`) and `_finish_calibration()`;
+- sets `auto_cal_mag = False` and schedules `_auto_cal_toggle` to turn it back on 1 000 ms
+  later;
+- writes `config.last_mag_2d_cal = rtc.unix(precision=1)`, or `0` if the RTC is not ready.
+
+### 3D calibration: iterative sphere fit with a planarity guard
+
+The 3D path runs **only while the totem is vertical** (**confirmed**,
+`imu_fusion_auto.dis:4000-4277`). A sample is admitted through four gates, each with its own
+rejection counter:
+
+| Gate | Test | Counter |
+| --- | --- | --- |
+| Cadence | `ticks_diff(now, _cal3d_last_sample_ms) >= _cal3d_sample_ms` (100 ms, 200 ms after the first successful fit) and the 1 000 ms post-fit hold has expired | — |
+| Interference | corrected field magnitude inside `_field_min`…`_field_max`; before any fit, raw magnitude inside `mag_gate_min`…`mag_gate_max` (10–320 µT) | `_rej_interference` |
+| Stability | gyro magnitude `< 280` °/s **and** accel deviation `< _CAL3D_MAX_ACCEL_DEV` | `_rej_stability` |
+| Diversity | at least `_cal3d_min_dist` µT from **every** retained sample — 9 µT initially, 13 µT after the first fit (`_cal3d_dist_sq` holds the square) | `_rej_diversity` |
+
+Accepted samples go into a 60-deep FIFO. Once it holds 12 or more and
+`_cal3d_variance()` — the mean squared distance from the sample centroid — reaches **80**
+(an RMS spread of ≈ 8.9 µT), `_cal3d_record()` runs the fit
+(`imu_fusion_auto.dis:4240-4277`).
+
+`_cal3d_record` (**confirmed**, `imu_fusion_auto.dis:1470-2411`) is four passes:
+
+1. **Seed.** Centre starts at the per-axis bounding-box midpoint; the centroid is kept
+   separately.
+2. **Sphere fit.** Three refinement iterations. Each computes the mean radius from the
+   current centre, then moves the centre by the mean of `(r - r̄)/r` scaled radius vectors —
+   the standard iterative least-squares sphere centre.
+3. **Quality.** `std` is the RMS deviation of the sample radii from the mean radius. A
+   3×3 covariance matrix `C` is accumulated about the centroid, and **eight power
+   iterations** recover the dominant eigenvector of `trace·I − C` — equivalently the
+   eigenvector of `C`'s *smallest* eigenvalue, i.e. the normal of the plane the samples lie
+   closest to. `cov` is then `sqrt(vᵀCv) / r̄`.
+4. **Planarity guard.** When `cov < _CAL3D_PLANAR_RATIO` (0.2) the samples are effectively
+   coplanar, so the fit is under-determined along that normal: the new centre's component
+   along it is projected out and the previous `magbias_3d` value is kept for that direction.
+   The log line then carries `(planar)`.
+
+Acceptance (**confirmed**, `imu_fusion_auto.dis:2218-2245`):
+
+```python
+ok = (new_mag < 250 and std < 15
+      and (old_mag < 1.0 or self._is_test_bias or not config.last_mag_cal
+           or abs(new_mag - old_mag) < old_mag * 2))
+if not ok:
+    log.warn('3D cal rejected: mag=... std=... cov=... change=...')
+    return
+```
+
+On acceptance: the first ever fit tightens the gates to `_cal3d_min_dist = 13` and
+`_cal3d_sample_ms = 200`; `_cal3d_count` increments; a **non-planar** fit learns the
+interference gate as `mean_radius × 0.7` … `mean_radius × 1.3` (from `_CAL3D_FIELD_TOL`);
+`magbias_3d` is stored; `bias_src` becomes 2 unless a fresh 2D fit still governs; and the
+three rejection counters reset. `is_flash_3d` (default `False`, never set) would blink the
+ring teal.
+
+`_finish_calibration` is shared by both paths (**confirmed**, `imu_fusion_auto.dis:2412-2447`):
+`_is_test_bias = False`, `modes.last_mag_cal = ticks_ms()`, `modes.evt_calibrated.set()`,
+`modes.is_mag_cal_needed = False`, and `config.last_mag_cal = rtc.unix(precision=1)` when
+the RTC is ready. The counterpart lives in `Compass.backend_checks`, which sets
+`modes.is_mag_cal_needed = True` once the last calibration is more than **1 800 s** old, or
+when there has never been one and uptime exceeds 1 800 s (**confirmed**,
+`compass.dis:3262-3335`); `ble_manager` reports the flag to the app (`ble_manager.dis:6217`).
+
+### Which bias wins
+
+`bias_src` is `1` for the 2D fit and `2` for the 3D fit, and `bias_force` overrides it.
+`_refresh_active(is_persist=True)` resolves the pair into the `magbias` actually handed to
+`madgwick.update` (**confirmed**, `imu_fusion_auto.dis:1012-1067`):
+
+```python
+src = self.bias_force or self.bias_src
+if src == 1 and self.magbias_2d is not None:
+    b = self.magbias_2d
+    active = (b[0], b[1], self.magbias_3d[2]) if self._cal3d_count else b
+else:
+    active = self.magbias_3d
+self.magbias = active
+if is_persist:
+    config.magbias = active
+```
+
+So once a 3D fit exists the 2D source contributes **only X and Y** — the Z component always
+comes from the 3D fit. That is what `_gap_xy()` measures: the XY distance between the two
+biases (`imu_fusion_auto.dis:1092-1134`), reported as `gap_xy=...uT` in the handoff and
+override log lines.
+
+A 2D fit is only authoritative for **20 minutes** (`1200000` ms in `_is_2d_active`,
+`imu_fusion_auto.dis:1068-1091`; the same 1 200 s appears in seconds form in `_bias_tick`
+and in the `src=2D (...s left)` telemetry, `:1220`, `:4153`). `_bias_tick`, called once per
+cycle while the totem is vertical, performs the handoff (**confirmed**,
+`imu_fusion_auto.dis:1177-1318`):
+
+- If `_boot_bias` is pending and the RTC is ready, it restores `config.magbias` as the 2D
+  bias — but **only if `config.last_mag_2d_cal` is less than 1 200 s old** — back-dating
+  `_last_cal_2d` by that age, setting `bias_src = 1` and `is_nav_ready = True`, and logging
+  `2D bias restored from config | age=...s | cals=...`.
+- Otherwise, if `bias_src == 1`, the totem is vertical and at least one 3D fit exists, it
+  calls `_switch_to_3d('expired')` as soon as the 20 minutes lapse — the
+  `Bias handoff 2D->3D (...)` line. That is `_switch_to_3d`'s **only** call site in the
+  whole image, so `expired` is the only reason string the handoff ever logs
+  (`imu_fusion_auto.dis:1312-1313`). **Confirmed.**
+
+`set_boot_bias` (`imu_fusion_auto.dis:2732-2759`) is what `Compass.start` calls with
+`tuple(config.magbias)` before `fusion.start()` (`compass.dis:5585-5597`): it loads the
+stored tuple into `magbias_3d`, arms `_boot_bias` only when `config.last_mag_2d_cal` is
+non-zero, sets `bias_src = 2` and refreshes **without** persisting.
+
+### Bias resets
+
+`_reset_bias(is_persist=True, is_reset_fusion=False, is_random=True)`
+(**confirmed**, `imu_fusion_auto.dis:2579-2693`; the public `reset_bias` wrapper defaults
+all three to `True` and logs `Manual magbias reset (button/external)` first) clears `magbias_2d`, `_last_cal_2d`,
+`_boot_bias`, `_field_min`/`_field_max`, `_cal3d_count`, `is_nav_ready`, `_cal3d_ready` and
+`_spin_deg`, restores the loose gates (9 µT / 100 ms), sets `_is_test_bias = True`, and sets
+`magbias_3d` to either `(0, 0, 0)` or a random vector. `_random_bias`
+(`imu_fusion_auto.dis:2448-2578`) rejects candidates until one has a magnitude between
+**25 and 75 µT**, lies at least 25 µT away in XY from the previous bias, and — when the
+previous bias is non-trivial — sits more than 45° away from it in direction
+(`_RESET_BIAS_MAX_COS`). It is a *test* fixture, which is why it also arms `_is_test_bias`,
+the flag that waives the 3D acceptance check on bias-magnitude change.
+
+### What `modes.is_fusion_err` means
+
+The flag is set in exactly two places, both meaning **the IMU stopped answering** (it is
+never cleared anywhere in the frozen modules, so it is one-way until reboot):
+
+| Site | Trigger | Also does |
+| --- | --- | --- |
+| `compass.dis:6576-6609` | `OSError` or `RuntimeError` while constructing or starting `Icm20948Mag` | `modes.hw_err_code = 2`, appends `2` to `config.hw_errors`, logs `IMU Unavailable` / `Cannot start fusion`, `start_fusion` returns 0 so `set_boot_bias` and `fusion.start()` are skipped |
+| `imu_fusion_auto.dis:3030-3070` | `OSError` from `await self.read_coro()` inside `_update` | same three writes, logs `IMU Unavailable` / `Cannot read coro`, then **returns** — the fusion task exits and never restarts |
+
+Its one consumer is `Compassing.start_rotation`, which returns immediately when it is set
+(`compassing.dis:657`), so a dead IMU leaves the ring blank rather than pointing wrongly.
+**Confirmed.**
+
+### What is not recovered
+
+| Area | Why |
+| --- | --- |
+| `madgwick.update` internals | native C module, no `.mpy` in the image. Only the 14-argument signature, the seed quaternion and the gain formula are recoverable |
+| `c_icm20948_mag` internals | native C module. Register map, ODR, full-scale ranges, units conversion and the `0` constructor argument are all opaque |
+| Geometric meaning of `heading_tilt_compensated` | the formula is confirmed, but which body axis it measures depends on `madgwick`'s quaternion convention |
+| Intent behind `get_rotation_dir`'s wrap cases | the code is confirmed; whether the mirrored `0`/`300` handling is deliberate cannot be decided from the bytecode |
+| `is_clockwise`, `toggle_mag_state`, `Fusion.calibrate`, `read_coro_cal`, `peer_azimuth`, `cb_on_cal` | defined but never referenced anywhere in the 94 frozen modules, so their intended role is only guessable |
 
 ## Magnetic compass & calibration
-
-Heading comes from a magnetometer, corrected for hard/soft-iron errors and for magnetic
-declination.
 
 ### Calibration
 
 | Concept | Evidence |
 | --- | --- |
 | 2D and 3D calibration | `_switch_to_3d`, `Bias handoff 2D->3D`, `_CAL3D_MAX_ACCEL_DEV` |
-| Quality metric | `gap_xy={:.1f}uT` (residual field gap in microtesla) |
+| Quality metric | `_gap_xy()` → `gap_xy={:.1f}uT` (residual field gap in microtesla) |
 | Persistence | `2D bias restored from config \| age={}s \| cals={}` |
 | Finish / fail | `_finish_calibration`, `_last_calibrated`; a rejected 3D fit logs `3D cal rejected: mag={:.1f} std={:.1f} cov={:.2f} change={:.1f}` |
+| Source override | `Bias source override={} \| active src={} \| gap_xy={:.1f}uT`, `src=2D ({}s left)`, ` \| 2D governs, gap_xy={:.1f}uT` |
+| Gate telemetry | `3D gates \| {} \| rej i/s/d={}/{}/{} \| n={} \| spin={:.0f}deg \| cals={} \| {}` |
 
-The 2D→3D "bias handoff" upgrades from a flat-plane heading to a full 3D solution once
-enough motion is seen: `Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT | 2D age={}s | cals={}`.
+The 2D→3D "bias handoff" hands governance from the flat-plane fit back to the 3D fit when
+the 2D fit **expires**, 20 minutes after it was taken:
+`Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT | 2D age={}s | cals={}`. The full mechanism —
+both fits, the gates that feed them and the rule that decides which one is active — is
+decoded under [Which bias wins](#which-bias-wins).
 All of this calibration telemetry lives in `imu_fusion_auto`; it is unrelated to Vibe Mode
 (`new_vibe.py`, a sound-reactive LED effect — see [Power, input & sensors](/subsystems/power)).
 The `--- Magnetic Calibration Samples ---` string cited in earlier revisions existed only in
 the unused v5.0.2 `imu_fusion.py` and is gone in v5.0.3.
 
+`config.magbias` defaults to the tuple `(30.675, 21.6, -3.825)`; the negative third element
+is confirmed by an explicit `UNARY_OP __neg__`.
+
 ### Declination (World Magnetic Model)
 
-`mag_wmm_data.py` embeds the **World Magnetic Model** — specifically **WMM 2025** (valid
-2025–2030; `WMM_2025`) — so the device converts magnetic heading to true heading based on
-location, refreshed periodically:
+`mag_wmm_data.py` contains exactly one name, `WMM_2025`: a flat tuple of 90 six-element
+tuples `(n, m, g, h, ġ, ḣ)` covering degree and order **1…12** — the complete WMM main-field
+plus secular-variation coefficient set (90 = Σ(n+1) for n = 1…12). The first entry is
+`(1, 0, -29351.8, 0.0, 12.0, 0.0)`, which is WMM2025's published g₁⁰ and its secular
+variation, so the model is **WMM 2025** (valid 2025–2030). **Confirmed**,
+`mag_wmm_data.dis:6` (constant table) and `:22-779` (the tuple build).
 
-```text
-Declination check unnecessary. Last check was {} sec ago and {}m away
-```
+`task_mag_declination.py` is a straight port of the NOAA `geomag` spherical-harmonic
+routine. `get_declination(lat, lon, year=2025.1, alt=0)` clamps `year` to ≤ 2030.0, builds
+the normalised coefficient tables with `_load_coefficients(maxord=12)` and evaluates
+`_calculate(..., epoch=2025.0, maxord=12, ...)`. The WGS84 semi-axes **6378.137** and
+**6356.7523142** km and the geomagnetic reference radius **6371.2** km are local constants
+in `_calculate` (**confirmed**, `task_mag_declination.dis:211-215`) — they are *not* in
+`mag_wmm_data`, as earlier revisions of this page claimed.
 
-`task_mag_declination.py` recomputes declination only when the device has moved far
-enough or enough time has passed — a power optimization.
+Both the calculation and its caller free the tables aggressively:
+`_load_coefficients` ends with `del sys.modules['tasks.mag_wmm_data']` in a `finally`, and
+`get_declination` deletes its six working tables and calls `gc.collect()` twice.
 
-The embedded WGS84 axes (`6378.137` / `6356.7523142` km) and the `6371.2` km geomagnetic
-reference radius — all present as IEEE-754 doubles in the binary — confirm a genuine
-spherical-harmonic declination computation rather than a lookup table.
+### When declination is recomputed
+
+`Compass.set_declination` (**confirmed**, `compass.dis:7430-7697`):
+
+1. Awaits `evt_gnss_location` and `evt_rtc_ready`, sleeps **20 s**, then awaits both again.
+2. Logs `Setting magnetic declination`. Needs `gnss_data.gnss_date` and
+   `gnss_data.location`, else returns.
+3. Builds the decimal year as `year + round(month / 12, 2)`.
+4. **Skips the recomputation** when a previous result exists and the device is both
+   **within 1000 m** of `config.dec_lat/dec_lon` **and** less than **2 419 200 s (28 days)**
+   past `config.dec_unix`:
+
+   ```text
+   Declination check unnecessary. Last check was {} sec ago and {}m away
+   ```
+
+5. Otherwise it records `gc.mem_alloc()`, imports `task_mag_declination.get_declination`,
+   calls it, and in a `finally` deletes both `sys.modules['task_mag_declination']` and
+   `sys.modules['mag_wmm_data']` before `gc.collect()`. It then logs
+   `Mag declination memory used: {} | Declination: {}`.
+6. On success it applies **`fusion.mag_offset = declination × -1`**, mirrors it into
+   `config.mag_offset`, stores `config.dec_lat/dec_lon/dec_unix`, and sets
+   `modes.is_save_config`. Failures log `Magnetic declination error` and leave the old
+   offset in place.
+
+The negation matters: `mag_offset` is *added* to the raw tilt-compensated heading, so the
+stored offset is the negative of the WMM declination.
 
 ## Heading output
 
-The compass surface the UI consumes:
+`Fusion._update` produces, each cycle (**confirmed**, `imu_fusion_auto.dis:3420-3600`):
 
-| Output | Evidence |
+| Output | Definition |
 | --- | --- |
-| Tilt-compensated heading | `heading_tilt_compensated`, `heading_tilt_compensated_deg` (degrees) |
-| Motion heading | `get_heading_mot` — course-over-ground computed by `get_azimuth` between the previous and current GNSS fix (`location_prev`→`location`), gated by `odometer` ≥ 10000 (there is no NAV-PVT `headMot` field); `avg_azimuth`, `peer_azimuth` |
-| Compass lock | `is_compass_lock`, `toggle_compass_lock`; logs `Compasss Lock Enabled`, `Turning ON compass lock` / `Turning OFF compass lock` |
+| `heading_tilt_compensated` | `degrees(atan2(…)) + self.mag_offset` — may be outside 0-360 |
+| `heading_tilt_compensated_deg` | the same value wrapped as `(h + 360) % 360` |
+| `avg_azimuth` | the mean of the previous and current heading — just two samples, not a long-window average. The intended wrap handling misfires: see the warning below. |
+| `avg_pitch` | `(pitch + new_pitch) / 2` |
 
-## Navigation logging
+`avg_azimuth` is averaged from `heading_deg` — the **yaw** angle — not from
+`heading_tilt_compensated_deg`. It is also the only `Fusion` output the rest of the firmware
+consumes; see [What downstream code actually reads](#what-downstream-code-actually-reads).
 
-`nav_logger.py` records navigation events, schedulable remotely:
+<Warning>
+**The wrap branch of `avg_azimuth` does not do what it looks like.** The bytecode is
+(**confirmed**, `imu_fusion_auto.dis:3556-3597`):
 
-| Symbol | Role |
-| --- | --- |
-| `is_nav_log`, `is_nav_ready` | logging state |
-| `evt_nav_log_scheduled`, `rec_nav_logs` | scheduled recording |
-| `demigod_gen_add_nav_log_rule` | push a logging rule via [demi-god](/protocols/demigod) |
-| `cloud_nav_peer` | upload nav data to the cloud |
-| `is_nav_log_fast_rotate` | v5.0.3: fast log rotation while BLE log uploads are active |
+```python
+a, b = self.heading_deg, cur          # a = previous, b = current
+if abs(a - b) > 180:
+    a = min(a, b) + 360
+    b = max(a, b)                     # reads the a just reassigned above
+self.avg_azimuth = ((a + b) / 2) % 360
+```
 
-`nav_logger.check_log_storage` normally rotates `events.bin` at 7100 B. In v5.0.3, when
-`modes.is_nav_log_fast_rotate` is set — by the BLE log uploader when no `events-*.gz`
-backlog exists — it rotates at **≥1024 B** instead
-(`Nav log fast rotation at {} B (BLE uploads active, backlog empty)`).
+Because `a` is rebound before `max` is evaluated, and the rebound `a` is always ≥ 360 while
+`b` is always &lt; 360, `max(a, b)` returns `a`. The average then collapses to
+`a % 360`, i.e. **`min(previous, current)`** — the smaller of the two headings, not their
+circular mean. The author almost certainly meant
+`a, b = min(a, b) + 360, max(a, b)` as a single tuple assignment; MicroPython would have
+emitted a `ROT_TWO` for that, and there is none.
+
+In practice the effect is small: at 25 Hz consecutive headings differ by a fraction of a
+degree, so across the 0°/360° seam the output snaps to the smaller value instead of
+interpolating — a sub-degree error. It only becomes large if the heading jumps more than
+180° between frames.
+</Warning>
+
+`nav_helpers.get_heading_mot()` is course-over-ground, not a NAV-PVT field
+(**confirmed**, `nav_helpers.dis:53-89`):
+
+```python
+if gnss_data.location_prev and gnss_data.odometer >= 10000:
+    return int(get_azimuth(*gnss_data.location_prev, *gnss_data.location))
+return -1
+```
+
+The odometer is in millimetres, so the gate is **10 m travelled**, and the sentinel for
+"unknown" is **`-1`**, not `None`.
+
+`nav_helpers.update_peer_location(peer)` is what turns a peer's coordinates into something
+the ring can draw: when the peer has `lat`/`lon` and our own `gnss_data.location` is set and
+not `(0, 0)`, it sets `peer.direction = get_azimuth(my_lat, my_lon, peer_lat, peer_lon)` and
+`peer.distance = get_distance(peer_lat, peer_lon, my_lat, my_lon)`
+(**confirmed**, `nav_helpers.dis:90-143`). `get_azimuth` and `get_distance` come from the
+native `c_stats` module, so their formulas are **not recoverable**.
+
+### From heading to ring pixels
+
+In `Compassing.start_rotation` (**confirmed**, `compassing.dis:706-760`):
+
+```python
+north_diff = 360 - fusion.avg_azimuth
+north_px   = self.get_dial_px('n', fusion.avg_azimuth)
+if config.is_persistent_north:
+    set_led_buff(buf, north_px, colors.rgb(colors.white, brt=GLOBAL_BRT))
+for mac, peer in config.peers.items():
+    if peer.is_hidden: continue
+    px = self.get_peer_px(mac, north_diff)
+```
+
+- `config.is_persistent_north` simply keeps a **white pixel on magnetic-corrected north**
+  lit at all times. It is also reported to the app in a packed flags byte alongside
+  `is_compass_lock` (`ble_core.dis:678-690`).
+- `get_peer_px(mac, north_diff)` returns `None` when `peer.direction` is `None`; otherwise
+  `get_dial_px(mac, get_bearing(peer.direction, offset=-north_diff))`, where
+  `get_bearing(h, o) = (h + o) % 360` (**confirmed**, `compassing.dis:455-488`,
+  `1347-1358`). Since `offset = -(360 - avg_azimuth)`, the bearing handed to `get_dial_px`
+  is `(direction + avg_azimuth) % 360`; the sign is then reversed again by `get_dial_px`'s
+  mirrored ring mapping (`px = abs(px - 60)`), so the two cancel.
+- `get_dial_px(id, deg)` maps `px = int(deg // 6)` onto the 60-pixel ring
+  (`RING_PX_COUNT = 60`, `project_data.dis:522`), mirrors it, and then applies a per-id
+  half-step easing filter against `self._cache`: `abs(prev - px) <= 30` →
+  `px = round((prev + px) / 2)`, else `px = round((prev + px + 60) / 2) % 60`. It is a
+  smoothing filter, **not** a static arc width.
+
+### Compass lock is a button lock, not a heading lock
+
+<Warning>
+`config.is_compass_lock` does **not** freeze the heading or the ring. `Compass.touch_button_cb`
+stores `modes.touch_feature = feature`, and then, if `is_compass_lock` is set, logs
+`Compasss Lock Enabled` and **replaces every touch gesture handler**
+(**confirmed**, `compass.dis:8782-8850`):
+
+```python
+from peer_management import max_peers_reached
+touch_v2.cb_single_tap   = (max_peers_reached, 'max_peers_reached')
+touch_v2.cb_double_tap   = None
+touch_v2.cb_triple_tap   = None
+touch_v2.cb_multi_tap    = (max_peers_reached, 'max_peers_reached')
+touch_v2.cb_short_hold   = None
+touch_v2.cb_long_hold    = None
+touch_v2.cb_ex_long_hold = None
+return
+```
+
+It is a child-lock: taps and holds stop doing anything except play the "max peers reached"
+feedback. `Compass.toggle_compass_lock` flips the flag, logs `Turning ON/OFF compass lock`,
+and re-runs `touch_button_cb(feature=modes.touch_feature)` to install or remove the
+overrides.
+</Warning>
 
 ## Peer staleness & proximity display
 
-How a bonded peer is shown on the ring depends on whether its coordinates are fresh.
-v5.0.3 changes both the staleness timeout and how stale peers are displayed:
+`peer_helpers.is_peer_stale(peer, now)` (**confirmed**, `peer_helpers.dis:534-636`):
 
-| Behavior | v5.0.3 | v5.0.2 |
-| --- | --- | --- |
-| `peer_helpers.is_peer_stale` sets `is_unknown` after no coordinates for | **7200 s** (2 h) | 14400 s (4 h) |
-| Stale peers in `compassing.get_peer_led_prox` | proximity path: RSSI ≥ −41 → shown "nearby"; within the accuracy distance → `is_unknown=1`, then nearby; no distance → RSSI tiers | always a directional spread |
+```python
+if peer.is_poi: return 0
+if not peer.last_coords_unix and not peer.last_coords_ticks: return 1
+timeout = 600
+if peer.distance:
+    timeout = int(peer.distance / 75 * 60)   # 75 m per minute ≈ walking pace
+    if   timeout < 60:  timeout = 60
+    elif timeout > 600: timeout = 600
+    timeout *= 2                             # → 120 s … 1200 s
+if peer.last_coords_unix:
+    if now > 1704067200:                     # 2024-01-01, "is the RTC believable"
+        age = now - peer.last_coords_unix
+        if age > 7200: peer.is_unknown = 1   # v5.0.2: 14400
+        if age > timeout: return 1
+elif peer.last_coords_ticks:
+    if ticks_diff(ticks_ms(), peer.last_coords_ticks) // 1000 > timeout: return 1
+return 0
+```
 
-## Promo activation
+So the **staleness timeout is distance-scaled** (600 s when the distance is unknown,
+otherwise twice the walking time between 2 and 20 minutes), and the 7200 s figure is
+separately the threshold for the `is_unknown` flag. v5.0.2 used **14400 s (4 h)** for that
+flag; v5.0.3 halves it to **7200 s (2 h)**.
 
-`compass.activation_check` creates a **time-limited promo point of interest** (log strings
-`Add Promo Activation: {} | Secs until start: {}`, `Creating promo activation in: {}`,
-`No promo activation`, `[activation_check] Activation expired`,
-`[activation_check] Activation doesn't start for 12hrs`). In v5.0.2 the function existed but
-was never called; v5.0.3 launches it from `backend_checks`.
+`compassing.get_peer_led_prox(peer)` returns `(marker, spread)` where `marker` is
+`Ellipsis` for "on top of you, no direction" and `False` for "draw a directional arc", and
+`spread` is the arc half-width from `get_peer_spread`: `3` at ≤ 40 m, `2` at ≤ 60 m, `1` at
+≤ 100 m, `0` beyond (or with no distance). **Confirmed**, `compassing.dis:1391-1508` (`get_peer_spread` at `:1359-1390`):
+
+```python
+if peer.is_poi and peer.is_sticky_heading:  return (False, get_peer_spread(peer=peer))
+if not peer.is_poi and not peer.lat and not peer.lon:
+    peer.is_stale = 1
+    return (Ellipsis, 0)
+if peer.rssi is None: peer.rssi = -99
+if peer.rssi >= -41:  return (Ellipsis, 0)          # radio says "right here"
+if peer.distance is not None:
+    if gnss_data.p_acc and gnss_data.p_acc <= MIN_LOCK_ACCURACY and peer.p_acc:
+        thresh = max(gnss_data.p_acc, peer.p_acc)
+        if thresh < 1.5: thresh = 1.5
+        if peer.distance <= thresh:
+            if peer.is_stale: peer.is_unknown = 1
+            return (Ellipsis, 0)
+    return (False, get_peer_spread(peer=peer))
+if peer.rssi >= -78: return (False, 3) if peer.rssi >= -63 else (False, 1)
+return (False, 0)
+```
+
+The v5.0.2 → v5.0.3 change here is precise: **v5.0.2 had an extra early return**
+immediately after the no-coordinates branch —
+
+```python
+if peer.is_stale:
+    return (False, get_peer_spread(peer=peer))
+```
+
+— so a stale peer was always drawn as a directional arc from its last known distance,
+skipping the RSSI and accuracy logic entirely. v5.0.3 deletes that branch, so stale peers
+now go through the same proximity path as fresh ones, and gain `is_unknown = 1` when the
+accuracy check concludes you are standing on them.
+
+## Navigation logging
+
+`nav_logger.py` records per-period navigation telemetry, schedulable remotely:
+
+| Symbol | Role |
+| --- | --- |
+| `is_nav_log` | logging enabled |
+| `is_nav_ready` | **not a `nav_logger` symbol at all.** It is a `Fusion` instance attribute (`fusion.is_nav_ready`), set by a completed 2D or 3D calibration, and the string appears in no other frozen module — nothing reads it. **Confirmed** by exhaustive search |
+| `evt_nav_log_scheduled`, `rec_nav_logs_gen3` | scheduled recording (the name `rec_nav_logs` exists only inside the `Error in rec_nav_logs` string) |
+| `demigod_gen_add_nav_log_rule` | push a logging rule via [demi-god](/protocols/demigod) (`espnow_msg.dis:556`) |
+| `cloud_nav_peer` | upload nav data to the cloud (`ble_manager.dis:5844`) |
+| `is_nav_log_fast_rotate` | v5.0.3: fast log rotation while BLE log uploads are active |
+
+Records are packed into `events.bin` with `'<BiffH4behhBBhHBbb6B4B'` (44 bytes) plus a
+`'<6Bbh4B'` (13-byte) sub-record per peer — both format strings **confirmed** at
+`nav_logger.dis:164`. Fields include the GNSS message count, `h_acc_sum/min/max`, `p_acc`,
+`modes.horizontal_sec`, `power_level`, BLE-active, LED brightness, a `pack_flags` byte over
+`is_sos`/`is_charging`/`is_phone_gnss_used`/`is_app_conn`/`is_eco_mode`, and minutes since
+`modes.last_mag_cal`; the exact index-to-field mapping is **inferred** from the pack order.
+
+`check_log_storage` (**confirmed**, `nav_logger.dis:1211-1408`) runs under a
+`WdtBlockers.LOG_ROTATE` guard and does considerably more than a size comparison:
+
+```python
+if statvfs('/')[3] < 39:           # free blocks
+    log.warn('VFS free space too low to safely write log')
+    remove_oldest_log('events-'); remove_oldest_log('events-')
+    return False
+if not exists('events.bin'): return True
+size = stat('events.bin')[6]
+is_fast = modes.is_nav_log_fast_rotate and size >= 1024
+if size < 7100 and not is_fast: return True
+count = <number of 'events-*' files, yielding every 10>
+if is_fast and count and size < 7100: return True   # fast path needs an EMPTY backlog
+if count > 100: remove_oldest_log('events-')
+if is_fast:
+    log.info('Nav log fast rotation at {} B (BLE uploads active, backlog empty)')
+await compress_file(file_path='events.bin', output_path='events-{unix}.gz')
+```
+
+So the normal rotation threshold is **7100 B**, the fast threshold is **1024 B**, and the
+"backlog empty" condition is enforced **twice**: `f_ble_file_upload` turns
+`modes.is_nav_log_fast_rotate` on and off with
+`[Upload] Backlog empty; nav log fast rotation ON` /
+`[Upload] Backlog present; nav log fast rotation OFF`
+(`f_ble_file_upload.dis:1918-1950`), and `check_log_storage` re-checks the file count
+itself. Rotated logs are gzipped to `events-<unix>.gz`, and the backlog is capped at 100
+files.
+
+## Promo activation (time-limited point of interest)
+
+`Compass.activation_check` creates a **time-limited, geofenced point of interest** that the
+compass then points at like a peer. In v5.0.2 the function existed but was never called; in
+v5.0.3 `backend_checks` launches it with `tasks.launch(self.activation_check)`
+(`compass.dis:1943-1947`). **Confirmed** both ways — `activation_check` has no `LOAD_ATTR`
+reference anywhere in v5.0.2's `compass.dis`.
+
+The full flow (**confirmed**, `compass.dis:3466-3745`):
+
+```python
+await modes.evt_rtc_ready.wait(); await modes.evt_gnss_location.wait()
+if len(config.peers) >= modes.max_bonds: return
+if modes.is_promo_bond: return
+now = rtc.unix(precision=1)
+if now > 1790812800: return                      # 2026-10-01T00:00:00Z — feature kill date
+name = None; activations = ()
+if 1789917600 <= now <= 1789963200:              # 2026-09-20T15:20Z .. 2026-09-21T04:00Z
+    name        = 'Totem Secret Meetup'
+    color       = colors.hot_pink
+    mac         = 'A77401000008'
+    activations = ((1789960800, 1789963200, 39.94275, -82.40321),)
+if not name: return
+# pick an activation: reject end <= start ('Invalid activation syntax'),
+#   end < now + 60 ('Activation expired'),
+#   start > now + 43200 ("Activation doesn't start for 12hrs");
+#   otherwise schedule it, secs_until = max(0, start - now)
+if idx < 0: log.debug('No promo activation'); return True
+log.debug('Add Promo Activation: {} | Secs until start: {}')
+if get_distance(*gnss_data.location, lat, lon) > 5000: return True   # 5 km geofence
+log.debug('Creating promo activation in: {}')
+tasks.schedule(create_promo_bond, task_name='create_promo', delay_ms=secs_until * 1000,
+               lat=lat, lon=lon, h_acc=5, poi_name=name, poi_rgb=color, eat=end, mac=mac)
+```
+
+Decoding the embedded constants:
+
+| Constant | Meaning (UTC) |
+| --- | --- |
+| `1790812800` | 2026-10-01 00:00:00 — after this, `activation_check` returns immediately |
+| `1789917600` | 2026-09-20 15:20:00 — start of the window in which the promo is *defined* |
+| `1789963200` | 2026-09-21 04:00:00 — end of that window, and the activation's own end |
+| `1789960800` | 2026-09-21 03:20:00 — the activation's start |
+| `39.94275`, `82.40321` (an explicit `UNARY_OP __neg__` follows the longitude) | **39.94275, −82.40321**; reverse-geocoding these to central Ohio, USA is **inferred** |
+| `43200` | the 12-hour look-ahead in `Activation doesn't start for 12hrs` |
+| `5000` | the geofence radius, in metres |
+
+`peer_helpers.create_promo_bond(**kw)` (**confirmed**, `peer_helpers.dis:262-380`) then
+builds a synthetic `Peer` — `is_poi = 1`, `animation_id = 1`, fixed `lat`/`lon`,
+`p_acc = h_acc`, `peer_name`, `rgb`, a ring pixel from `get_next_peer_pixel()`, and `eat`
+(expire-at unix) — inserts it at `config.peers[mac]`, increments `config.poi_count`, sets
+`modes.is_promo_bond = True`, and logs `Creating promo activation bond` /
+`[create_promo_bond] Created Bond!`. If the MAC is already present it logs
+`[create_promo_bond] Peer already exists` and does nothing. Defaults when the caller omits
+them: `mac='A77401000001'`, `poi_name='POI'`, `poi_rgb=(0, 0, 255)`, `h_acc=5`.
+
+Because the POI is an ordinary `Peer` with `is_poi = 1`, `is_peer_stale` returns 0 for it
+unconditionally, and `get_peer_led_prox` takes the directional-arc fast path for it as soon
+as `is_sticky_heading` is also set.
+
+The v5.0.2 equivalent, never executed, pointed at a different event:
 
 | | v5.0.3 | v5.0.2 |
 | --- | --- | --- |
-| Promo name | `Totem Secret Meetup` | `Three City Stages: Tinie Tempah` (unused) |
-| Active window | 2026-09-21 03:20–04:00 UTC | n/a (`activation_check` never called) |
+| Promo name | `Totem Secret Meetup` | `Three City Stages: Tinie Tempah` |
+| Virtual MAC | `A77401000008` | `A77401000007` |
+| Definition window | 2026-09-20 15:20 → 2026-09-21 04:00 UTC | 2026-08-29 00:40 → 14:00 UTC |
+| Activation window | 2026-09-21 03:20 → 04:00 UTC | 2026-08-29 12:40 → 14:00 UTC |
+| Coordinates | 39.94275, −82.40321 | 53.013, −7.15636 |
+| Feature kill date | 2026-10-01 00:00 UTC | 2026-09-01 00:00 UTC |
+| Called? | yes, from `backend_checks` | **no** — defined but dead |
 
-The promo's coordinates are embedded in the firmware and are intentionally not reproduced
-here.
+## Orientation events
 
-## Receiver lifecycle & auto-reset
+`imu_fusion_auto` raises the task names `orient_horiz` / `orient_vert`, and the shared state
+is `modes.evt_orien_vertical`. **Confirmed** owners of the strings, since earlier revisions
+of this page lumped them together:
 
-The GNSS subsystem manages the receiver end-to-end and can self-heal:
-
-| Concept | Evidence |
+| String | Function |
 | --- | --- |
-| Baud auto-detection | `Auto-detecting correct baud...`, `GNSS baud rate identified: {}` |
-| RAM configuration | `CFG-VALSET` / `CFG-MSGOUT` frames enable NAV-PVT output on UART1 (key `0x20910007`, decoded per u-blox spec as `CFG-MSGOUT-UBX_NAV_PVT_UART1`) |
-| Start modes | `CFG-RST` drives cold / warm / hot start (`GNSS Cold Start`, `GNSS Warm Start`, `GNSS Hot Start`) |
-| BBR persistence | `Saving GNSS config to BBR for faster reboots`; hot/cold start state cached in `hotcold.bin` |
-| Auto-reset | `Auto-Reset GNSS`, `Cannot communicate with GNSS module` — an unresponsive receiver is power-cycled/reinitialized |
+| `Orientation Changed to Vertical` / `... to Horizontal` | `Compass.orientation_change`, `compass.dis:4338-4634` (`:4358`) |
+| `Exit Smart Group due to vertical orientation` | `Compass.smart_group_auto_exit`, `compass.dis:4272-4337` (`:4321`) |
+| `Unlocking orientation` | `Compass.unlock_orientation`, `compass.dis:9464-9487` |
+| `Compass not vertical, do not exit smart group`, `... for 2sec, ...` | `Compass.exit_smart_group_host`, `compass.dis:9488-9559` |
 
-The embedded config frames all begin `B5 62` and their trailing checksum bytes verify, so
-the frame contents are confirmed; the CFG-MSGOUT key→message-name mapping is inferred from
-the u-blox protocol spec.
+`modes.evt_orien_vertical` is read in ten places across `compass.py`, including the
+once-a-minute branch that halves the GNSS nav rate — see
+[Nav rate throttling](#nav-rate-throttling).
+
+## Version deltas at a glance
+
+| Module | v5.0.2 → v5.0.3 |
+| --- | --- |
+| `nav_helpers.mpy` | identical (md5 `46dd2e73…`) |
+| `mag_wmm_data.mpy` | identical (md5 `b3e6d2da…`) |
+| `task_mag_declination.mpy` | identical (md5 `7de305a5…`) |
+| `imu_fusion_auto.mpy` | identical (md5 `f6508f8d…`); the separate `imu_fusion.py` is **removed** |
+| `ubx_gnss.mpy` | constant table identical; two `print('buff: {}')` debug lines removed from `parse_ubx`'s `ValueError`/`MemoryError` handlers |
+| `nav_logger.mpy` | adds the `is_nav_log_fast_rotate` 1024 B path |
+| `peer_helpers.mpy` | `is_unknown` threshold 14400 s → 7200 s |
+| `compassing.mpy` | `get_peer_led_prox` loses the stale-peer early return |
+| `compass.mpy` | `activation_check` is now launched from `backend_checks`; new promo constants |

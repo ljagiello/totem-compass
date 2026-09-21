@@ -12,3 +12,6 @@ re/rodata_strings.txt
 
 # Reverse-engineering scratch directory
 re/
+
+# Built CLI binary
+/totemctl

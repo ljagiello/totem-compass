@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "**.go"
+      - "**.h"
+      - "**.c"
       - "**/testdata/**"
       - "go.mod"
       - "go.sum"
@@ -13,6 +15,8 @@ on:
   pull_request:
     paths:
       - "**.go"
+      - "**.h"
+      - "**.c"
       - "**/testdata/**"
       - "go.mod"
       - "go.sum"
@@ -76,6 +80,20 @@ jobs:
           - { package: ./client, target: FuzzReceive }
           - { package: ./client/clienttest, target: FuzzWrite }
           - { package: ./cmd/totemctl, target: FuzzParseRawFrame }
+          - { package: ./cmd/totemctl, target: FuzzConsoleLine }
+          - { package: ./mesh, target: FuzzParse }
+          - { package: ./mesh, target: FuzzHalf }
+          - { package: ./emulator, target: FuzzNode }
+          - { package: ./emulator, target: FuzzParseCommand }
+          - { package: ./emulator, target: FuzzLineReader }
+          - { package: ./cmd/totememu/ring, target: FuzzRing }
+          - { package: ./store, target: FuzzScan }
+          - { package: ./store, target: FuzzStateDecode }
+          - { package: ./emulator, target: FuzzOTAServer }
+          - { package: ./emulator, target: FuzzLEDs }
+          - { package: ./emulator, target: FuzzInput }
+          - { package: ./emulator, target: FuzzRestore }
+          - { package: ./cmd/totememu/settings, target: FuzzSettings }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -95,6 +113,29 @@ jobs:
         with:
           name: fuzz-${{ matrix.target }}
           path: ${{ matrix.package }}/testdata/fuzz/${{ matrix.target }}/
+
+  firmware:
+    name: ESP32 emulator firmware
+    # cmd/totememu only builds with TinyGo (build tag tinygo && esp32), so
+    # the jobs above skip it.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Set up TinyGo
+        uses: acifani/setup-tinygo@v3
+        with:
+          tinygo-version: 0.42.0
+          install-binaryen: false
+
+      - name: Build
+        run: tinygo build -target esp32-generic -size short -o totememu.bin ./cmd/totememu
 
   lint:
     name: golangci-lint

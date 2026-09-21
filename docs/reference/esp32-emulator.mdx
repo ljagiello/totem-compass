@@ -1,0 +1,408 @@
+---
+title: "ESP32 emulator"
+description: "An ESP32 running TinyGo that joins the ESP-NOW mesh as another Totem."
+---
+
+`cmd/totememu` turns a stock ESP32 into a Totem on the [ESP-NOW mesh](/protocols/espnow-mesh).
+It pairs with a real Totem over the air, and from then on the two exchange peer status every
+radio window like any two bonded Totems. It is written in Go and built with TinyGo and
+[`tinygo.org/x/espradio`](https://github.com/tinygo-org/espradio).
+
+A Totem's GNSS receiver, magnetometer, motion sensor and power chip are modelled too, so the
+emulator reports a position that moves, a compass, a battery that drains and a clock
+(see [simulated hardware](#simulated-hardware)). On a board that has those parts, its own
+drivers replace the model.
+
+**Hardware-tested** on 2026-09-19 with an ESP32-D0WD-V3 and a Totem on firmware 5.0.3:
+
+- the bond completed through the normal Touch Crystal pairing;
+- the Totem unicast its status to the emulator every second, and acknowledged every frame the
+  emulator sent;
+- a walk at 5 km/h and a drive at 50 km/h arrived with the position, speed, compass, heading of
+  motion and clock the firmware expects, including the duplicate status a Totem sends once a
+  peer is more than 30 m away;
+- the bond came back by itself after the board rebooted.
+
+On 2026-09-20, with the settings store and the `rx` command:
+
+- the settings sector survived a power cycle: the name, the boot count and the bond came
+  back, and the bonded peer was in the node before the radio heard anything;
+- an injected locate request was answered, and relayed with the hop count stepped and the
+  last-hop position replaced by the board's own;
+- an injected Smart Group invitation was joined while pairing was open, and the board never
+  transmitted a `(7,0)` host beacon.
+
+## Layout
+
+| Package | Role |
+| --- | --- |
+| `mesh` | codec for the peer `(0, cmd)`, locate `(2,0)` and Smart Group `(7,x)` frames, field by field as in [message format](/protocols/message-format#peer-frame-0-cmd). Tested against frames packed by CPython's `struct` with the firmware's own formats, and fuzzed. |
+| `emulator` | the Totem itself: pairing handshake, radio windows, clock sync, locate reply and relay, Smart Group member. Pure Go that takes frames and the time, and returns frames to send, so it is tested on the host with scenario tests and a fuzz target. |
+| `emulator` (sensors) | `SensorSource`, and a `Sim` that walks or drives a track, keeps an odometer, drains a battery and points a compass. |
+| `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && esp32` build tags). |
+| `cmd/totememu/ring` | the receive ring's C (`ring.h`) compiled for the host, so it can be tested and fuzzed. |
+| `store` | the settings a reboot keeps — the name, the crystal colour and the bonds, as a Totem keeps `config.json` — as an append-only journal in one flash sector. Pure Go, so it is tested and fuzzed on the host. |
+| `cmd/totememu` (flash) | that journal's backend: the ESP32's own SPI flash, driven from IRAM with the cache off. |
+
+## Build and flash
+
+```bash
+tinygo flash -target esp32-generic -port /dev/cu.usbserial-0001 \
+  -ldflags "-X main.owned=8c94df7b0478" ./cmd/totememu
+```
+
+`main.owned` lists the ESP-NOW (WiFi station) MACs of your own Totems, comma-separated. It is
+the MAC that `totemctl info` shows. `main.name` sets the name other Totems display (default
+`emu_totem_` plus the last four hex digits of the board's MAC, such as `emu_totem_abb0`).
+
+To pair, put the Totem next to the board and hold its Touch Crystal until the pairing
+animation starts (about 1.2 s). The emulator notices the Totem's bond request and pairs
+back. Bonding needs **RSSI ≥ −25 dBm** on both sides, so the two must nearly touch. The board
+keeps the bond in flash, so a reboot comes up still bonded; it also takes a bond back when a
+Totem that kept it in `config.json` sends a status frame.
+
+## Watching the mesh
+
+`totemctl mesh` talks to the board over USB serial and decodes on the host, with the same
+`mesh` package, every frame your Totem sends it:
+
+```bash
+totemctl mesh watch          # decoded frames and events until Ctrl-C
+totemctl mesh watch --raw    # plus each frame's bytes
+totemctl mesh watch --tx     # plus the frames the emulator sends
+totemctl mesh watch --json   # one JSON object per frame, every field
+totemctl mesh status         # the emulator and its peers
+totemctl mesh pair           # wait for a bond while you hold the Touch Crystal
+totemctl mesh clock          # give the board this computer's time
+totemctl mesh send sos on    # any console command below
+```
+
+```text
+14:10:14 ← 8c94df7b0478  -15 dBm  status "LCFs totem"  37.586700,-122.007362 ±1m alt 24m  azimuth 121° flat  batt 53% 3.81V  fw 5.0.3  up 20h59m0s  clock 14:10:15.100
+```
+
+The commands pick the only USB serial port with an ESP32 bridge chip (CP210x, CH34x, FTDI or
+Espressif USB), or take `--port`. They open it with DTR and RTS asserted and leave them so: on
+ESP32 boards the auto-reset circuit pulls EN low when RTS is set without DTR, so a monitor that
+clears both on open (pyserial's `dtr=False, rts=False`) reboots the emulator. The commands
+switch the console to JSON lines with `format json` and back to text when they exit. With
+`--trace` they log every console line.
+
+The ESP32 only receives frames addressed to itself or broadcast. Status frames your Totem
+unicasts to its other peers do not reach it.
+
+## Console
+
+The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo monitor
+-port <port>` shows it directly:
+
+| Command | Effect |
+| --- | --- |
+| `pair` | open a 6 s pairing window, as a long hold does |
+| `status` | this device and each peer: name, RSSI, last heard, position, battery |
+| `pos <lat> <lon> [accuracy m]`, `pos off` | report a GNSS fix (latitude ±90, longitude ±180, accuracy 0-127 m, default 5), or none (the default) |
+| `heading <deg>` | compass azimuth to report, 0-359; while a simulation runs it steers the track too, the way a Totem points where it is going |
+| `sim still\|walk\|drive [bearing]`, `sim off` | run or stop the simulated hardware |
+| `flat on\|off` | report the Totem lying down or upright |
+| `batt <0-100> [charging]` | battery level |
+| `clock <unix ms>` | set the wall clock (`totemctl mesh clock` sends this computer's). Between 2020 and 2038: a peer frame carries the time as an int32 of seconds, as the firmware does, and a clock outside that cannot be put on the air |
+| `sos on\|off` | the SOS flag |
+| `unbond <mac>` | delete a peer and send it the `(0,2)` notice |
+| `log debug\|info\|warn\|error` | log level; `debug` logs every frame heard and sent, as hex |
+| `format text\|json` | log lines as slog text or as JSON (what `totemctl mesh` uses) |
+| `touch crystal\|power\|sos tap\|double\|triple\|hold [ms]` | make a gesture on an input |
+| `leds` | what the ring and the crystal are doing |
+| `color <name>` | the crystal's default colour, from the firmware's 13 |
+| `power`, `power on\|off` | the power state, or switch the device off and on as the button held does |
+| `ota [update]` | the last update, or run one |
+| `rx <src mac> self\|all <rssi> <hex frame>` | feed the node a frame as though the radio had heard it, for the paths that need a second Totem |
+| `store`, `store forget` | the saved settings and bonds, or forget them: the flash and the live bonds both, as a factory reset does |
+| `flash` | check the flash driver on its scratch sector: erase, write, read back |
+| `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
+| `help` | list the commands |
+
+The console is parsed by `emulator.ParseCommand`, which rejects values out of range (and
+`NaN` or `Inf` coordinates) with a `bad command` warning rather than put them on the air. It is
+fuzzed on the host.
+
+## Simulated hardware
+
+A Totem has a GNSS receiver, a magnetometer, a motion sensor and a power chip. On a board
+without them the `emulator` package provides a `Sim` that behaves like one, so the emulator
+reports what a Totem in someone's hand would:
+
+```bash
+totemctl mesh send pos 37.5868 -122.0074 3   # where the walk starts
+totemctl mesh clock                          # the board has no clock of its own
+totemctl mesh send sim walk 90               # walk east; drive is 50 km/h, still holds position
+totemctl mesh send flat on                   # lying down: peers then expect status every second
+totemctl mesh send batt 40                   # battery level, and "batt 40 charging"
+```
+
+```text
+→ 8c94df7b0478  status "emu_totem_abb0"  37.586800,-122.002060 ±5m alt 12m 50km/h  azimuth 90° heading 89° upright  batt 94% 4.07V  fw 5.0.3  clock 15:30:35.142
+```
+
+The simulation moves the position along the bearing (a walk wanders, a drive holds its
+course), keeps the odometer, derives the heading of motion from the last 10 m as
+`get_heading_mot` does, drains the battery and reports satellites and a solution id.
+
+**The clock matters for more than the display.** With one, the node holds wall-clock radio
+windows and advertises the time to peers the way a Totem with a GNSS lock does
+(`rtc_method` 1); without one it borrows a peer's clock and stays quiet about it
+(`rtc_method` 2). A board that has just booted counts from 1970, so the node refuses any
+clock before 2020 rather than push that at a peer whose own clock is not set.
+
+`SensorSource` is the seam: `Sim` on a board with no sensors, and a board's own GNSS,
+magnetometer, motion sensor and power chip where they exist. `Controls` is the other half
+of it, the settings `pos`, `heading`, `flat`, `batt` and `clock` drive. Both the simulation
+and the fixed reading take them, so the same console command works whichever is installed;
+a source that reports real hardware and takes no settings says so instead of accepting the
+command and changing nothing.
+
+## The rest of the device
+
+A Totem is more than its radio, and the emulator now models the rest of
+it: what the ring and the crystal are doing, the three inputs, the power
+state, and an update over WiFi. Each is grounded in the firmware where the
+disassembly gives a number, and says so where it does not.
+
+### The halo and the crystal
+
+Sixty ring pixels (`RING_PX_COUNT`) and seven in the crystal
+(`CRYSTAL_PX_COUNT`), the 13-colour palette from `project_data.Colors`
+with the exact RGB values, and the animations the LED task plays as events
+arrive: the pairing breathe, the fill when a peer bonds, the countdown
+when one is deleted, the SOS blink, the demi-god flash, the white 30%
+progress ring of a download (`PROGRESS_RGB`) and the orange fill of a
+failure (`ERROR_RGB`). The charger going in replays the power-up ring, as
+`power_conn_new` does once `v_in` has read high for three 100 ms samples
+— a contact that bounces on the way into the socket does not set it off,
+and neither does a poll rate, because the wait is 300 ms of clock rather
+than a count of polls. It only goes on over a resting ring: plugging in
+during an alarm, a pairing window or an update leaves those showing. At
+rest the ring is the compass: a lit pixel, with
+its neighbours feathered, pointing at the bonded Totem, in the colour that
+peer was given when it bonded (`shuffle_bond_colors`).
+
+Frame timings are the one thing the firmware keeps out of reach — they
+live in undisassembled bytecode — so the ones here are chosen to look like
+the device, at 25 ms a frame.
+
+```text
+leds
+leds state="pairing, crystal teal, ring 60/60 lit, brightness 100%"
+```
+
+On a board with an APA106 ring, `emulator.LEDs().Ring()` is what to write
+to it. On a stock dev board there is one LED, on GPIO2, and it follows the
+crystal: enough to see a pairing breathe, an SOS blink, and the dark of a
+device that has powered down.
+
+### Touch and the buttons
+
+The Touch Crystal and the power and SOS buttons all report the same
+gestures — taps counted inside a window, and holds — and `compass` wires
+each to a callback:
+
+| Input | Gesture | What it does |
+| --- | --- | --- |
+| Touch Crystal | hold ~1.2 s | start pairing |
+| Power | single tap | `toggle_brightness` |
+| Power | double tap | `user_enable_ble` |
+| Power | hold 800 ms | `device_off` |
+| SOS | single tap | `sos_mute` — the alarm keeps going out, the blinking stops |
+| SOS | hold 800 ms | `start_sos` |
+| SOS | triple tap | `start_ota` |
+| SOS | long hold 10 s | `compass_reset` (not emulated; the bonds stay) |
+
+The recogniser takes edges, not gestures, so the same code serves a real
+pin, a capacitive reading and the console. v5.0.3's 30 ms edge lockout is
+there, and so is the wait before touch is enabled after a boot. A hold
+fires when it matures, not when the finger lands, so a three-second hold
+of the crystal opens its pairing window 1.2 s in and keeps it open for
+the full six seconds.
+
+A device that has been powered down answers one gesture — the power
+button held, which turns it back on — and its strip stays dark: on a
+board whose LED follows the crystal, switching it off switches the light
+off.
+
+```bash
+totemctl mesh send touch crystal hold 1500   # pair, as a finger would
+totemctl mesh send touch sos hold 900        # start the alarm
+totemctl mesh send touch sos tap             # mute it
+```
+
+The BOOT button on GPIO0 is wired to the SOS button, so those gestures can
+also be made by hand.
+
+### Power
+
+The battery curve is `get_batt_pct`'s own breakpoint table, decoded from
+the 232-byte constant in `peripherals.py`: 58 pairs of millivolts and a
+raw level, from 4120 mV down to 3190, with the percentage taken as
+`(raw*1000//605 + 5)//10`. So 4.12 V reads 100%, 4.0 V reads 86% and
+3.8 V reads 50%, and anything above 4.12 V reads full — a Totem on its
+charger reports 4.48 V at 100%.
+
+The learned maximum (`config.batt_max_volts`) rescales a reading only
+when it is *below* the table's top, lifting it so a pack that no longer
+reaches 4.12 V still reads full at its own ceiling; above the top there
+is no rescale at all. It is learned the way `one_min_coro` learns it:
+only while charging, and only once the peak stops rising, stored as that
+peak less 0.04 V.
+
+The mode follows the battery — normal, eco, low below 3.45 V — and below
+3.15 V the device powers itself down rather than brown out, which a peer
+sees as the status frames stopping. That is a different number from the
+one the gauge reaches zero at: the table's flat end is 3.19 V, so a
+Totem reports 0% for a stretch and keeps running. A pack on the charger
+never hits the cutoff, however flat it reads. The mode is not settable by hand, because the next battery
+reading five milliseconds later would undo it: change the battery with
+`batt` instead. Light sleep is accounted the way the firmware logs it,
+including the two reasons it stays awake: a radio window about to open,
+and a clock sync that has not finished. The watchdog model is
+`wdt_manager`'s: the feed loop runs only while no blocker is held, and a
+flash write holds `vfs write`.
+
+The sleep is accounted, not taken: the board stays awake. A Totem light-sleeps between
+radio windows and still keeps its link, and the board could do the same, but the counter is
+what a peer can see the effect of — the mode in a status frame, and a device that has
+powered down going quiet. Powering down is the emulator's deep sleep: the radio windows
+stop, frames are no longer answered, and only a held power button brings it back.
+
+### WiFi OTA
+
+The update client runs the firmware's exchange against
+`api.totemportal.com`: POST the release poll, GET `contents.json`, pick the
+`.bin` (or the `.tgz` for a preview), read the version out of the name
+between `_v` and the extension, download it with the progress ring
+running. A device that has switched itself off is refused first — there is
+no rebooting a device that has already stopped — and then the battery
+gate, as `Battery too low for OTA update` does. A board wired without a
+power chip is exempt, but only if it was built with `NoPowerChip` — never
+because it happens to read zeroes. A reading of 0 V and 0% is also what a
+dead cell and a failed ADC report, and those two are exactly what the gate
+is for, so the flag is written the way round where forgetting it keeps the
+gate on.
+
+The emulator stops before writing a slot: it has one image, and losing it
+would take the board off the mesh. Everything up to that point is real,
+including the refusals — the exchange is plain HTTP with no key, no
+signature and no TLS, so a release object with no `ota_url`, an index that
+is not a JSON array, or a name with a path in it are all rejected rather
+than followed. `FuzzOTAServer` covers exactly that.
+
+```bash
+totemctl mesh send ota update
+ota failed err="ota: battery too low for an update: 20%"
+```
+
+## Settings that survive a reboot
+
+A Totem keeps its name, its crystal colour and every bond in `config.json` on its
+filesystem. The board has no filesystem, so the `store` package keeps the same things in one
+4 KB flash sector as an append-only journal: a save appends a record, and only a full sector
+costs an erase. Bonds go back into the node before the radio starts, so the emulator comes up
+already bonded.
+
+```text
+settings restored name=emu_totem_abb0 peers=1 boots=3 seq=4 free=3816
+bond restored mac=8c94df7b0478 name="LCFs totem"
+```
+
+A save happens when something a person changed is different from what is on the flash: a
+bond gained or lost, the name, the crystal colour, the brightness, the SOS mute. The
+counters the device keeps ride along with those rather than causing a write of their own,
+because a counter that grows on its own would put a record on the flash every time anything
+so much as looked at the settings.
+
+Only the boot count comes back. The total light sleep and the highest cell voltage seen are
+written as a snapshot of what the device last reported — `store` prints them — but not read
+back, because the firmware keeps both in `modes`, whose constructor sets them to zero: they
+start again at every boot, and a power cycle is a boot.
+
+Everything read back is untrusted — a write cut short by a reset, a previous firmware, or
+noise — so a record is believed only if its header and checksum agree, and a sector that
+makes no sense boots with defaults rather than failing. `FuzzScan` covers exactly that.
+
+Flashing the board erases the sector with the rest of the chip, so a reflash starts from
+defaults; a power cut does not.
+
+The driver underneath is the fiddly part, because on the ESP32 the code itself runs from
+flash through the MMU cache. Touching flash means turning that cache off, and while it is off
+the CPU cannot fetch an instruction or a constant from flash — so the operations live in
+IRAM, take every address they need as data, and each is its own function (a branch on an
+operation number compiled into a jump table, which lives in flash, and the board jumped into
+`0xbad00bad`). An erase takes about 51 ms with interrupts off, so the settings are written
+only when a bond or a setting actually changed.
+
+Two things about this board are worth knowing if you port it: its flash ships without block
+protection but the ROM's erase still refuses anything past the `chip_size` in the ROM's own
+descriptor, and the bootloader leaves that at 2 MB on a 4 MB part — so the sector sits just
+under 2 MB rather than at the end of the chip.
+
+## Injecting frames
+
+Some paths need a second Totem: a locate relay, a Smart Group invitation. `rx` feeds the node
+a frame as though the radio had heard it, so they can be exercised on the board itself:
+
+```bash
+totemctl mesh send rx 8c94df7b0478 all -70 a7740200...   # a locate request from your Totem
+totemctl mesh send rx 8c94df7b0478 self -20 a7740000...  # a status frame, unicast to the board
+```
+
+An injected frame is not a way around the rules. It goes to the same parser, the same
+duplicate check and the same scope test as one off the air: a frame whose source is not one
+of your Totems is dropped, and what the board sends in answer still has to pass `allowedTX`.
+
+## Radio setup
+
+`espradio` starts the WiFi station, and the firmware then applies the Totem's settings from
+`EspConn.power_on` through the WiFi blob functions that `espradio` links but does not wrap:
+`esp_wifi_set_protocol(STA, WIFI_PROTOCOL_LR)`, `esp_wifi_set_channel(6)`,
+`esp_wifi_set_max_tx_power(84)` (21 dBm) and `esp_wifi_config_espnow_rate(STA,
+WIFI_PHY_RATE_LORA_250K)`. The send reports confirm rate `0x29`.
+
+<Warning>
+`espradio` v0.3.0's ESP-NOW receive trampoline passes nine arguments to Go, and clang
+adjusts the stack around that call with `MOVSP`. When the Go side has spilled the caller's
+register window, the `MOVSP` raises `AllocaCause` (EXCCAUSE 5). TinyGo's ESP32 exception vector
+treats that as fatal; ESP-IDF handles it in `_xt_alloca_exc`. The board crashed this way about
+12 s after the first bond (`EXC 00000005 401906e4 …`). The firmware therefore registers its own
+receive callback. That callback only copies each frame into a ring buffer, without calling Go
+from the WiFi task, and the main loop drains the buffer every 5 ms. The UART receive interrupt
+also stops firing once the WiFi blob runs, so the console polls the UART FIFO.
+</Warning>
+
+## Untrusted input
+
+Everything that reaches the emulator from outside is fuzzed, and the fuzz targets run in CI:
+
+| Input | Where | Target |
+| --- | --- | --- |
+| ESP-NOW frames off the air | `mesh.Parse` | `FuzzParse`, `FuzzHalf` |
+| Frames, signal strength and timing into the device logic | `emulator.Node` | `FuzzNode`, which also interleaves console commands |
+| Console command text | `emulator.ParseCommand` | `FuzzParseCommand` |
+| Raw serial bytes | `emulator.LineReader` | `FuzzLineReader` |
+| The board's own output, read by the CLI | `totemctl mesh` | `FuzzConsoleLine` |
+| Frames arriving in the C receive ring | `cmd/totememu/ring.h` | `FuzzRing`, which compiles the same header for the host |
+| What a flash sector holds after a reset, a previous firmware or a wild write | `store.Open` | `FuzzScan` |
+| A saved settings record | `store.State` | `FuzzStateDecode` |
+| A settings record put back into a live node — bonds, coordinates, colours and a timestamp | `emulator.Node.Restore` | `FuzzRestore` |
+| What an update server answers, over plain HTTP | `emulator` OTA client | `FuzzOTAServer` |
+| Edges from a bouncing pin or a jittering touch reading | `emulator` input recogniser | `FuzzInput` |
+| Animations, dials and jumps in time | `emulator.LEDs` | `FuzzLEDs` |
+
+## Scope
+
+The emulator only listens to and talks to the Totems in `main.owned`:
+
+- Frames from any other sender are dropped unread.
+- Unicasts go only to owned Totems. `emulator` checks every outgoing frame in one place, and
+  the tests assert this for every frame.
+- It relays only locate frames that an owned Totem originated.
+- It never hosts a Smart Group, because a host's finalize makes every member delete its
+  existing peers.
+- It never sends demi-god commands.

@@ -3,219 +3,254 @@ title: "WiFi (OTA updates)"
 description: "The third 2.4 GHz role: station-mode WiFi used to pull firmware/preview updates over HTTP."
 ---
 
-WiFi is used almost exclusively for **over-the-air updates** when the Bluetooth path is
-unavailable (for example, when the device is on firmware older than the app supports).
-Driven by `f_lib/wifi.py` / `wifi_v2.py`, `f_lib/firmware_ota.py`, `f_lib/requests.py`,
-and `ota_daemon`.
+WiFi exists on this device for one job: **pulling over-the-air updates**. It is never
+active during normal navigation. The code lives in `f_lib/wifi.py`, `f_lib/requests.py`,
+`f_lib/firmware_ota.py` and the `f_ota/` package, and it only runs on a boot that follows
+an OTA trigger — see [an OTA is two boots](/subsystems/ota#an-ota-is-two-boots-not-one).
 
 <Note>
-In v5.0.3 (as in v5.0.2) the phone-**hotspot** OTA path is **sunset**
-(`OTA Hotspot has been sunset`, still in `f_ota/main.py`). The live path is
-**station-mode WiFi** (updates performed "via WiFi"), kicked off by an OTA command received
-over the device's API WebSocket or locally by a triple tap of the physical SOS button
-(`start_ota`). The hotspot section lower down is retained as **legacy**: its credentials
-and soft-AP machinery are still compiled in, but it is no longer the current update
-mechanism.
+Everything on this page was read out of the frozen MicroPython bytecode in
+`re/v5.0.3/mpy/*.dis`; citations are `file.dis:line`. Claims that could **not** be read
+directly are marked **inferred** or **not recoverable**.
 </Note>
 
-## The current path: station-mode WiFi OTA
+## What actually starts a WiFi OTA
 
-The device connects to a saved/nearby WiFi network in **station mode** (`conn_to_wifi`,
-`Searching for WiFi network`) and performs the update **over HTTP**. Two update methods
-exist, distinguished in the logs, with different package formats:
+<Warning>
+Earlier revisions of this page claimed the device "opens a client WebSocket to the API
+host and can be told to update over it." **That is wrong.** The only WebSocket code in
+the image is a *server* in `f_ota/hotspot.py` — the device's own soft-AP web UI — and that
+module is imported by nothing in v5.0.3 (`grep f_ota.hotspot` matches only itself). There
+is no WebSocket client, no persistent connection to `api.totemportal.com`, and no polling
+loop: the device only talks to the API *during* an update it was already told to perform.
+</Warning>
 
-| Method | Log string | Package format |
-| --- | --- | --- |
-| Firmware | `Performing Firmware update via WiFi` | `.bin` (`.bin package not found in repo`) |
-| Preview | `Performing Preview update via WiFi` | `.tgz` gzipped tar (`.tgz package not found in repo`, `Downloaded file is not .tgz`) |
-
-The payload for either method is described by a downloaded **`contents.json`** — a JSON
-**array of filenames** (`Downloading content.json`), not a fixed filename; the device
-picks the entry ending in `.bin` (firmware) or `.tgz` (preview). The image streams into
-the inactive OTA slot via `ota_block_writer.py`, its SHA-256 is verified
-(`File integrity confirmed!` / `SHA256 hash does NOT match`), and on success the device
-reboots into the new slot (`OTA completed successfully!`). See
-[OTA server contract](#ota-server-contract) for the full request/response exchange.
-
-### Command-triggered over the API WebSocket
-
-The device opens a **client WebSocket** to the API host and can be told to update over it.
-OTA can also be started on the device itself: a triple tap of the physical SOS button
-calls `start_ota` (see the trigger note below).
-
-| Signal | Evidence |
-| --- | --- |
-| WebSocket to API | `WebSocket Connection initiated...` / `WebSocket Init Request...`, sitting beside `http://api.totemportal.com` |
-| OTA command | `Sending OTA command to update nearby devices`, `Demigod to update nearby devices`, qstr `demigod_gen_ota_update` |
-| OTA daemon | symbols `ota_daemon` / `ota_cmd` (`from ota_daemon import *`) |
-| Local gesture | SOS button triple tap → `start_ota` (`sw_sos.cb_triple_tap`, **confirmed**, same in v5.0.2 and v5.0.3) |
-
-After the command is received, the device runs the station-WiFi download described above.
+A trigger (SOS triple tap, the phone app over BLE, an ESP-NOW/demi-god broadcast, or the
+REPL) writes a `perform.ota` parameter file and soft-resets. The next boot notices the
+soft reset plus the file and calls `f_ota.main.start_ota`, which is where WiFi first comes
+up. The full sequence, the `cmd` numbers and the `perform.ota` schema are documented under
+[OTA & rollback](/subsystems/ota).
 
 ### Battery gate
 
-<Note>
-OTA is **battery-gated**: `Battery too low for OTA update` (`low_battery` /
-`monitor_battery` / `battery_volt`). The exact voltage/percent threshold is **not present
-as a literal** in this firmware — it lives in bytecode and cannot be recovered from
-strings. Only the gate itself is confirmed.
-</Note>
+OTA is battery-gated at the **trigger**, before any reboot:
 
-## OTA server contract
-
-The station-WiFi update is a plain-HTTP REST + fetch exchange against
-`http://api.totemportal.com` (`API_ENDPOINT` — no TLS, no auth). A custom server that
-answers these exchanges (or a spoofed `api.totemportal.com` via DNS/ARP) is sufficient to
-push firmware to a device you own: there is **no API key, client certificate, HMAC, or
-image signature** anywhere on this path.
-
-<Steps>
-  <Step title="Device polls for a release">
-    `POST http://api.totemportal.com/devices/{MAC}/ota` with a JSON body
-    (`get_release_from_api`). `{MAC}` is the uppercase-hex device MAC (`get_mac_addr`):
-
-    ```json
-    {"version": "5.0.3", "endpoint_id": 1, "device_type_id": 1,
-     "lat": 0.0, "lon": 0.0, "gnss_time": 0, "release_id": 339}
-    ```
-
-    (`version` and `release_id` are the device's own `release_code` / `release_id` from
-    `f_ota/system.py`: `5.0.3` / 339 on v5.0.3, `5.0.2` / 335 on v5.0.2. The other values are
-    illustrative.)
-  </Step>
-  <Step title="Server returns a release object">
-    The reply (`get_release_details`) must expose these fields:
-
-    ```json
-    {"ota_url": "http://<host>/repo/*", "version": "5.0.3",
-     "product": "totem_compass", "branch": "totem",
-     "release_code": "5.0.3", "release_id": 123}
-    ```
-  </Step>
-  <Step title="Device fetches the package index">
-    `GET {ota_url}/contents.json` (`?uid=` appended when uncached) returns a JSON
-    **array of filenames** (`contents.json syntax err, cannot parse` on bad JSON). The
-    device picks the entry ending in `.bin` (firmware) or `.tgz` (preview) — e.g.
-    `["firmware_v5.0.3.bin"]`. The version is parsed as the substring between `_v` and
-    the extension.
-  </Step>
-  <Step title="Device downloads, verifies, flashes, reboots, acks">
-    The picked file is downloaded (`.bin` streamed to the OTA slot; `.tgz` unpacked to
-    VFS), verified by **SHA-256 only** (no signature), flashed, and the device reboots.
-    It then reports success with
-    `POST http://api.totemportal.com/devices/{MAC}/ota?updated` (`record_release`,
-    `Recording OTA release`) — a JSON body carrying `boot_count`, `branch`, `device_age`,
-    `device_type_id`, `product`, `release_code`, `release_id`, `lat`, `lon`, `gnss_time`.
-    A custom server need only accept it with 200.
-  </Step>
-</Steps>
-
-## Where the firmware comes from
-
-The device fetches release metadata from the Totem API and downloads the package from S3.
-On-device, the payload is **resolved through `contents.json`** (a JSON array of
-filenames) rather than a fixed filename: version is tracked as a **release code**
-(`release_code` / `release_id` / `MPY_OTA_VER`). The running version appears only as the
-`release_code` `5.0.3` / `release_id` 339 constants in `f_ota/system.py` (v5.0.2: `5.0.2` /
-335), never as a path or filename.
-
-The confirmed on-device host literal uses **`http://`** (see Transport security below):
-
-```text
-http://datapeak-developer.s3.us-east-1.amazonaws.com/{}
+```python
+if not modes.evt_battery_charged.is_set():
+    log.warn('Battery too low for OTA update')
+    return
 ```
 
-<Note>
-A phone-app-style URL such as
-`http://datapeak-developer.s3.us-east-1.amazonaws.com/totem_compass/totem/5.0.3/firmware_v5.0.3.bin`
-is a **phone-app construction**, not a device literal. The filename component
-`firmware_v<code>.bin` does **not** appear anywhere in this firmware (zero matches across
-all segments `seg0`–`seg6` and the ELF; re-checked on the v5.0.3 segments). What *is*
-confirmed on-device is the bucket / product / branch dirs (`totem_compass`,
-`totem_compass/totem`) plus the templated host `…/{}`; the concrete filename is built
-app-side. See [download URL](/reference/download-url) for the full breakdown.
-</Note>
+(`compass.dis:6904`.) This is an `asyncio.Event` flag maintained by the battery monitor,
+**not** a voltage or percentage compared inline — the threshold that sets and clears the
+event lives in the power subsystem, not here. Once the reboot has happened there is no
+further battery check on the download path.
 
-The device-side endpoints are `http://api.totemportal.com/devices/{MAC}/ota` (release
-poll) and the `…/ota?updated` success callback (`get_release_from_api` /
-`record_release`). `{MAC}` is the uppercase-hex device MAC (`get_mac_addr`) — confirmed
-by bytecode, not merely symbol adjacency. See
-[OTA server contract](#ota-server-contract) for the request/response bodies.
+## Choosing and joining a network
+
+### Known networks
+
+`f_ota.config` hard-codes two credentials (`f_ota_config.dis`, `PERM_NETWORKS`):
+
+| SSID | Password |
+| --- | --- |
+| `magiceye` | `magiceye` |
+| `totemupdate` | `totem1234` |
+
+`get_known_networks()` (`f_ota_config.dis`) merges them with runtime state:
+
+```python
+d = PERM_NETWORKS                      # NOTE: bound, not copied
+if cfg.networks:
+    for ssid in cfg.networks:
+        if ssid not in d:
+            d[ssid] = cfg.networks[ssid]
+if user_cfg.wifi_ssid and user_cfg.wifi_ssid not in d:
+    d[user_cfg.wifi_ssid] = user_cfg.wifi_key
+return d
+```
+
+Two things follow. First, the hard-coded pair always wins over anything supplied at
+runtime with the same SSID. Second, because `d` **is** the module-level `PERM_NETWORKS`
+dict rather than a copy, every call permanently accumulates the caller's networks into it
+for the life of the process.
+
+`cfg.networks` is whatever a trigger put in `perform.ota` under `networks`;
+`user_cfg.wifi_ssid` / `wifi_key` come from `user-config.json`, the file the (now dead)
+hotspot web UI wrote.
+
+<Warning>
+`totemupdate` / `totem1234` is **not** legacy. It is in `PERM_NETWORKS`, so the current
+station-mode OTA path will join it on every update attempt if it is in range. Anything
+broadcasting that SSID with that password, in range of a device that has been told to
+update, gets to answer its HTTP requests.
+</Warning>
+
+### `prep_wlan()` and the connect loop
+
+`prep_wlan()` (`f_ota_main.dis:437`) logs
+`Preparing WLAN protocols for update (v2)...` and then:
+
+```python
+await local_wifi.disconnect(power_off=True)
+local_wifi.wlan.active(True)
+await asyncio.sleep_ms(300)
+local_wifi.protocol = 7          # 802.11 b/g/n
+local_wifi.pm = 0                # power-save off
+local_wifi.wlan.config(protocol=7)
+local_wifi.wlan.config(pm=0)
+```
+
+ending with `WLAN prep completed`. Despite the `(v2)` in that string, `f_ota/main.py`
+imports `ConnErr, WiFi, CLIENT` from **`f_lib.wifi`**, not `f_lib/wifi_v2.py`
+(`f_ota_main.dis:162`). `WiFi.__init__` defaults to `protocol=7, pm=1` and sets
+`self.reconnects = 3` (`f_lib_wifi.dis:234`).
+
+`WiFi.connect_to_known(networks, hostname, max_n=10, attempts=2, priority_nw=None)`
+(`f_lib_wifi.dis:550`, defaults at `:183`):
+
+1. Empty `networks` → `ConnErr('No network creds were provided', ErrCode.invalid_auth)`.
+2. Up to **`max_n = 10`** scan rounds, each `await asyncio.sleep_ms(200)` then
+   `get_nearby_networks()`, stopping as soon as anything is seen. Still nothing →
+   `ConnErr('No networks within range', ErrCode.conn_failed)`.
+3. Intersect the scan with `networks`. Nothing in common →
+   `ConnErr('Known-network not found within range', ErrCode.conn_failed)`.
+4. If `priority_nw` (i.e. `user_cfg.wifi_ssid`) is among the matches it wins; otherwise
+   the first match in scan order.
+5. **`attempts = 2`** tries of `asyncio.wait_for(self.connect(ssid, key, hostname), 15)`,
+   printing `Connecting to: {} | Attempt {} of {}...`. A timeout prints
+   `Timed out connecting to WiFi, trying again...`.
+6. `if not wlan.isconnected(): raise ConnErr('Unable to establish connection with {}', ErrCode.conn_failed)`.
+
+The retry branch assigns a backoff value of `30` to a local that is never read again — the
+`wait_for` timeout is the literal `15` on both attempts. Dead code.
+
+`wifi_update` passes `hostname = '{}_{}'.format(cfg.hostname, cfg.mac[-4:])`, e.g.
+`mytotem_a1b2` (`cfg.hostname` defaults to `'mytotem'`).
+
+Any `ConnErr` is re-raised by `wifi_update` as
+`OtaErr('{} | code: {}'.format(e.msg, e.code), ErrCode.conn_failed)`, which aborts the
+update and — with `cfg.is_reboot` defaulting to `True` — reboots the device.
+
+## The HTTP exchange
+
+Two update kinds share one path, distinguished by the `cmd` number the trigger supplied,
+**not** by `cfg.update_method`:
+
+| `cmd` | Log string | Package |
+| --- | --- | --- |
+| `1` | `Performing Preview update via WiFi` | `.tgz` gzip+tar, unpacked over the filesystem root |
+| `3`, `4` | `Performing Firmware update via WiFi` | `.bin` ESP-IDF app image, streamed into the inactive OTA slot |
+
+`cfg.update_method` selects where the *URL* comes from: `1` = use `cfg.ota_url` as given,
+`2` = ask the API first. `start_ota` sets it to `2` whenever `cfg.endpoint_id and
+cfg.version` are both set, which the standard `perform.ota` defaults guarantee
+(`endpoint_id = 2`, `version = 'latest'`).
+
+The full request and response shapes — the seven-key release poll, the `resp['body']`
+release object, `contents.json`, and the ten-key `?updated` completion report — are
+documented once, under
+[OTA server contract](/subsystems/ota#ota-server-contract-wifi-path). In summary:
+
+```text
+POST http://api.totemportal.com/devices/{mac}/ota          -> {"body": {"endpoint": …, "release_code": …, …}}
+GET  {endpoint}/{release_code}/contents.json[?uid=XXXXXXXX] -> ["firmware_v5.0.3.bin", …]
+GET  {endpoint}/{release_code}/{picked filename}             -> streamed to flash
+POST http://api.totemportal.com/devices/{mac}/ota?updated   -> (2xx)
+```
+
+`{mac}` is `get_mac_addr()` = `''.join('{:02x}'.format(b) for b in machine.unique_id())`,
+i.e. 12 **lower-case** hex characters with no separators (`f_lib_bitwise.dis:158`).
+Earlier revisions said upper-case; that was wrong.
+
+`f_lib/requests.py` speaks **HTTP/1.0** with `Connection: close`
+(`b'%s /%s HTTP/1.0\r\n'`, `f_lib_requests.dis`). It can do TLS — port 443 is in its
+scheme table — but every Totem host literal in the image is `http://`.
 
 ## Transport security
 
 <Warning>
-The observed OTA download URLs use **HTTP**, not HTTPS
-(`http://datapeak-developer.s3.us-east-1.amazonaws.com/{}`,
-`http://api.totemportal.com`). Integrity therefore rests on the **image-level checks**
-(appended SHA-256 and the ESP-IDF OTA validation / rollback), not on TLS. The mbedTLS
-stack is compiled in and used elsewhere, but the update fetch itself was seen over
-cleartext. There is **no image signature** on the OTA path — integrity is the SHA-256
-digest only (checked on the BLE transfer path and by the ESP-IDF bootloader, not in
-`f_ota/install_ota.py`, which contains no SHA-256; see [OTA integrity](/subsystems/ota#integrity));
-the ECDSA/mbedTLS machinery in the image is unused here, so a custom OTA server needs no
-signing key.
+Both hops are cleartext HTTP with no authentication, and the firmware image carries no
+app-level hash or signature check on the WiFi path — the only verification is that the
+number of bytes written equals the server's own `Content-Length`
+(`Received {} bytes (expected {}).`, `f_lib_firmware_ota.dis:639`). Anything that can
+answer for `api.totemportal.com`, or for whatever host the API's `endpoint` field names,
+or that can stand up a `totemupdate` / `magiceye` access point near a device that has been
+told to update, can flash arbitrary code onto it. See
+[OTA integrity](/subsystems/ota#integrity).
 </Warning>
 
-## The hotspot method (legacy / sunset)
+## LED feedback
 
-<Warning>
-This path is **sunset** in v5.0.3, as it was in v5.0.2 (`OTA Hotspot has been sunset`).
-The credentials and soft-AP machinery are still present in the image, but it is no longer
-the active update mechanism. Documented here for completeness.
-</Warning>
+The `ota_callback` task drives the ring and Touch Crystal for the whole update
+(`ota_callback.dis:497`). Earlier revisions of this page said no firmware string bound a
+colour to an OTA state, and concluded the mapping was unconfirmed. That was wrong — the
+mapping is in bytecode, not in strings:
 
-Historically the device joined a **phone personal hotspot** configured with fixed
-credentials, then pulled the update over plain HTTP.
+| State | Indication |
+| --- | --- |
+| Searching for / connecting to WiFi | **white** comet chasing around the 60-pixel ring, 50 ms per step |
+| Connected | ring cleared |
+| Downloading | ring fills progressively with `PROGRESS_RGB = dim_leds(colors.white, 0.3)` — a **white progress ring** |
+| Failure (`ota_status.code == 3`) | ring flashes `ERROR_RGB = dim_leds(colors.orange, GLOBAL_BRT)` twice (200 ms on / 200 ms off / 400 ms on), then goes dark — the **orange failure blink** |
+| Throughout | Touch Crystal twinkles magenta → violet → blue (`(200,0,200) → (100,0,200) → (0,0,200)`) |
+
+`colors.orange = (255,128,0)` and `GLOBAL_BRT = 0.6` (`project_data.dis:1902`, `:515`).
+There is no *pink* OTA state: the "can't join" animation uses `colors.white`, same as the
+progress ring. Full detail in
+[LED feedback during an OTA](/subsystems/ota#led-feedback-during-an-ota).
+
+## The two things called "hotspot"
+
+These are unrelated and earlier revisions conflated them.
+
+### 1. `totemupdate`, a network the device joins — still live
+
+A phone personal hotspot (or any AP) named `totemupdate` with the key `totem1234`,
+on 2.4 GHz. The device joins it in **station** mode via `connect_to_known`, exactly like
+any other entry in `get_known_networks()`. Documented above; not deprecated.
+
+### 2. `f_ota/hotspot.py`, the device as an access point — dead code
+
+Historically the device could become the AP and serve a web UI to a phone. The module is
+still compiled in but nothing imports it, and `ota_mgr` refuses the command that used to
+reach it:
+
+```python
+elif cmd == 2:
+    raise OtaErr('OTA Hotspot has been sunset', ErrCode.operation_failed)
+```
+
+(`f_ota_main.dis:1076`.) For the record, what it did (`f_ota_hotspot.dis:601`):
 
 | Parameter | Value |
 | --- | --- |
-| SSID | `totemupdate` |
-| Password | `totem1234` |
-| Band | 2.4 GHz (iOS "Maximize Compatibility", Android "Compatibility Mode") |
-| Trigger | triple tap of the physical SOS button → `start_ota` (still wired in v5.0.3; see note below) |
+| Soft-AP SSID | `'{}_{}'.format(cfg.hostname, cfg.mac[-4:])`, e.g. `mytotem_a1b2` |
+| Soft-AP key | `totem1234` |
+| `ifconfig` | `('10.9.8.7', '255.255.255.0', '192.168.0.1', '8.8.8.8')` |
+| Served from | `m_assets/web/`, over `HTTP/1.0 200 OK` / `404 Not Found` |
+| Upgrade | RFC 6455 handshake (`Sec-WebSocket-Key`, the `258EAFA5-…` GUID, `HTTP/1.1 101 Switching Protocol`) |
+| Wrote | `user-config.json` (`WiFi Network Saved`) and `perform.ota` |
+| Log lines | `Starting server...`, `Hotspot launched: {}`, `WebSocket Init Request...`, `WebSocket Connection initiated...`, `Server max inactivity period reached...` |
 
-<Steps>
-  <Step title="Trigger">
-    The SOS button is a **physical** push button driven by `button.AsyncButton`
-    (`sw_sos = AsyncButton(0, hold_ms=800, long_hold_ms=10000)` in `compass`), **not** the
-    capacitive Touch Crystal (`touch_button_v2`, a separate input). Its triple tap is wired
-    to `start_ota` (`sw_sos.cb_triple_tap`) — **confirmed**, identical in v5.0.2 and v5.0.3;
-    SOS itself is started by *holding* the button (`start_sos`). Earlier revisions of this
-    page said the triple tap belonged to the Touch Crystal and SOS rather than OTA; that was
-    wrong. There is **no** `update mode` / `updater` string in the image: the gesture calls
-    the same `compass.start_ota` entry point that the ESP-NOW (`cb_start_ota`) and BLE
-    (`cb__start_ota`) triggers use. The "searching for WiFi" halo animation is supported
-    (`anim_gnss_search`, `Searching for WiFi network`).
-  </Step>
-  <Step title="Join totemupdate">
-    Station mode connects to the `totemupdate` SSID on 2.4 GHz (`conn_to_wifi`).
-  </Step>
-  <Step title="Download">
-    Over HTTP via `f_lib/requests.py`, streaming into the inactive OTA slot
-    (`ota_block_writer.py`).
-  </Step>
-  <Step title="Verify & reboot">
-    The image SHA-256 is checked (`File integrity confirmed!` /
-    `SHA256 hash does NOT match`); on success the device reboots into the new slot, on
-    failure it reverts.
-  </Step>
-</Steps>
-
-<Note>
-The specific OTA-state LED colors and ring/spinner animations earlier drafts described
-(pink spinning ring = can't join, white progress ring = downloading, ring fills white =
-success, orange blink = failure) are **not confirmed** by the WiFi/OTA strings. Only
-palette color symbols like `hot_pink` and `orange` (and `PROGRESS_RGB` / `ERROR_RGB`)
-exist — there is no ring/spinner/progress-ring animation string binding a color to an OTA
-state. The one supported state reference is the "searching for WiFi" halo
-(`anim_gnss_search`); any color-to-state mapping would need separate LED/animation
-analysis to confirm.
-</Note>
+It also set `ota_status.step_id = 3` — the only assignment of that value anywhere, which
+is why the LED callback's `step_id >= 3` test reads oddly on the surviving path.
 
 ## WiFi capabilities present
 
-Beyond OTA, the WiFi driver exposes standard station/AP features (scan, connect,
-protocol/tx-power control — `WLAN settings changed to (pwr, proto, txpower)`). These
-share the single 2.4 GHz radio with BLE and ESP-NOW and are not used during normal
-navigation, only for updates and any cloud sync.
+`f_lib/wifi.py` exposes exactly seven methods (`f_lib_wifi.dis:183`): `__init__`,
+`connect`, `connect_to_known`, `disconnect(power_off=True)`, `get_nearby_networks`,
+`power_on`, `scan(max_n=10)`. `scan` powers the interface on, calls `wlan.scan()` and
+sorts the result in reverse (signal-strongest first); `get_nearby_networks` turns that
+into the `nearby_networks` list `connect_to_known` intersects against.
+
+<Note>
+The string `WLAN settings changed to (pwr, proto, txpower) ({}, {})` lives in
+`espnow_conn_v2.dis:2735`, not in the WiFi driver — it belongs to the ESP-NOW radio
+manager, which owns the same 2.4 GHz interface during normal operation. Earlier revisions
+of this page attributed it to the WiFi stack.
+</Note>
+
+The radio is shared with BLE and ESP-NOW, which is why `prep_wlan()` tears it down with
+`disconnect(power_off=True)` and brings it back up with power save disabled before an
+update, and why `stop_ota` disconnects again on the way out.

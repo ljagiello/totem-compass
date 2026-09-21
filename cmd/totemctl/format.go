@@ -35,16 +35,45 @@ func (p *printer) status(format string, args ...any) {
 }
 
 // emit writes v as one JSON line tagged with its type.
+//
+// A value JSON cannot hold still produces a line, saying what could not
+// be written and what type it was.
+//
+// This is a backstop, not the fix for a hole any caller has: the
+// protocol decoder already puts every float it hands out through
+// finite(), for this reason, and mesh frames are handled where they are
+// decoded — there the raw hex survives, which matters more than the
+// type name. What this catches is a value that reaches JSON without
+// having been through either, which is a shape this tool grows every
+// time it prints something new.
 func (p *printer) emit(v any) {
 	t := reflect.TypeOf(v)
+	if t == nil {
+		// A nil interface, which reflect has no type for: asking it for
+		// a name panics, and this is the mode a stream is watched in.
+		// Reported on stderr the same way the marshal failure below is:
+		// a line saying nothing arrived is worth the same word as one
+		// saying it could not be written, and the last commit said this
+		// had been done when it had not.
+		p.log.Warn("cannot encode as JSON", "type", "", "err", "nil value")
+		p.println(`{"type":"","error":"nothing to encode"}`)
+		return
+	}
 	b, err := json.Marshal(struct {
 		Type string `json:"type"`
 		Data any    `json:"data"`
 	}{t.Name(), v})
-	if err != nil {
-		p.log.Warn("cannot encode as JSON", "type", t.Name(), "err", err)
+	if err == nil {
+		p.println(string(b))
 		return
 	}
+	p.log.Warn("cannot encode as JSON", "type", t.Name(), "err", err)
+	// Two strings, which encoding/json cannot refuse: an invalid byte in
+	// one is escaped rather than returned as an error.
+	b, _ = json.Marshal(struct {
+		Type  string `json:"type"`
+		Error string `json:"error"`
+	}{t.Name(), err.Error()})
 	p.println(string(b))
 }
 

@@ -1,30 +1,137 @@
 ---
 title: "Power, input & sensors"
-description: "Battery/sleep management, the Touch Crystal, the power and SOS buttons, Vibe Mode, and the temperature sensor."
+description: "Battery measurement and health, power modes, shutdown paths, the watchdog, the Touch Crystal, the power and SOS buttons, Vibe Mode, and the temperature sensor."
 ---
 
-## Power & battery
+The [ESP32 emulator](/reference/esp32-emulator#power) models the battery curve, the power
+modes, the sleep accounting and the watchdog's blocker rule; its
+[touch section](/reference/esp32-emulator#touch-and-the-buttons) models the gestures below.
 
-`device_power.py` owns the power state machine; `wdt_manager.py` the watchdogs.
+<Note>
+  **Evidence convention on this page.** Claims are **confirmed** when they were read
+  directly out of the v5.0.3 disassembly (cited as `file.dis:line`), **inferred** when they
+  are reasoned from strings or structure, and called out explicitly when they are **not
+  recoverable** from the frozen bytecode. Line numbers refer to `re/v5.0.3/mpy/*.dis`.
+</Note>
 
-| Concept | Evidence |
+## Where the power code lives
+
+`device_power.py` does **not** hold the power state machine — it only contains
+`shut_down_tasks`, `restore_ble_secrets_vfs` and `save_ble_secrets`
+(`device_power.dis:203`, the module's `children` list). The state machine is spread over:
+
+| Concern | Location |
 | --- | --- |
-| Power modes | `Changing power mode from {} to: {}`, `Power Control \| Desired boot_mode: {}` |
-| Boot cause | `BOOT_POWER_ON`, `BOOT_SHUTDOWN` |
-| Battery health | `Changing battery health to: {}`, `BATT_POOR_TOUCH` |
-| Low-voltage cutoff | `Voltages too low, powering down \| {}v` |
-| OTA gate | `Battery too low for OTA update` (guard confirmed; the numeric threshold is not present in the binary) |
-| Battery % | `peripherals.get_batt_pct` — piecewise voltage table (below) |
+| Battery sampling, health ladder, WDT timeout | `Compass.backend_checks` (`compass.dis:1898`) |
+| Battery health transitions | `Compass.change_power_level` (`compass.dis:6751`) |
+| Eco / normal brightness modes | `Compass.change_power_mode` (`compass.dis:8446`) |
+| Learned maximum voltage | `Compass.one_min_coro` (`compass.dis:9560`) |
+| Shutdown / reboot sequencing | `Compass.shut_down` → `device_power.shut_down_tasks` |
+| Light sleep | `espnow_conn_v2.communicate_v2` / `smart_sleep` (`espnow_conn_v2.dis:2809`, `:3556`) |
+| Watchdog | `wdt_manager.py` |
 
-### Battery percentage
+## Power hardware
 
-`peripherals.get_batt_pct` maps cell voltage to a percentage with a piecewise-linear
-voltage table, optionally rescaled by a learned maximum voltage. v5.0.3 recalibrated it
-(**confirmed** from the disassembly):
+All pins below are **confirmed** from `Compass.__init__` (`compass.dis:1275`–`1445`).
 
-- The table's top segment (4.38–4.13 V) was removed, so **4.12 V now reads 100%**
-  (v5.0.2: 61%). The curve was renormalised (`/605`).
-- The learned-max rescale applies only when the learned maximum is **below 4.12 V**.
+| Signal | Pin | Configuration | Purpose |
+| --- | --- | --- | --- |
+| Battery sense | GPIO 34 | `ADC(Pin(34), atten=ADC.ATTN_11DB)` (`self.v_supply`) | Cell voltage |
+| Charger present | GPIO 39 | `Pin(39, Pin.IN)` (`self.v_in`) | `modes.is_charging = self.v_in.value()` |
+| Microphone | GPIO 36 | `ADC(Pin(36), atten=ADC.ATTN_11DB)` (`self.mic`) | Vibe Mode |
+| Power button / power gate | GPIO 4 | `Pin(4, Pin.IN, Pin.PULL_UP)` as a button; re-opened as `Pin(4, Pin.OUT, Pin.PULL_UP)` and driven low to power down | See [Shutdown](#shutdown-and-reboot) |
+| SOS button | GPIO 0 | `Pin(0, Pin.IN, Pin.PULL_UP)` | See [Physical buttons](#physical-buttons-power--sos) |
+| SOS indicator LED | GPIO 14 | `Pin(Pin(14), Pin.OUT, Pin.PULL_DOWN)` (`self.sos_led`), off at init | Blinked by `sos_blink` |
+| Touch Crystal | GPIO 27 (**inferred**) | `c_cap_touch.enable(27, self.on_touch)` (`touch_button_v2.dis`, `start`) — the literal `27` is **confirmed**; that it is a GPIO number rather than a driver channel is inferred (GPIO 27 is ESP32 `TOUCH7`) | Capacitive pad |
+
+Cell voltage is read through a fixed linear calibration (**confirmed**,
+`compass.dis:1446`):
+
+```python
+battery_volt = 0.0017 * self.v_supply.read() + 0.206
+```
+
+Readings are smoothed through a 5-deep queue, `self.volt_smooth = CSmoothQ(5)`
+(`compass.dis:1306`), refilled once per `backend_checks` pass. `backend_checks` defaults to
+`interval_ms=3000` (`compass.dis:1105`), so `modes.batt_volts` is a ~15-second rolling
+average.
+
+## Battery percentage
+
+`peripherals.get_batt_pct(max_volts, cur_volts)` (`peripherals.dis:296`) converts volts to a
+percentage against a piecewise-linear table stored as a single 232-byte `bytes` constant in
+the module's `obj_table`. The bytes are **58 little-endian `(millivolts, raw)` `uint16`
+pairs**, descending from `(4120, 605)` to `(3190, 0)` (**confirmed** — decoded from the
+literal at `peripherals.dis:313`).
+
+The whole function, recovered from bytecode:
+
+```python
+T = <232-byte table>                    # 58 pairs of (mv, raw), high → low
+TOP_MV, TOP_RAW = 4120, 605             # T[0:4]
+BOT_MV          = 3190                  # T[len(T)-4 : len(T)-2]
+
+def get_batt_pct(max_volts, cur_volts):
+    if not cur_volts:
+        return 0
+    mv = int(cur_volts * 1000 + 0.5)
+
+    # Learned-maximum rescale — only inside this window, and it only scales UP.
+    if max_volts:
+        max_mv = int(max_volts * 1000 + 0.5)
+        if BOT_MV < max_mv < TOP_MV:
+            mv = BOT_MV + (mv - BOT_MV) * (TOP_MV - BOT_MV) // (max_mv - BOT_MV)
+
+    if mv >= TOP_MV:                    # clamps are OUTSIDE the `if max_volts` block
+        return 100
+    if mv < BOT_MV:
+        return 0
+
+    hi_mv, hi_raw = TOP_MV, TOP_RAW
+    for i in range(4, len(T), 4):       # walk down until the bracket is found
+        lo_mv, lo_raw = u16(T, i), u16(T, i + 2)
+        if mv >= lo_mv:
+            raw = lo_raw + (mv - lo_mv) * (hi_raw - lo_raw) // (hi_mv - lo_mv)
+            raw = raw * 1000 // TOP_RAW
+            return (raw + 5) // 10      # round-half-up to whole percent
+        hi_mv, hi_raw = lo_mv, lo_raw
+    return 0
+```
+
+Two consequences worth stating plainly:
+
+- The `>= 4120 → 100` and `< 3190 → 0` clamps are **not** gated on a learned maximum. A
+  device that has never learned one still reads 100% at 4.12 V and 0% below 3.19 V.
+- The rescale window is strict on both ends (`3190 < max_mv < 4120`), and because the
+  divisor `max_mv − 3190` is always smaller than the numerator's `930`, a learned maximum
+  can only push the reported percentage **up**, never down.
+
+### The curve
+
+Representative points from the 58-entry table, with the percentage the algorithm returns
+for exactly that voltage and no learned maximum:
+
+| Volts | Raw | % | Volts | Raw | % |
+| --- | --- | --- | --- | --- | --- |
+| 4.12 | 605 | 100 | 3.70 | 190 | 31 |
+| 4.05 | 560 | 93 | 3.60 | 120 | 20 |
+| 4.00 | 520 | 86 | 3.55 | 90 | 15 |
+| 3.95 | 470 | 78 | 3.50 | 50 | 8 |
+| 3.90 | 410 | 68 | 3.47 | 40 | 7 |
+| 3.85 | 360 | 60 | 3.43 | 30 | 5 |
+| 3.80 | 305 | 50 | 3.36 | 20 | 3 |
+| 3.75 | 250 | 41 | 3.28 | 10 | 2 |
+| 3.72 | 210 | 35 | 3.19 | 0 | 0 |
+
+Spacing is 10–20 mV from 4.12 V down to 3.50 V and then widens sharply (3.47, 3.43, 3.36,
+3.28, 3.19) — the last 8% of the gauge covers 310 mV of real cell voltage.
+
+### v5.0.3 recalibration
+
+**Confirmed** by decoding both tables. v5.0.2's constant is 332 bytes / 83 pairs, topping
+out at `(4380, 1000)`; v5.0.3's is 232 bytes / 58 pairs, topping out at `(4120, 605)`. The
+lower 58 pairs are byte-identical between the two versions — v5.0.3 simply deleted the 25
+entries above 4.12 V and renormalised against the new top raw value.
 
 | Cell voltage (no learned max) | v5.0.3 | v5.0.2 |
 | --- | --- | --- |
@@ -35,54 +142,287 @@ voltage table, optionally rescaled by a learned maximum voltage. v5.0.3 recalibr
 Battery % therefore reads noticeably higher on v5.0.3 and reaches 100% at a normal full
 charge.
 
-### Sleep
+### Learning the maximum
 
-The device uses aggressive sleep to extend battery life. A specific "~12 h for v5.0"
-endurance figure is not evidenced in the binary (it comes from the v5.0 release
-notes/marketing); the only `12`-hour literal, `[activation_check] Activation doesn't start for 12hrs`,
-concerns promo-activation timing (see [Navigation](/subsystems/navigation#promo-activation)),
-not battery endurance.
+`config.batt_max_volts` starts at `0` (`project_data.dis:1283`), which is falsy, so a fresh
+device applies no rescale at all. It is written from exactly one place — `one_min_coro`,
+under `if modes.is_charging` (`compass.dis:9596`–`9668`) — and always as **peak minus
+0.04 V**:
+
+```python
+if modes.is_charging and modes.batt_volts_max:
+    if modes.batt_volts_max > modes.batt_volts_prev:      # still climbing
+        modes.batt_volts_prev = modes.batt_volts_max
+        modes.volts_no_rise_cnt = 0
+    elif modes.batt_volts_max == modes.batt_volts_prev:   # plateau
+        if modes.batt_volts_max > config.batt_max_volts - 0.04:
+            config.batt_max_volts = modes.batt_volts_max - 0.04   # "Max volts updated A: {}"
+        else:
+            if modes.volts_no_rise_cnt < 5:
+                modes.volts_no_rise_cnt += 1
+            if modes.volts_no_rise_cnt >= 5:
+                config.batt_max_volts = modes.batt_volts_max - 0.04   # "Max volts updated B: {}"
+```
+
+`modes.batt_volts_max` is the running `volt_smooth.max()` captured while charging
+(`compass.dis:2758`). Branch A fires immediately when the new peak is at or above the
+stored learned maximum; branch B needs five consecutive one-minute passes with no rise.
+Both log lines (`Max volts updated A: {}` / `Max volts updated B: {}`) exist only here.
+
+## Battery health (`power_level`)
+
+`modes.power_level` defaults to `0` (`project_data.dis:782`). `backend_checks` recomputes it
+every pass and calls `change_power_level` only when it differs
+(`compass.dis:2760`–`2890`, **confirmed**):
+
+| Reading | Resulting level |
+| --- | --- |
+| `batt_volts < 3.15` **and not charging** | log `Voltages too low, powering down \| {}v`, then `device_off()` |
+| `batt_volts >= 3.65` | 0 |
+| `3.45 <= batt_volts < 3.65` | 0 if already at level 0; if `power_level` is already above 0, stays 2 until `batt_volts > 3.49` (that is, `3.45 + 0.04`), then 0 |
+| `batt_volts < 3.45` | 2 |
+
+Three things this corrects or adds:
+
+- **Level 1 is dead.** `change_power_level` implements a `power_level == 1` branch, but
+  `backend_checks` only ever produces 0 or 2, so nothing assigns it.
+- **The ladder runs while charging too.** Only the `< 3.15 V` cutoff sits in the
+  not-charging branch; the health ladder, the touch sensitivity switch and the watchdog
+  timeout adjustment all run on both paths (the charging branch's `JUMP 36` skips only the
+  cutoff).
+- **The 3.45–3.65 V band is sticky.** Once degraded, the device stays at level 2 until it
+  climbs past 3.49 V, which prevents flapping around 3.45 V.
+
+### What each level does
+
+`change_power_level` (`compass.dis:6751`), **confirmed**:
 
 <CardGroup cols={2}>
-  <Card title="Light sleep" icon="moon">
-    `Awoke from lightsleep | Slept for: {} of {} | Total Sleep: {} | sleep duty: {:.3f}`.
-    Radios are gated off (`Not sleeping due radio needing to turn on soon`); LED gating
-    during light sleep is inferred, not directly evidenced. A `dev_total_lightsleep_ms`
-    counter tracks duty.
+  <Card title="Level 0 — healthy" icon="battery-full">
+    Sets `modes.evt_battery_usable`. If `evt_battery_charged` was clear, stops the
+    `low_battery` task, restores the crystal (`crystal_default()` when vertical, or
+    `init_touch(True)` when horizontal and touch is off), then sets
+    `evt_battery_charged`.
   </Card>
-  <Card title="Deep sleep" icon="power-off">
-    State persists in RTC memory (`f_lib/rtc_mem.py`, `rtc_v2.py`).
-    Wake: `Awake from Deep Sleep | {} | Free mem: {}`.
+  <Card title="Level 2 — degraded" icon="battery-low">
+    Clears `evt_battery_charged` and `evt_battery_usable`, turns the crystal off, waits
+    10 ms, **disables the Touch Crystal** (`init_touch(False)`), launches
+    `leds.crystal.breathe_v2` as task `low_battery` in red at `brt=0.3`, and sets
+    `modes.is_save_config = True`.
   </Card>
 </CardGroup>
 
-GNSS RTC sync can hold off sleep (`Block sleep for GNSS RTC Sync`) so a time sync
-completes before the device drops power.
+`evt_battery_charged` is the gate the rest of the firmware actually reads. **Confirmed**
+consumers:
 
-### Watchdogs
+| Gate | Behaviour when clear |
+| --- | --- |
+| `Compass.start_ota` (`compass.dis:6908`) | logs `Battery too low for OTA update` and returns without starting |
+| `Compass.ble_schedule_mgr` (`compass.dis:5925`) | logs `Battery too low for BLE` and calls `start_ble(is_force_off=True)` |
+| `Compass.toggle_brightness` (`compass.dis:8389`) | power-button single tap returns immediately; brightness cannot be toggled |
+| `compassing`, `ble_manager`, `ble_controller` | additional render/link gates |
 
-`wdt_manager.py` runs a condition/blocker model (classes `WdtManager` / `WdtConditions`
-/ `WdtBlockers`): the WDT feed loop is enabled only while **no** condition and **no**
-blocker is active — `_should_enable` returns False as soon as any is set.
+This resolves the old "OTA gate: numeric threshold is not present in the binary" note. The
+OTA threshold *is* recoverable — it is indirect. OTA requires health level 0, which means
+`batt_volts >= 3.65 V`, or `> 3.49 V` if the device was already degraded.
+
+### Boot-time battery check
+
+`Compass.start` samples the battery before the main loop and, if
+`modes.batt_volts < 3.45`, waits on `modes.anim_boot_batt_pct` and then forces
+`change_power_level(power_level=2)` (`compass.dis:5494`–`5512`, **confirmed**) — a device
+booted flat comes up already in the degraded state.
+
+## Power modes (eco / normal)
+
+`Compass.change_power_mode(power_mode)` (`compass.dis:8446`, **confirmed**):
+
+| `power_mode` | Brightness | Effects |
+| --- | --- | --- |
+| `1` — eco | `0.1` | `modes.is_eco_mode = config.is_eco_mode = 1`, `config.power_mode = 1`, clears `modes.evt_non_eco_mode`, starts `modes.eco_mode_start`; the halo ring is turned **off** entirely |
+| `2` — normal | `0.6` | `modes.is_eco_mode = config.is_eco_mode = 0`, `config.power_mode = 2`, sets `modes.evt_non_eco_mode`; ring filled at `0.6` |
+| anything else | — | returns `False` without changing anything |
+
+Leaving eco mode accumulates `modes.eco_mode_sec` from `modes.eco_mode_start`, so total
+eco-mode time is tracked across a session. The function logs
+`Changing power mode from {} to: {}`.
+
+The power button's single tap (`Compass.toggle_brightness`, `compass.dis:8386`) simply
+flips between the two: it reads `modes.is_eco_mode`, XORs to the other mode, and calls
+`change_power_mode`. It is a no-op while `modes.is_power_down` is set or the battery is
+degraded.
+
+`config.power_mode` defaults to `0` (`project_data.dis:1376`) — a value
+`change_power_mode` rejects — so the persisted mode is only meaningful once the user has
+toggled brightness at least once.
+
+## Shutdown and reboot
+
+`Compass.shut_down(method)` (`compass.dis:5256`) is the single entry point and is
+idempotent — it returns immediately if `modes.is_power_down` is already set. It persists
+`fusion.mag_offset` into `config.mag_offset`, sets `config.is_silent_boot` when
+`modes.is_silent_reboot`, disables touch, and then calls
+`device_power.shut_down_tasks(method=method)`.
+
+`device_power.shut_down_tasks(method=0, is_save_config=True)` (`device_power.dis:203`,
+**confirmed**) sets the `BOOT_SHUTDOWN` watchdog condition, bumps `config.boots` (and
+`config.boots_failed` when `modes.hw_err_code` is set), saves BLE secrets unless
+`method == 2`, stops the whole task list, powers ESP-NOW off, waits 50 ms and then:
+
+| `method` | Action |
+| --- | --- |
+| `0` | `Pin(4, Pin.OUT, Pin.PULL_UP).off()` — drives GPIO 4 low |
+| `1` | `machine.reset()` (hard reset) |
+| `2` | `machine.soft_reset()` |
+
+For `1` and `2` it first turns the crystal and ring off (unless `modes.is_silent_reboot`)
+and waits 100 ms so the LEDs are visibly dark before the reset.
+
+Method `0` drives the *same* GPIO 4 line that the power button reads. The firmware is
+electrically asserting the button line; that an external latch or PMIC interprets a
+sustained low as "cut power" is **inferred** — the bytecode only shows the pin being driven
+low, and nothing after it runs.
+
+Callers, all **confirmed**:
+
+| Caller | Method |
+| --- | --- |
+| `Compass.device_off()` (`compass.dis:3746`) | `shut_down(method=0)` |
+| `Compass.device_reboot(is_soft_reboot=False)` (`compass.dis:3763`) | `shut_down(2)` if soft, else `shut_down(1)` |
+| `Compass.power_control(boot_mode)` (`compass.dis:5146`) | `1` → `device_reboot()`, `2` → `device_reboot(is_soft_reboot=True)`, `3` → `device_off()`; logs `Power Control \| Desired boot_mode: {}` |
+
+`power_control` is wired to `parser.cb_power_ctrl` (`compass.dis:1370`), so a peer or the
+app can reboot or power off the device remotely.
+
+### Reset cause at boot
+
+`project_main` reads `machine.reset_cause()` once into `_reset_cause` and logs
+`Reset Cause: {}` (`project_main.dis:327`–`336`). Two branches depend on it
+(**confirmed**):
+
+- `_reset_cause == 5` (soft reset) → `WDT.delete()` immediately at import time.
+- `_reset_cause == 3` (watchdog reset) → the boot animation is skipped; the ring is
+  force-powered on but not coloured (`project_main.dis:656`).
+
+## Sleep
+
+The device uses **light sleep** only. A "~12 h for v5.0" endurance figure is not evidenced
+in the binary (it comes from the v5.0 release notes); the only `12`-hour literal,
+`[activation_check] Activation doesn't start for 12hrs`, concerns promo-activation timing
+(see [Navigation](/subsystems/navigation#promo-activation)), not battery endurance.
+
+### Light sleep
+
+`espnow_conn_v2` imports `from machine import lightsleep` (`espnow_conn_v2.dis:641`) and
+calls it inside `smart_sleep(sleep_duration_ms, speed_id)` (`:3556`). `smart_sleep` returns
+without sleeping when `sleep_duration_ms < 10`.
+
+The decision to sleep is made in `communicate_v2` (**confirmed**, `espnow_conn_v2.dis:3400`–`3455`):
+
+| Gate | Log line |
+| --- | --- |
+| `hpt.ms_until_radio_on < 100` | `Not sleeping due radio needing to turn on soon` |
+| GNSS RTC sync pending (`evt_rtc_ready` set, `rtc_method == 1`, more than 15 s of slack) | `Block sleep for GNSS RTC Sync` |
+| invalid frames seen | `Lightsleep skipped due to invalid messages` |
+
+After waking, `smart_sleep` adds the elapsed time to `modes.dev_total_lightsleep_ms` and
+`modes.lightsleep_ms`, and re-activates the WLAN driver (`self.wlan.active(True)`) unless a
+WLAN kick is in progress.
+
+The `Awoke from lightsleep | Slept for: {} of {} | Total Sleep: {} | sleep duty: {:.3f}`
+line is emitted **only** when `modes.is_timing_debug` is set (`espnow_conn_v2.dis:4156`) —
+it is a debug counter readout, not a normal-operation log.
+
+### Deep sleep is not used in this build
+
+**Confirmed by absence:** no module in the 94 frozen modules calls `machine.deepsleep()`.
+The only occurrence of the word is in a stock MicroPython `boot.py` template string inside
+`inisetup.dis`.
+
+Three artefacts previously read as evidence of deep sleep, and what they actually are:
+
+- **`Awake from Deep Sleep | {} | Free mem: {}`** does exist, but it is a bare `print()` in
+  `project_main` (`project_main.dis:1296`) reachable only when `boot_mode == 2` (the
+  `mpy_dev.dev_comms` developer boot path) **and** `_reset_cause == 4`
+  (`DEEPSLEEP_RESET`). Since nothing ever enters deep sleep, that reset cause never occurs.
+- **`esp32.wake_on_ext0(pin=self.pin, level=esp32.WAKEUP_ALL_LOW)`** is called on every
+  button press (`button.dis`, `pressed`), together with
+  `esp32.gpio_deep_sleep_hold(False)`. These arm a deep-sleep wake source that is never
+  used — vestigial code from an earlier power design (**inferred**).
+- `f_lib/rtc_mem.py` is real, and what it stores is **not sleep state**. It has six
+  importers, not the three an earlier revision of this page claimed as confirmed:
+  `ble_core`, `ble_manager` and `device_power` (BLE bonding secrets, category 1),
+  `project_data` (the category 2 device snapshot), `project_main` (which calls `reload()`
+  at boot and reads the category 0 reboot-into-service mailbox), and
+  `f_lib/firmware_ota`, which imports it and never uses it (**confirmed** — counted from
+  `IMPORT_NAME f_lib.rtc_mem` across all 94 modules). See
+  [f_lib](/reference/f-lib) for the frame format and the three categories.
+
+## Watchdog
+
+`wdt_manager.py` builds a single module-level singleton, `wdt_mgr = WdtManager()`
+(`wdt_manager.dis:128`). Everything below is **confirmed** from that module.
+
+```python
+class WdtBlockers:   LOG_ROTATE = 0;    VFS_WRITE = 1;   WLAN_KICK = 2
+class WdtConditions: BOOT_POWER_ON = 0; BLE_ACTIVE = 1;  OTA_ACTIVE = 2; BOOT_SHUTDOWN = 3
+```
+
+State at construction: `_timeout_ms = 2000`, `conditions = [True, False, False, False]`
+(so `BOOT_POWER_ON` is already set before anything runs), `blockers = [0, 0, 0]`, and
+`_feed_loop` is launched as task `wdt_feed_loop`.
+
+| Mechanism | Detail |
+| --- | --- |
+| Blockers | **counters**, not flags. `set_block(i, True)` increments and `False` decrements, so two overlapping writers do not clear each other's block. `debug()` prints each as `name(count)`. |
+| Conditions | plain booleans assigned by `set_condition(i, value)`. `set_condition_async(i, value, pause_ms)` sleeps first, then assigns. |
+| Arming rule | `_should_enable()` returns `True` only when **no blocker count is above zero and all four conditions are `False`**. Any blocker also sets `is_blocking_tasks`. |
+| Feed loop | always runs; sleeps 250 ms and feeds only while `is_active` and a `wdt` object exists. |
+| On/off | `update()` constructs `WDT(timeout=self._timeout_ms)` when it should be enabled, and calls `WDT.delete()` when it should not — logging `Turning on WDT` / `Turning off WDT`. |
+| Timeout change | `update(timeout_ms=…)` logs `Updating WDT threshold from: {} to {}` and, when currently armed, deletes and rebuilds the WDT so the new timeout takes effect. |
+| Debug readout | `[WDT {}] cond=[{}] blk=[{}]` via `print()`, with condition names `('booting', 'ble', 'ota', 'shutdown')` and blocker names `('log rotate', 'vfs write', 'wlan kick')`. |
+
+`WDT.delete()` and `WDT.status()` are called as **class** methods. Stock MicroPython's
+`machine.WDT` has neither, so this is a Totem-patched WDT implementation (**inferred** from
+the call shape).
+
+### Who sets what
+
+| Signal | Set by | Cleared by |
+| --- | --- | --- |
+| `BOOT_POWER_ON` | `Compass.start`, at the top (`compass.dis:5461`) | `set_condition_async(..., pause_ms=8000)` launched immediately after — **8000 ms after boot** (`compass.dis:5470`) |
+| `BLE_ACTIVE` | `ble_manager` (`ble_manager.dis:1261`, `:4319`, `:4695`, `:4919`) | same |
+| `OTA_ACTIVE` | `Compass.start_ota` (`compass.dis:6922`) | the OTA path |
+| `BOOT_SHUTDOWN` | `device_power.shut_down_tasks`, first statement (`device_power.dis:209`) | never — the device is going away |
+| `VFS_WRITE` | `device_power`, `debugger`, `nav_logger`, `project_data`, `espnow_conn_v2`, `compass` around every filesystem write | the matching `set_block(..., False)` |
+| `LOG_ROTATE` | `nav_logger` (`nav_logger.dis:1224`, `:1401`) | same |
+| `WLAN_KICK` | `ble_manager` around its WiFi-driver kick (`ble_manager.dis:1440`, `:1837`) — new in v5.0.3 | same |
+
+### Timeout follows battery health
+
+`backend_checks` recomputes the timeout on every pass (`compass.dis:2860`, **confirmed**):
+
+```python
+if wdt_mgr.is_active:
+    timeout = 4000 if power_level == 2 else 2000
+    if timeout != wdt_mgr.wdt_timeout_ms:
+        wdt_mgr.update(timeout_ms=timeout)
+```
+
+A degraded battery doubles the watchdog window to 4 s, giving the slower, brown-out-prone
+device more slack before a reset.
+
+### Recovery
 
 | Concept | Evidence |
 | --- | --- |
-| Feed loop | `Starting WDT feed loop`, `Manually feeding WDT` |
-| Threshold updates | `Updating WDT threshold from: {} to {}` |
-| Condition/blocker engine | `[WDT {}] cond=[{}] blk=[{}]` |
-| Blockers | `('log rotate', 'vfs write', 'wlan kick')` — `WLAN_KICK = 2` is new in v5.0.3 (v5.0.2: `log rotate`, `vfs write` only) |
 | Recovery / boot-loop counters | `Performing immediate WDT Recovery`, `calc_recovery_risk`, `recovery_count`, `boots_wdt` |
 | BLE handoff watchdog | `ble_handoff_watchdog`, `[BLE Watchdog] Handoff stall detected` |
 
-The v5.0.3 `WLAN_KICK` blocker (`'wlan kick'`) is set and cleared by `ble_manager` around
-its new WiFi-driver "kick", so the watchdog is held off while the WLAN driver is being
-kicked.
+A separate `ble_handoff_watchdog` guards BLE TX-ownership handoff between the phone app and
+the ESP, reclaiming TX priority when a stall is detected.
 
-A separate `ble_handoff_watchdog` guards BLE TX-ownership handoff between the phone app
-and the ESP, reclaiming TX priority when a stall is detected
-(`[BLE Watchdog] Handoff stall detected`).
-
-### Scheduled BLE off-time (v5.0.3)
+## Scheduled BLE off-time (v5.0.3)
 
 `compass.ble_schedule_mgr` turns BLE off on a schedule. In v5.0.3 it:
 
@@ -91,40 +431,97 @@ and the ESP, reclaiming TX priority when a stall is detected
   and skips that wait entirely when `ble_conn.is_stalled`;
 - also waits for the BLE log uploader to go idle
   (`Waiting on BLE log upload to finish before scheduled disconnect`);
-- after **two or more consecutive hung links** (`stall_count ≥ 2`) keeps BLE off for
+- after **two or more consecutive hung links** (`stall_count >= 2`) keeps BLE off for
   **90 s instead of 30 s** and skips the fast-reconnect window
-  (`BLE hung {} links in a row - staying off {} ms without fast-reconnect bursts`).
+  (`BLE hung {} links in a row - staying off {} ms without fast-reconnect bursts`);
+- force-stops BLE whenever `evt_battery_charged` is clear (`Battery too low for BLE`).
+
+The `30000` / `90000` / `20000` literals are **confirmed** at `compass.dis:5752`–`5757`.
 
 `start_ble` now ignores a reconnect request when BLE is already active
 (`[Compass.start_ble] BLE already active; reconnect request ignored`).
 
 ## Touch Crystal
 
-Capacitive touch input via `touch_button_v2.py`, which wraps a custom native driver
-imported in Python as `c_cap_touch` (`IMPORT_NAME` / `STORE_NAME c_cap_touch`), built on
-the ESP-IDF `touch_pad` API (`touch_pad_init failed`, etc.) — not the stock touch module. The Touch Crystal is a separate input from the two
-physical buttons below. (v5.0.2 also froze an `io_mgr.py`, but it contained only
-`import io` and had no importer; it is removed in v5.0.3.)
+Capacitive input via `touch_button_v2.py`, which wraps a custom native driver imported in
+Python as `c_cap_touch` (`IMPORT_NAME` / `STORE_NAME c_cap_touch`), built on the ESP-IDF
+`touch_pad` API (`touch_pad_init failed`, etc.) — not the stock MicroPython touch module.
+The Touch Crystal is a separate input from the two physical buttons below. (v5.0.2 also
+froze an `io_mgr.py`, but it contained only `import io` and had no importer; it is removed
+in v5.0.3.)
+
+### Gestures
+
+The driver reports an event id indexing `TOUCH_EVENTS` (**confirmed**, the tuple literal in
+`touch_button_v2.dis:115`):
+
+```python
+TOUCH_EVENTS = ('N/A', 'LONG_HOLD', 'SHORT_HOLD', 'SINGLE_TAP',
+                'DOUBLE_TAP', 'MULTI_TAP', 'EX_LONG_HOLD')
+```
+
+`TouchButtonV2` carries a matching callback per gesture: `cb_single_tap`, `cb_double_tap`,
+`cb_triple_tap`, `cb_multi_tap`, `cb_short_hold`, `cb_long_hold`, `cb_ex_long_hold`.
+Hold thresholds default to (**confirmed**, `touch_button_v2.dis`, `__init__`):
+
+| Field | Default |
+| --- | --- |
+| `_short_hold_ms` | 360 |
+| `_long_hold_ms` | 1200 |
+| `_ex_hold_hold_ms` | 7200 |
+
+Pairing is a touch-crystal long hold of exactly 1200 ms.
 
 | Concept | Evidence |
 | --- | --- |
 | Tap events | `[on_touch] Event \| tap_count: {} \| duration_ms: {}` |
-| Gestures | `DOUBLE_TAP`, single tap, `on_release`, `Taps: {}` |
+| Release events | `[on_release] Release Event \| duration_ms: {} \| short_hold_ms: {}` |
 | Adaptive sensitivity | `[touch] Low battery mode ON` / `[touch] Low battery mode OFF` |
 | Debounce after boot | `Booted: {} ago, waiting: {} before enabling touch` |
-| Temporary disable | `Block Touch starting/Completed: {}` |
+| Temporary disable | `Block Touch starting: {}` / `Block Touch Completed: {}` |
+| Diagnostics | `val: {} \| base: {} \| thr: {} \| sens: {} \| on: {}` |
 
-Touch sensitivity is recalibrated as the battery drains so the crystal keeps working at
-low voltage. The two low-battery log forms differ: OFF reports a single value
-(`[touch] Low battery mode OFF | sens: {:.3f}`), while ON reports the base and scaled
-values in one line (`[touch] Low battery mode ON | base_sens: {:.3f} → adjusted: {:.3f}`)
-via `_LOW_BATT_FLOOR` and `_LOW_BATT_MULTIPLIER`.
+### Enable sequence
+
+`TouchButtonV2.start()` (**confirmed**) waits on `modes.anim_boot_batt_pct`, sleeps 500 ms,
+and then holds off until at least **5500 ms** have elapsed since `modes.booted`, logging
+`Booted: {} ago, waiting: {} before enabling touch` for the remainder. It then calls
+`c_cap_touch.enable(27, self.on_touch)`, registers `self.on_release` as the hold-release
+callback, turns auto-tune on, and re-applies low-battery mode if `modes.batt_volts` is
+already at or below `BATT_POOR_TOUCH`.
+
+### Low-battery sensitivity
+
+Module constants (**confirmed**, `touch_button_v2.dis:171`–`176`):
+
+```python
+BATT_POOR_TOUCH      = 3.55
+_LOW_BATT_MULTIPLIER = 1.35
+_LOW_BATT_FLOOR      = 0.25
+```
+
+`backend_checks` drives the switch with ±0.04 V of hysteresis, and only while the driver is
+running (`compass.dis:2820`–`2855`):
+
+- **on** when `batt_volts <= 3.55` and low-battery mode is not already active;
+- **off** when `batt_volts > 3.59` (`BATT_POOR_TOUCH + 0.04`) and it is.
+
+Turning it **on** stores the current sensitivity, computes
+`min(max(sens * 1.35, 0.25), 0.5)`, **disables auto-tune** and applies the pinned value,
+logging `[touch] Low battery mode ON | base_sens: {:.3f} → adjusted: {:.3f}`. Turning it
+**off** re-enables auto-tune, calls `c_cap_touch.calibrate()` and logs the single-value form
+`[touch] Low battery mode OFF | sens: {:.3f}`.
+
+Note that at battery health level 2 the Touch Crystal is switched off entirely by
+`change_power_level`, so low-battery sensitivity only matters in the band between 3.55 V
+and the level-2 threshold.
 
 ### Native parameter validation bounds
 
-The native `c_cap_touch` driver validates its parameters against these literal ranges.
-These are **validation bounds**, not defaults — the defaults are non-extractable
-bytecode/C constants.
+These are **not recoverable from the frozen bytecode** — `c_cap_touch` is a native C
+module. They come from the firmware image's read-only strings
+(`re/v5.0.3/rodata_strings.txt:50`–`65`) and are **validation bounds**, not defaults; the
+defaults are compiled-in C constants and remain unrecovered.
 
 | Parameter | Allowed range |
 | --- | --- |
@@ -136,38 +533,92 @@ bytecode/C constants.
 | `ex_long_hold_ms` | 50–30000 |
 | `auto_tune_multiplier` | 1.0–20.0 |
 
+The driver additionally enforces ordering: `short_hold_ms < long_hold_ms < ex_long_hold_ms`
+(`short_hold_ms must be less than long_hold_ms`, `long_hold_ms must be greater than
+short_hold_ms`, `ex_long_hold_ms must be greater than long_hold_ms`). The Python side calls
+`get_`/`set_` accessors for `sensitivity`, `auto_tune`, `auto_tune_multiplier`,
+`multi_tap_window`, `sample_interval` and each hold threshold, plus `calibrate`,
+`get_baseline`, `get_threshold`, `enable`, `disable`, `is_enabled`, `read` and
+`set_hold_release_callback`.
+
 ## Physical buttons (power & SOS)
 
-`button.py` (`button.AsyncButton`) drives **both** physical buttons with an async
-press/hold/multi-tap model (`long_hold_task`, per-gesture `cb_*` callbacks). The default
-wiring is set in `compass` and is **identical in v5.0.2 and v5.0.3** (**confirmed**):
+`button.AsyncButton` drives **both** physical buttons. The constructor signature is
+`AsyncButton(pin, hold_ms=300, long_hold_ms=10000, wake=None)` (**confirmed**,
+`button.dis`, class body), and it opens the pin as `Pin(pin, Pin.IN, Pin.PULL_UP)` — the
+buttons are active-low.
+
+The wiring in `Compass.__init__` is **confirmed** at `compass.dis:1323`–`1444` and is
+identical in v5.0.2 and v5.0.3:
 
 | Button | Constructor | Single tap | Double tap | Triple tap | Hold | Long hold |
 | --- | --- | --- | --- | --- | --- | --- |
-| Power `sw_power` | `AsyncButton(4, hold_ms=800)` (Pin 4) | `toggle_brightness` | `user_enable_ble` (toggles BLE advertising on/off) | — | `device_off` | — |
-| SOS `sw_sos` | `AsyncButton(0, hold_ms=800, long_hold_ms=10000)` | `sos_mute` | — | **`start_ota`** | `start_sos` | `compass_reset` |
+| Power `sw_power` | `AsyncButton(4, hold_ms=800)` | `toggle_brightness` | `user_enable_ble` | — (`None`) | `device_off` | — |
+| SOS `sw_sos` | `AsyncButton(0, hold_ms=800, long_hold_ms=10000)` | `sos_mute` | — (`None`) | **`start_ota`** | `start_sos` | `(compass_reset, 'compass_reset')` |
 
-So the SOS alert is started by **holding** the SOS button, and a **triple tap** of the
-SOS button starts an OTA update. (Earlier revisions of this page said no literal tied a
-physical-button triple tap to any action and that `cb_triple_tap` belonged to the Touch
-Crystal — both wrong; the Touch Crystal is the separate `touch_button_v2` input.) On debug
-builds only (`log._print_lvl == 1`), v5.0.3 rewires the SOS single tap to
-`dev_trigger_upload`, which requests a BLE log upload and then calls `sos_mute`.
+`cb_long_hold` is a `(callable, task_name)` **tuple**, not a bare callable — it defaults to
+`(None, None)` and is launched as `tasks.launch(cb_long_hold[0], task_name=cb_long_hold[1])`.
 
-**v5.0.3 debounce change.** v5.0.2 disabled the button for 50 ms after a press via a
-`debounce` coroutine. v5.0.3 removes that coroutine and instead applies a **30 ms
-timestamp lockout** (`_edge_ms`) in the IRQ handler `changed`, on both press and release
-edges. The effect — more reliable single/double/triple-tap detection — is inferred.
+So the SOS alert is started by **holding** the SOS button, and a **triple tap** of the SOS
+button starts an OTA update. On debug builds only (`log._print_lvl == 1`), `start_ble`
+rewires the SOS single tap to `dev_trigger_upload` (`compass.dis:6217`), which requests a
+BLE log upload and then falls through to `sos_mute`.
 
-| Confirmed SOS behavior | Evidence |
+### Gesture timing
+
+**Confirmed** from `button.dis`:
+
+| Step | Behaviour |
+| --- | --- |
+| Press | `is_pressed = 1`, `hold_start = _edge_ms = ticks_ms()`, `cb_press` fires, `check_hold()` is spawned |
+| Release | `_edge_ms = ticks_ms()`, `tap_count += 1`, logs `Button released` with body `Taps: {}`, restarts the `check_taps` task, fires `cb_release` and cancels the pending hold check |
+| Tap resolution | `check_taps(wait_ms=500)` sleeps 500 ms, snapshots `tap_count`, resets it to zero, then dispatches **exactly one** of `cb_single_tap` / `cb_double_tap` / `cb_triple_tap` — a triple tap does *not* also fire single and double |
+| Hold | `check_hold()` sleeps `hold_ms`, zeroes `tap_count` (so a hold cancels pending taps), re-reads the pin, and only if still pressed sleeps a further **fixed 100 ms** before launching `cb_hold` |
+| Long hold | measured from `hold_start`, not from the hold callback: it sleeps until `ticks_add(hold_start, long_hold_ms)` and re-checks the pin before logging `Executing long hold callback` |
+
+Because the long hold is anchored to the press, `sw_sos`'s 10 000 ms long hold fires 10 s
+after the button first went down — 9.1 s after `start_sos` already ran at
+`hold_ms + 100 ms`.
+
+### v5.0.3 debounce change
+
+**Confirmed** by diffing the two modules. v5.0.2 had `debounce_ms = 50` and a `debounce()`
+coroutine that set `enabled = False`, slept 50 ms and set it back
+(`v5.0.2/mpy/button.dis:513`). v5.0.3 deletes that coroutine and instead uses
+`debounce_ms = 30` with an `_edge_ms` timestamp lockout tested at the top of the IRQ handler
+`changed` and refreshed in both `pressed` and `released`. The effect — more reliable
+single/double/triple-tap detection — is **inferred**.
+
+### SOS
+
+| Behaviour | Evidence |
 | --- | --- |
 | Trigger | hold `sw_sos` (`hold_ms=800`) → `start_sos` |
-| Mute / un-mute | single tap → `sos_mute`; `Muting SOS`, `Un-muting SOS`, `is_sos_mute` |
-| Peer-in-SOS propagation (mesh) | `evt_peer_in_sos` |
-| Crystal LED indication | `crystal_sos`, `crystal_sos_blink` |
+| While active | `config.is_sos = 1`, `msgr.update_sos()`, `sos_blink` runs as task `enable_sos` toggling the GPIO 14 LED, and `sw_sos.cb_hold` is **rewired to `sos_cancel`** so a second hold cancels |
+| Mesh burst | with peers bonded, `enow_v2.send_burst(interval_ms=300, burst_duration_ms=6000)` — on `start_sos` only when `is_send_burst` is set, and unconditionally on `sos_cancel` |
+| Auto-expiry | `config.sos_timeout = rtc.unix(precision=1) + 3600` — SOS **self-cancels after one hour**, via `sw_sos.force_off()` + `sos_cancel()` in `backend_checks` (`compass.dis:2313`). Only armed when `modes.evt_rtc_ready` is set. |
+| Mute / un-mute | single tap → `sos_mute`, gated on **both** `evt_orien_vertical` **and** `evt_peer_in_sos`; logs `Muting SOS` / `Un-muting SOS`, toggles `modes.is_sos_mute` and stops or relaunches the `crystal_sos` task |
+| Cancel cleanup | `sos_cancel` clears `config.is_sos` and `config.sos_timeout`, stops `enable_sos`; `sos_blink`'s `CancelledError` handler turns the LED off and restores `sw_sos.cb_hold = start_sos` |
+| Peer propagation (mesh) | `evt_peer_in_sos` |
+| Demi-daemon | `enable_demi_daemon()` replaces **all** `sw_sos` callbacks (`compass.dis:3856`) |
 
 `sos_timing` is a generator in `f_lib/generators.py` (next to `breathe_effect`); it paces
-the SOS indication (inferred) rather than defining the trigger gesture.
+the SOS indication (**inferred**) rather than defining the trigger gesture.
+
+### Factory reset
+
+Holding `sw_sos` **while the device boots** triggers a factory reset (**confirmed**,
+`Compass.compass_reset`, `compass.dis:1602`–`1720`):
+
+1. `compass_reset(is_init=True)` reads `self.sw_sos.pin.value()` directly. If it is low
+   (pressed), it logs `Checking for factory reset` and fills the ring.
+2. It then extinguishes one ring LED per **20 ms** for **60 iterations** — a ~1.2 s
+   progress wipe across the 60-pixel ring. Releasing the button at any point aborts.
+3. If the button survived all 60 steps, it logs `Perform a factory reset!`, takes the
+   `VFS_WRITE` watchdog block, deletes every `.bin` in `/`, removes `user-config.json`,
+   rewrites a default `config.json`, and calls
+   `shut_down_tasks(method=1, is_save_config=False)` — a hard reset with no config save.
+4. Otherwise the ring and crystal are turned off and `modes.evt_led_override_off` is set.
 
 <Note>
   The SOS triple tap calls `start_ota`. Firmware updates run over direct
@@ -180,13 +631,18 @@ the SOS indication (inferred) rather than defining the trigger gesture.
 
 `new_vibe.py` ("Vibe Mode", version string `newvibe-1.10`; v5.0.2: `newvibe-1.9`) is a
 **microphone-driven, sound-reactive ring LED effect** (**confirmed**): it samples the
-microphone ADC (`mic.read_u16`) and writes the halo ring's pixel buffer (`ring.buf`)
-directly. It is **not** magnetometer calibration — earlier revisions of this page called it
-"passive magnetic calibration", which was wrong for both v5.0.2 and v5.0.3.
+microphone ADC on GPIO 36 (`mic.read_u16`, `new_vibe.dis:478`) and writes the halo ring's
+pixel buffer (`ring.buf`) directly. It is **not** magnetometer calibration — earlier
+revisions of this page called it "passive magnetic calibration", which was wrong for both
+v5.0.2 and v5.0.3.
 
 `compass.vibe_mode` launches `new_vibe.new_vibe` as a task still named `'sound_react'`;
-v5.0.3 removed the dead in-`compass` `sound_react` / `set_buff` code. The task is gated by
-`evt_*` events (qstrs such as `evt_non_eco_mode`, `evt_led_override_off`).
+v5.0.3 removed the dead in-`compass` `sound_react` / `set_buff` code. The coroutine first
+awaits `modes.evt_non_eco_mode.wait()` and then `modes.evt_orien_vertical.wait()`, and
+thereafter re-checks a list of six events — `evt_orien_vertical`, `evt_non_eco_mode`,
+`evt_bonded`, `anim_gnss_search`, `evt_peer_mgmt_ended`, `evt_led_override_off`
+(**confirmed**, `new_vibe.dis:160`–`192`). So Vibe Mode never runs in eco mode, and never
+while the compass is horizontal.
 
 v5.0.3 tuning changes:
 
@@ -194,20 +650,22 @@ v5.0.3 tuning changes:
 | --- | --- | --- |
 | Auto-gain up rate | 25 | 13 |
 | Peak-hold | drops to 0 below 8 | drops to 0 below 0 |
-| Brightness base | 0.07 (~30% dimmer, inferred) | 0.1 |
+| Brightness base | 0.07 (~30% dimmer, **inferred**) | 0.1 |
 | Debug telemetry | removed | `_DBG`-gated (`_DBG` was already False) |
 
 With the `_DBG` telemetry gone, the v5.0.2 `NEWVIBE …` and `#NEWVIBE-REC …` log lines and
 the `task started, waiting on enable events` / `resumed after pause` / `task cancelled`
-strings no longer exist in v5.0.3. The magnetometer bias handoff and its `gap_xy`
-residual (`Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT`, `2D governs, gap_xy={:.1f}uT`)
-belong to the fusion engine (`imu_fusion_auto`), unrelated to Vibe Mode — see
+strings no longer exist in v5.0.3. The magnetometer bias handoff and its `gap_xy` residual
+(`Bias handoff 2D->3D ({}) | gap_xy={:.1f}uT`, `2D governs, gap_xy={:.1f}uT`) belong to the
+fusion engine (`imu_fusion_auto`), unrelated to Vibe Mode — see
 [Navigation](/subsystems/navigation).
 
 ## Temperature sensor
 
-`ds18x20.py` + `onewire.py` provide a **DS18B20** 1-Wire temperature driver
-(`_search_rom`, `DS18X20`). The driver is compiled in and instantiable, but there is no
-runtime-log evidence (no `°C` / `celsius` / `temperature: {}` string) that a sensor is
-physically wired and polled, so its actual use for temperature compensation or environment
-reporting is inferred, not confirmed.
+`ds18x20.py` + `onewire.py` provide a **DS18B20** 1-Wire temperature driver (`_search_rom`,
+`DS18X20`). **Confirmed by absence: no module in the build imports `ds18x20`** — the string
+appears only inside `ds18x20.dis` itself. The driver is frozen into the image and
+instantiable from the REPL, but nothing in the firmware ever constructs it, and there is no
+runtime-log evidence (no `°C` / `celsius` / `temperature: {}` string) of a sensor being
+polled. Any use for temperature compensation or environment reporting is therefore dead
+code in v5.0.3, not an active subsystem.

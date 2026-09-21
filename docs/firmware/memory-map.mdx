@@ -24,6 +24,14 @@ is the data-bus view (`.rtc.data`) and seg 6 the instruction-bus view (`.rtc.tex
 RTC SLOW memory (`0x50000000`–`0x50002000`) is not used by any segment.
 
 <Note>
+  The "retained across deep sleep" property of the RTC regions is a property of the
+  ESP32, not a description of how this firmware behaves. Totem's application never calls
+  `machine.deepsleep()`; it uses RTC memory to carry three small frames across a
+  **reset** — see [boot flow](/firmware/boot-flow) and the frame format on the
+  [module reference](/reference/modules).
+</Note>
+
+<Note>
 Structural details of the layout above:
 
 - **DROM starts with the OTA descriptor.** The first 256 bytes of segment 0 are the
@@ -49,12 +57,12 @@ the rebuilt ELF has no symbol table, so it cannot be confirmed by symbol.
 | Range | Region | Use |
 | --- | --- | --- |
 | `0x3f400000`–`0x3f800000` | DROM | flash-mapped constant data |
-| `0x3ff80000`–`0x3ff82000` | RTC fast (data bus) | retained data across deep sleep |
+| `0x3ff80000`–`0x3ff82000` | RTC fast (data bus) | retained data across reset and deep sleep |
 | `0x3ffae000`–`0x40000000` | DRAM | data / heap |
 | `0x40070000`–`0x400a0000` | IRAM | instruction RAM |
 | `0x400c0000`–`0x400c2000` | RTC fast (instr bus) | retained code/data |
 | `0x400d0000`–`0x40400000` | IROM | flash-mapped instructions |
-| `0x50000000`–`0x50002000` | RTC slow | retained across deep sleep |
+| `0x50000000`–`0x50002000` | RTC slow | retained across reset and deep sleep |
 
 ## Rebuilt ELF
 

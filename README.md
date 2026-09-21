@@ -83,13 +83,49 @@ only.
 | [`client/`](client/) | scanning, connecting, subscriptions, acks and TX-window handling on [`tinygo.org/x/bluetooth`](https://github.com/tinygo-org/bluetooth) (tested on macOS; the library also supports Linux/BlueZ and Windows) |
 | [`cmd/totemctl/`](cmd/totemctl/) | the CLI |
 
+## ESP32 emulator: `totememu`
+
+An ESP32 running TinyGo that joins the ESP-NOW mesh as another Totem: it pairs with a real
+Totem through the normal Touch Crystal pairing and then exchanges peer status with it every
+radio window. It models the rest of the device too — the halo and the crystal, the Touch
+Crystal and the two buttons, the power state and its battery curve, an update over WiFi —
+and keeps its name, colour and bonds in flash across a power cut. Hardware-tested against
+firmware 5.0.3. See [`docs/reference/esp32-emulator.mdx`](docs/reference/esp32-emulator.mdx).
+
+```bash
+tinygo flash -target esp32-generic -ldflags "-X main.owned=<your Totem's MAC>" ./cmd/totememu
+
+totemctl mesh pair                # hold the Totem's Touch Crystal next to the board
+totemctl mesh watch               # decode every frame the Totem sends it (--raw, --tx, --json)
+totemctl mesh status              # the emulator and its peers
+totemctl mesh clock               # give the board this computer's time
+totemctl mesh send pos 50.0671 19.9124 3   # where it is
+totemctl mesh send sim walk 90             # and where it goes: walk, drive or still
+totemctl mesh send batt 40                 # also: sos, heading, flat, unbond, selftest
+totemctl mesh send touch crystal hold 1500 # a gesture, as a finger would make it
+totemctl mesh send leds                    # what the ring and the crystal are doing
+```
+
+The `mesh` commands find the board's USB serial port by itself (or take `--port`,
+`TOTEM_PORT`, `port:` in the config file). They open it without toggling DTR/RTS, so the
+board does not reboot, and they decode the raw frames on the host with the `mesh` package.
+
+| Package | Contents |
+| --- | --- |
+| [`mesh/`](mesh/) | ESP-NOW frame codec (peer, locate, Smart Group), tested against frames packed with the firmware's own `struct` formats |
+| [`emulator/`](emulator/) | the Totem logic: pairing, radio windows, clock sync, locate reply and relay, Smart Group member, the halo and crystal, the touch and button gestures, the power state and the WiFi update, and a model of the GNSS receiver, compass, motion sensor and battery; host-tested |
+| [`store/`](store/) | the settings and bonds a reboot keeps, as an append-only journal in one flash sector |
+| [`cmd/totememu/`](cmd/totememu/) | the ESP32 firmware and its serial console |
+
 ## Scope & ethics
 
 The firmware analysis is static and no service was attacked; the releases API and firmware
-objects are served publicly. The only code run against hardware is `totemctl`, over BLE, on
-the author's own Totem. See [`docs/reference/methodology.mdx`](docs/reference/methodology.mdx).
-Use it only with devices you own. The mesh and demi-god paths can affect other people's
-Totems nearby, so `totemctl` does not send those commands.
+objects are served publicly. The only code run against hardware is `totemctl`, over BLE, and
+`totememu`, over ESP-NOW, both on the author's own Totem. See
+[`docs/reference/methodology.mdx`](docs/reference/methodology.mdx). Use them only with devices
+you own. The mesh and demi-god paths can affect other people's Totems nearby, so `totemctl`
+does not send those commands, and `totememu` talks only to the Totems it is built for, never
+hosts a Smart Group and never sends demi-god commands.
 
 ## License
 

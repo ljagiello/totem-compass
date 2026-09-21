@@ -1,0 +1,850 @@
+---
+title: "Networking: HTTP and WiFi"
+description: "f_lib/requests.py and f_lib/wifi.py decoded from the v5.0.3 bytecode — the async HTTP client that carries every cloud request this device makes, whether any of it is ever protected by TLS, and the station-mode WiFi join underneath it."
+---
+
+Every request a Totem makes to the outside world goes through one module: `f_lib/requests.py`.
+The OTA release poll, the `contents.json` index fetch, the firmware download and the
+completion report are all documented under [OTA](/subsystems/ota) and
+[WiFi OTA](/protocols/wifi-ota) — but those pages describe the *exchange*, and assume the
+client underneath behaves like a normal HTTP client. This page is the decode of the client
+itself, plus `f_lib/wifi.py`, the module that gets the radio associated before any of it
+can run.
+
+<Note>
+  **Evidence convention on this page.** Claims are **confirmed** when they were read
+  directly out of the v5.0.3 disassembly (cited as `file.dis:line`), **inferred** when they
+  are reasoned from strings or structure, and called out explicitly when they are **not
+  recoverable** from the frozen bytecode. Line numbers refer to `re/v5.0.3/mpy/*.dis`.
+
+  The Python shown below is **reconstructed**: the source is not in the image. The
+  operations, their order and the constants are exact; names of local variables that the
+  bytecode does not carry are ours, and are marked where it matters.
+</Note>
+
+| Module | Lines of disassembly | Importers | What rests on it |
+| --- | --- | --- | --- |
+| `f_lib/requests.py` | 1,772 | 4 | Every HTTP request the device makes |
+| `f_lib/wifi.py` | 940 | 2 | The station-mode join on the OTA path |
+
+The four importers of `f_lib/requests.py` are `data_upload_v2`, `f_lib/firmware_ota.py`,
+`f_ota/install_ota.py` and `ota_callback` (**confirmed**: `IMPORT_NAME f_lib.requests` in
+exactly those four of the 94 disassemblies). The two importers of `f_lib/wifi.py` are
+`f_ota/main.py` and `f_ota/hotspot.py`.
+
+There is a second, unrelated `requests/__init__.py` in the image (the stock
+micropython-lib client). Nothing on any device path imports it — its only importers are
+`mip/__init__.py` and `urequests.py` (**confirmed**). Everything below is `f_lib/requests.py`.
+
+## Is there TLS, and is anything validated?
+
+**Short answer: there is a TLS path, no first-party URL ever reaches it, and if one did the
+certificate would not be checked.** This confirms — and strengthens — the statement on
+[OTA](/subsystems/ota#ota-server-contract-wifi-path) that the OTA exchange is plain HTTP.
+
+Three separate findings, each confirmed:
+
+<Steps>
+  <Step title="The client does implement https">
+    `request` carries a two-entry scheme table. The default is `(80, False)`
+    (`f_lib_requests.dis:802`); a URL whose scheme is exactly `https:` triggers a lazy
+    `import ssl` (`:812`) and replaces it with `(443, True)` (`:814`). Any other scheme
+    raises `RequestErr('Unsupported HTTP protocol: {}')`. So `https://` is a supported
+    scheme, not a rejected one.
+  </Step>
+  <Step title="No first-party URL uses it">
+    Every host literal belonging to this product is `http://`: `http://api.totemportal.com`
+    and `http://datapeak-developer.s3.us-east-1.amazonaws.com` (plus the
+    `http://datapeak-developer.s3.us-east-1.amazonaws.com/{}` template in `project_main`).
+    A search of all 94 disassemblies finds `https://` in exactly two files, `mip/__init__.py`
+    and `webrepl.py` — stock MicroPython modules, neither of which is on the OTA, upload or
+    mesh path. **The TLS branch is dead in stock firmware.**
+
+    It is not dead *code*, though: `cfg.ota_url` is server-supplied (the `endpoint` field of
+    the release object) and a trigger file can override it, so an `https://` endpoint would
+    be honoured. See [OTA server contract](/subsystems/ota#ota-server-contract-wifi-path).
+  </Step>
+  <Step title="If it were used, nothing would be verified">
+    The wrap is one call, with exactly one positional argument and one keyword
+    (`f_lib_requests.dis:941`–`:946`):
+
+    ```python
+    if proto == 'https:':
+        s = ssl.wrap_socket(s, server_hostname=host)
+    ```
+
+    No `cert_reqs`, no `cadata`, no `ca_certs`, no `key`/`cert`. The `ssl` module it calls is
+    also frozen into the image (`ssl.py`, version `0.2.1`, a shim over the native `tls`
+    module) and its defaults are readable:
+
+    ```python
+    def wrap_socket(sock, server_side=False, key=None, cert=None, cert_reqs=CERT_NONE,
+                    cadata=None, server_hostname=None, do_handshake=True):
+        ctx = SSLContext(PROTOCOL_TLS_SERVER if server_side else PROTOCOL_TLS_CLIENT)
+        if cert or key:
+            ctx.load_cert_chain(cert, key)
+        if cadata:
+            ctx.load_verify_locations(cadata=cadata)
+        ctx.verify_mode = cert_reqs
+        return ctx.wrap_socket(sock, server_side=server_side,
+                               do_handshake_on_connect=do_handshake,
+                               server_hostname=server_hostname)
+    ```
+
+    (`ssl.dis:253`–`:303`; the defaults tuple `(False, None, None, CERT_NONE, None, None, True)`
+    is at `ssl.dis:32`–`:40`.) With the call above, `cert_reqs` stays `CERT_NONE` and
+    `cadata` stays `None`, so `load_verify_locations` is never reached and no trust store is
+    ever loaded. `SSLContext.__init__` independently sets `self._context.verify_mode = CERT_NONE`
+    on every context it builds (`ssl.dis:124`–`:134`).
+  </Step>
+</Steps>
+
+<Warning>
+  **`server_hostname` here is SNI, not verification.** It is forwarded to the native `tls`
+  context and nothing else in this module compares it to anything. With `verify_mode`
+  pinned to `CERT_NONE` there is no certificate chain to check it against, so an `https://`
+  OTA endpoint would encrypt the transfer and authenticate nothing. The firmware image does
+  bundle mbedTLS — see [firmware overview](/firmware/overview) — but no CA bundle is loaded
+  on this path.
+
+  The practical consequence for the OTA path is already stated under
+  [OTA integrity](/subsystems/ota#integrity) and
+  [transport security](/protocols/wifi-ota#transport-security); this page only removes the
+  remaining assumption that switching the endpoint to `https://` would have fixed it.
+</Warning>
+
+<Note>
+  **A disassembler footnote you need in order to read `(443, True)` above.** The `.dis`
+  files render that constant as `(443, Ellipsis)` (`f_lib_requests.dis:159`). That is a
+  mapping error in the reconstruction pipeline, not an `Ellipsis` in the source:
+  `re/tools/mpyrecon.py:106` maps the ROM immediate-object word `0x16` to `true` and `0x1E`
+  to `ellipsis`, while MicroPython's `REPR_A` immediates are `None = 0x06`,
+  `False = 0x0E`, `True = 0x1E` (bools are immediates 1 and 3 so that one bit gives the
+  value). Two corroborations: **no genuine `True` object appears in any `obj_table` in the
+  image** — the only `True` substrings are inside log strings — and the other `Ellipsis`
+  site, `compassing.dis:1423`, returns `(Ellipsis, 0)` from a function whose other returns
+  are `(False, 3)`, `(False, 1)` and `(False, 0)` (`compassing.dis:156`). Reading
+  `Ellipsis` as `True` is therefore **inferred**, but the inference is tight. Nothing else
+  on this page depends on it: the actual TLS decision is made by re-testing the scheme
+  string, not by reading that flag (see below).
+</Note>
+
+## `f_lib/requests.py`
+
+The module body is five imports, three classes and nine module-level functions
+(`f_lib_requests.dis:160`–`:265`). Its own imports are `asyncio`, `gc`, `json`, `socket`,
+`time`, `micropython.const`, `f_lib.file_mgr.copyfileobj` and `f_lib.logger.log`/`ErrCode`.
+`time`, `const` and `copyfileobj` are imported and never used.
+
+### The public surface *(CONFIRMED)*
+
+Defaults below are exact — they are the `MAKE_FUNCTION_DEFARGS` tuples built in the module
+body (`f_lib_requests.dis:224`–`:263`).
+
+| Name | Signature | Disassembly |
+| --- | --- | --- |
+| `RequestErr` | `Exception` subclass, `__init__(self, msg='', code=None)` | `:266` |
+| `SocketWrapper` | `__init__(self, f)`, sync and async context manager | `:306` |
+| `Response` | `__init__(self, sock)` | `:419` |
+| `request` | `async (method, url, data=None, payload=None, headers={}, stream=None, auth=None, timeout=None, parse_headers=True)` | `:712` |
+| `_get_addr` | `async (host, port)` | `:1342` |
+| `Downloader` | `__init__(self, ota_status=None)`, `async file(self, url, dest=None, pause_ms=0)` | `:1396` |
+| `delete` `head` `get` `patch` `post` `put` | `async (url, **kw)` → `request('<VERB>', url, **kw)` | `:1594`–`:1695` |
+| `rest` | `async (method=None, url=None, headers={}, payload=None)` | `:1696` |
+
+`RequestErr` and the verb wrappers are the only names imported elsewhere, along with
+`SocketWrapper`, `Downloader` and `rest`.
+
+<Note>
+  The six verb wrappers take `**kw`, not `*args`. Their scope flags are `3`
+  (`f_lib_requests.dis:1596` and the five siblings), and the call they emit passes the local
+  dict as a keyword pair whose key is `MP_OBJ_NULL` with a star-args bitmap of `0` — the
+  MicroPython encoding for `**kw`. Cross-checked against `ssl.dis:121`, whose `SSLContext.__init__`
+  has flags `4` and emits a bitmap of `1` for a real `*args`, and against
+  `asyncio_funcs.dis:263` (`gather`, flags `13`). This matters because `f_lib/firmware_ota.py`
+  calls `get(url, auth=auth)` (`f_lib_firmware_ota.dis:1176`) — which only type-checks under
+  the `**kw` reading.
+</Note>
+
+### The request pipeline
+
+```python
+async def request(method, url, data=None, payload=None, headers={}, stream=None,
+                  auth=None, timeout=None, parse_headers=True):
+    redirect = None
+    chunked = data and getattr(data, '__iter__', None) and not getattr(data, '__len__', None)
+
+    if auth is not None:
+        import binascii
+        username, password = auth
+        c = b'{}:{}'.format(username, password)
+        c = str(binascii.b2a_base64(c)[:-1], 'ascii')
+        headers['Authorization'] = 'Basic {}'.format(c)
+
+    try:
+        proto, dummy, host, path = url.split('/', 3)
+    except ValueError:
+        proto, dummy, host = url.split('/', 2)
+        path = ''
+
+    port, use_ssl = (80, False)
+    if proto == 'https:':
+        import ssl
+        port, use_ssl = (443, True)
+    elif proto != 'http:':
+        raise RequestErr('Unsupported HTTP protocol: {}'.format(proto))
+
+    if ':' in host:
+        host, port = host.split(':', 1)
+        port = int(port)
+
+    try:
+        ai = await asyncio.wait_for(_get_addr(host, port), timeout=10000)
+    except asyncio.TimeoutError:
+        raise RequestErr('HTTP connection timed out for: {}'.format(host), ErrCode.timeout)
+    if not ai:
+        raise RequestErr('Unable to connect to host: {}'.format(host), ErrCode.operation_failed)
+    ai = ai[0]
+
+    resp_d = None
+    if parse_headers is not False:
+        resp_d = {}
+
+    s = socket.socket(ai[0], socket.SOCK_STREAM, ai[2])
+    if timeout is not None:
+        s.settimeout(timeout)
+    try:
+        s.connect(ai[-1])
+        if proto == 'https:':
+            s = ssl.wrap_socket(s, server_hostname=host)
+        s.write(b'%s /%s HTTP/1.0\r\n' % (method, path))
+        if 'Host' not in headers:
+            s.write(b'Host: %s\r\n' % host)
+        for k in headers:
+            s.write(k); s.write(b': '); s.write(headers[k]); s.write(b'\r\n')
+        ...
+```
+
+(`f_lib_requests.dis:718`–`:970`.) Points worth stating, all **confirmed**:
+
+- **HTTP/1.0 with `Connection: close`**, always (`:950`, `:1038`). There is no keep-alive and
+  no connection pool; every request opens and tears down a socket. The response body is
+  therefore delimited by the server closing the connection, not by `Content-Length` — which
+  is why `Downloader` can read to EOF (below).
+- **The path is whatever followed the third `/`, verbatim.** `url.split('/', 3)` (`:778`),
+  falling back to `split('/', 2)` with an empty path on `ValueError` (`:785`–`:796`). No
+  percent-encoding, no normalisation, no rejection of CR/LF. A URL with no path yields
+  `GET / HTTP/1.0`.
+- **`use_ssl` is dead.** Local 20 is stored at `:805` and `:817` and never loaded anywhere in
+  the function. The TLS decision at `:936` re-tests `proto == 'https:'` instead. Harmless
+  today, but it means a future edit to the scheme table alone would not change behaviour.
+- **`headers={}` is a shared mutable default, and `auth` writes into it.**
+  `headers['Authorization'] = ...` at `:771` mutates whatever dict was passed — including the
+  module-level default built once at `:227`. A call that supplies `auth` and no `headers`
+  leaves the `Authorization` header in the default dict for every later call that also omits
+  `headers`. On current firmware the only `auth=` caller is `f_lib/firmware_ota.py:_open_url`,
+  and `cfg` carries no credentials, so nothing is leaked in practice — but the mechanism is
+  there.
+- **Basic auth is built as `b'{}:{}'.format(user, pw)`**, base64'd with the trailing newline
+  stripped (`:748`–`:770`). `str.format` on a `bytes` literal is a MicroPython extension;
+  this would not run on CPython.
+
+### Body and JSON
+
+```python
+        if payload is not None:
+            assert data is None
+            data = json.dumps(payload)
+            s.write(b'Content-Type: application/json\r\n')
+        if data:
+            if chunked:
+                s.write(b'Transfer-Encoding: chunked\r\n')
+            else:
+                s.write(b'Content-Length: %d\r\n' % len(data))
+        s.write(b'Connection: close\r\n\r\n')
+        if data:
+            if chunked:
+                for chunk in data:
+                    s.write(b'%x\r\n' % len(chunk)); s.write(chunk); s.write(b'\r\n')
+                s.write('0\r\n\r\n')
+            else:
+                s.write(data)
+```
+
+(`:1002`–`:1082`.) `chunked` is decided up front by duck-typing `data`: iterable but with no
+`__len__` (`:721`–`:731`). A `str`, `bytes`, `list` or `dict` all have `__len__`, so only a
+generator selects the chunked branch. Note that `Content-Length` is `len(data)` — for a
+`dict` that would be the *key count*, and the later `s.write(data)` would fail; the module
+is safe only because every caller passes an already-serialised string (see
+[`rest`](#rest-the-json-wrapper)).
+
+### Status line and headers
+
+`request` reads the status line with `readline()`, splits it on whitespace into at most
+three parts and requires at least two, else it closes the socket and raises
+`RequestErr('HTTP error: Bad Status: {}', ErrCode.operation_failed)` (`:1085`–`:1112`). The
+status is `int(parts[1])`; `reason` is `parts[2].rstrip()` when present.
+
+Then a header loop until a blank line, with three special cases (`:1130`–`:1252`):
+
+| Header | Handling | Disassembly |
+| --- | --- | --- |
+| `Transfer-Encoding:` containing `chunked` | socket closed, `RequestErr('Unsupported: {}', ErrCode.operation_failed)` | `:1144`–`:1160` |
+| `Location:` | see [redirects](#redirects) | `:1167`–`:1212` |
+| everything else | `resp_d[key] = value.strip()`, split on the first `:` | `:1225`–`:1240` |
+
+<Warning>
+  **Every header match here is case-sensitive**, and so is the later lookup of
+  `Content-Length` in the parsed dict (`:1330`–`:1340`). `Transfer-Encoding:`, `Location:`
+  and `Content-Length` are compared as exact byte strings against what the server sent. A
+  server that answers with lower-case header names — normal for anything that has been
+  through an HTTP/2 or HTTP/3 hop, where field names are lower-case on the wire — will have
+  its chunked encoding *not* rejected, its redirect *not* seen, and `Response.content_length`
+  left at its initial `0` (`:456`).
+
+  That last one reaches past this module: `f_lib/firmware_ota.py` takes
+  `resp.content_length` as `download_size`, and the byte count it compares against at the end
+  of a firmware write is exactly that value. See
+  [OTA integrity](/subsystems/ota#integrity) for what that check is and is not.
+</Warning>
+
+`parse_headers` is tri-state (`:1215`–`:1248`): `False` skips parsing entirely and leaves
+`resp.headers` as `None`; `True` (the default) does the split above; anything else is
+**called** as `parse_headers(line, resp_d)`. No caller in the image passes a callable.
+
+### Redirects
+
+```python
+            elif l.startswith(b'Location:'):
+                if not 200 <= status <= 299:
+                    if status in [301, 302, 303, 307, 308]:
+                        redirect = str(l[10:-2], 'utf-8')
+                    else:
+                        s.close()
+                        raise NotImplementedError('Redirect %d not yet supported' % status)
+        ...
+    if redirect:
+        s.close()
+        if status in [301, 302, 303]:
+            return request('GET', redirect, None, None, headers, stream)
+        else:
+            return request(method, redirect, data, payload, headers, stream)
+```
+
+(`:1167`–`:1212`, `:1275`–`:1305`.) Four things are true of this, all **confirmed**:
+
+- **The recursive call is not awaited.** `request` is a generator function (scope flag `1`,
+  `f_lib_requests.dis:714`), and both recursive calls are `CALL_FUNCTION 6` followed
+  immediately by `RETURN_VALUE` at `:1296` and `:1305` — there is no `GET_ITER` / `YIELD_FROM`
+  pair, which is how every other `await` in this file compiles (compare `:856`, `:1461`).
+  So a 3xx response makes `await requests.get(url)` evaluate to a **coroutine object**, not a
+  `Response`. The caller's next `resp.status_code` raises `AttributeError`. In other words
+  redirects do not work at all, in either branch.
+- **There is no redirect limit.** Nothing counts hops; the depth is bounded only by the fact
+  that the recursion never actually runs.
+- **The scheme is not re-checked against the original.** The `Location` value is re-parsed
+  from scratch by the recursive `request`, which accepts `http:` as readily as `https:`. An
+  `https://` request redirected to `http://` would be downgraded silently — were the
+  recursion awaited.
+- **`auth`, `timeout` and `parse_headers` are dropped** on redirect: only six of the nine
+  parameters are forwarded.
+
+The offset `l[10:-2]` assumes exactly `Location:` plus one space and a trailing CRLF; a
+server that omits the space loses the first character of the URL.
+
+### `Response`
+
+```python
+class Response:
+    def __init__(self, sock):
+        self._cached = None
+        self._chunk_size = 0
+        self._chunked = 0
+        self.content_length = 0
+        self.encoding = 'utf-8'
+        self.headers = None
+        self.raw = sock
+        self.status_code = None
+```
+
+(`:450`–`:481`.) `request` fills in `status_code`, `reason`, `headers` and `content_length`
+after construction (`:1307`–`:1341`).
+
+| Member | Behaviour | Disassembly |
+| --- | --- | --- |
+| `close()` | closes `raw` if set, then clears `raw` and `_cached` | `:482` |
+| `content` *(property)* | reads the whole socket once into `_cached` inside a `try/finally` that always closes `raw`; returns the cache on later reads | `:504` |
+| `text` *(property)* | `str(self.content, self.encoding)` | `:535` |
+| `json()` | `json.loads(self.content)`; on `ValueError` logs `JSON Syntax Error` with `body='REST response cannot be parsed as JSON'` and **returns `False`** | `:548` |
+| `read(size=4096)` | one chunk, see below | `:585` |
+
+`Response.read` is the odd one. On the first call (`_chunked` still `0`) it prints a
+three-column progress banner to stdout and sets `_chunk_size = content_length`; thereafter
+`_chunked` accumulates the running byte total and each call returns
+`raw.read(min(size, _chunk_size))`, printing a row per chunk (`:589`–`:710`). So
+`_chunked` is a **counter, not a flag**, despite the name, and the `_chunk_size == 0` branch
+that follows — which sets `_chunk_size = len(readline().strip())`, the length of the chunk-size
+*line* rather than the hex value it contains — is not a working chunked-transfer decoder. It
+is unreachable in practice because `request` rejects `Transfer-Encoding: chunked` before a
+`Response` is ever built. The progress rows go to `print`, not to
+[the logger](/reference/f-lib), so they appear on the serial console only.
+
+### `Downloader`
+
+```python
+class Downloader:
+    def __init__(self, ota_status=None):
+        self.file_size = 0
+        self.ota_status = ota_status
+        self.pct = 0
+
+    async def file(self, url, dest=None, pause_ms=0):
+        self.file_size, self.pct = (0, 0)
+        buf = memoryview(bytearray(4096))
+        resp = await get(url=url)
+        if resp.status_code != 200:
+            resp.close()
+            raise RequestErr('Endpoint not found', ErrCode.operation_failed)
+        self.file_size = resp.content_length
+        total = 0
+        with open(dest, 'wb') as f:
+            while True:
+                n = resp.raw.readinto(buf)
+                if n <= 0:
+                    break
+                total += n
+                if self.file_size:
+                    self.pct = round(total / self.file_size * 100)
+                    if self.ota_status:
+                        self.ota_status.progress = self.pct
+                print('\rDownloaded: {} of {} bytes | {}% complete'.format(total, self.file_size, self.pct), end='')
+                f.write(buf[:n])
+                gc.collect()
+                if pause_ms:
+                    await asyncio.sleep_ms(pause_ms)
+        print('')
+        resp.close()
+        f.close()
+        gc.collect()
+        self.pct = 100
+        if self.ota_status:
+            self.ota_status.progress = self.pct
+```
+
+(`:1420`–`:1593`.) Behaviour worth pinning down:
+
+- **It reads `resp.raw` directly, not `resp.read()`** (`:1553`). The loop runs until
+  `readinto` returns `0` — i.e. until the server closes the connection. `content_length` is
+  used **only** to compute the percentage (`:1497`–`:1520`). A response longer than its own
+  `Content-Length` is written to the file in full; a shorter one simply ends early with
+  `pct` below 100, and the `with` block still exits normally.
+- **`gc.collect()` runs after every 4 KiB block** (`:1541`). On a device this small that is
+  deliberate, and it is why the optional `pause_ms` yield exists at all.
+- **It strictly requires `200`** — any other status, including 2xx, raises
+  `RequestErr('Endpoint not found', ErrCode.operation_failed)` (`:1466`–`:1477`).
+- The redundant `f.close()` after the `with` block (`:1573`) is harmless.
+
+The only caller is the preview-package path:
+`await asyncio.wait_for(dl.file(url=url, dest=dest, pause_ms=20), 90)`
+(`f_ota_install_ota.dis:583`–`:597`) — a **90-second** ceiling on the whole `.tgz` download,
+with a 20 ms yield between blocks. The firmware (`.bin`) path does not use `Downloader`; it
+uses `SocketWrapper` (below) and streams into the OTA slot. Both are described from the OTA
+side under [the install path](/subsystems/ota#the-install-path-in-detail).
+
+### `SocketWrapper`
+
+Fourteen lines of bytecode (`:306`–`:418`): it holds one attribute `f`, returns it from both
+`__enter__` and `__aenter__`, and on exit closes `f` and — if any of `exc_type`, `exc_val`,
+`exc_tb` is set — `print`s the three of them separated by newlines. It never suppresses the
+exception and never logs through [the logger](/reference/f-lib).
+
+Its single use is `f_lib/firmware_ota.py:_open_url`, which returns
+`SocketWrapper(resp.raw)` so that a plain file and an HTTP body can be consumed by the same
+`with` statement (`f_lib_firmware_ota.dis:1155`–`:1211`):
+
+```python
+async def _open_url(url, auth=None, status=None):
+    if url.split(':', 1)[0] not in ('http', 'https'):
+        return open(url, 'rb')
+    resp = await get(url, auth=auth)
+    if resp.status_code != 200:
+        resp.close()
+        raise ValueError('HTTP Error: {}'.format(resp.status_code))
+    status.download_size = resp.content_length
+    return SocketWrapper(resp.raw)
+```
+
+Note that this is the second place a scheme is tested, with a different test
+(`split(':', 1)[0] in ('http', 'https')` rather than `== 'https:'`), and that the
+`Response` object itself is dropped — only the raw socket survives, so the response is never
+`close()`d except through the wrapper.
+
+### `rest`, the JSON wrapper
+
+```python
+async def rest(method=None, url=None, headers={}, payload=None):
+    if method not in ('DELETE', 'HEAD', 'GET', 'POST', 'PUT', 'PATCH'):
+        raise RequestErr('Unsupported HTTP method: {}'.format(method), code=ErrCode.param_invalid)
+    resp = await request(method, url=url, headers=headers, data=payload)
+    if not 200 <= resp.status_code < 300:
+        raise RequestErr('Endpoint unavailable: {}'.format(resp.status_code), ErrCode.operation_failed)
+    body = resp.json()
+    if body is False:
+        raise RequestErr('Response payload unparsable', ErrCode.syntax_err)
+    resp.close()
+    return body
+```
+
+(`:1700`–`:1771`.) Two details that the OTA pages depend on:
+
+- **`payload` is forwarded as `data`, not as `payload`** (`:1722`–`:1726`). `request`'s own
+  `payload` branch — the one that calls `json.dumps` and emits
+  `Content-Type: application/json` — is therefore **never taken through `rest`**. Callers must
+  serialise the body themselves and supply the header themselves, and they do:
+  `f_ota/install_ota.py` builds `headers = {'Content-Type': 'application/json'}` and
+  `payload = json.dumps({...})` before calling
+  `rest('POST', url=url, headers=headers, payload=payload)`
+  (`f_ota_install_ota.dis:751`–`:805`). The seven-key release poll documented under
+  [OTA server contract](/subsystems/ota#ota-server-contract-wifi-path) is unaffected — this
+  just explains *why* the caller does the serialising.
+- **`resp.json()` returning `False` is indistinguishable from a body of literal `false`.**
+  `Response.json` uses `False` as its error sentinel (`:548`–`:584`) and `rest` tests
+  `body is False` (`:1755`), so a server answering the JSON document `false` produces
+  `RequestErr('Response payload unparsable', ErrCode.syntax_err)`. The same sentinel means an
+  empty or unparsable body and a valid `false` are the same thing to every caller.
+
+### Timeouts, or the lack of them
+
+This is the weakest part of the module, and it is worth a table because three different
+timeout mechanisms are in play and two of them are effectively disabled.
+
+| Stage | What bounds it | Disassembly |
+| --- | --- | --- |
+| DNS resolution | `asyncio.wait_for(_get_addr(host, port), timeout=10000)` — **10,000 seconds**, see below | `:847`–`:856` |
+| `_get_addr` retry loop | nothing; retries every 500 ms forever | `:1344`–`:1394` |
+| TCP connect + all socket I/O | `s.settimeout(timeout)` — only when the caller passed `timeout`, and **no caller in the image does** | `:920`–`:929` |
+| Whole preview download | `asyncio.wait_for(..., 90)` in the caller | `f_ota_install_ota.dis:594` |
+
+```python
+async def _get_addr(host, port):
+    ai = None
+    while not ai:
+        try:
+            ai = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+        except OSError as e:
+            log.exc('Failed fetching address, trying again', exc=e, is_write=False)
+        await asyncio.sleep_ms(500)
+    return ai
+```
+
+`asyncio.wait_for` in this firmware takes **seconds** — its default `sleep` parameter is
+`core.sleep`, not `core.sleep_ms` (`asyncio_funcs.dis:63`–`:68`, `:139`), and the module
+exports a separate `wait_for_ms` for the millisecond form. So `timeout=10000` is a ceiling of
+roughly **two hours and 47 minutes** on name resolution. It is **inferred**, not confirmed,
+that `10000` was meant as milliseconds — nothing in the bytecode records intent — but the
+value is the only four-digit literal in the file and 10 s is the conventional DNS ceiling.
+
+Note also that the 500 ms sleep runs on the *successful* iteration too, so every request pays
+it, and that `_get_addr` swallows `OSError` only — any other exception from `getaddrinfo`
+escapes past the `wait_for` and out of `request` untranslated.
+
+The practical effect on the OTA path: with no `settimeout`, a server that accepts the
+connection and then stops sending blocks the whole asyncio loop indefinitely. What actually
+recovers the device in that state is the OTA watchdog condition, not this module — see
+[OTA](/subsystems/ota).
+
+### Other corners
+
+- `OSError` from anywhere in the send/receive block closes the socket and is re-raised,
+  except `errno == 118` (`EHOSTUNREACH` on ESP-IDF), which becomes
+  `RequestErr('Host unreachable', ErrCode.operation_failed)` (`:1254`–`:1272`). The numeric
+  constant is compared directly and never named; that it is `EHOSTUNREACH` is **inferred**.
+- `stream` is accepted by `request`, forwarded through both redirect branches, and never
+  otherwise read. Dead parameter (**confirmed**: local 5 is loaded only at `:1295` and `:1304`).
+- `time`, `micropython.const` and `f_lib.file_mgr.copyfileobj` are imported at module level
+  (`:175`–`:200`) and never referenced.
+
+## `f_lib/wifi.py`
+
+Two names: `ConnErr(Exception)` with `__init__(self, msg='', code=None)`, and `WiFi`
+(`f_lib_wifi.dis:86`–`:142`). The module aliases `network.STA_IF` to `CLIENT` and
+`network.AP_IF` to `HOTSPOT` at import (`:104`–`:117`); `HOTSPOT` is imported only by
+`f_ota/hotspot.py`, which is itself dead — see [WiFi OTA](/protocols/wifi-ota).
+
+### Which WiFi module the OTA path uses *(CONFIRMED)*
+
+Both `f_lib/wifi.py` and `f_lib/wifi_v2.py` are in the image and both define a `WiFi` class
+with `connect`, `connect_to_known`, `disconnect`, `get_nearby_networks`, `power_on` and
+`scan`. They split by caller, not by version:
+
+| Module | Imported by | Extra methods |
+| --- | --- | --- |
+| `f_lib/wifi.py` | `f_ota/main.py`, `f_ota/hotspot.py` | — |
+| `f_lib/wifi_v2.py` | `data_upload_v2`, `svc_ble_transfer` | `is_conn_wifi`, `set_mode` |
+
+So **the OTA path runs `f_lib/wifi.py`**, notwithstanding the
+`Preparing WLAN protocols for update (v2)...` log line, which refers to the second-generation
+*procedure* in `f_ota/main.py`, not to the module. This corroborates what
+[OTA](/subsystems/ota#the-install-path-in-detail) already says.
+
+`wifi_v2` is out of scope for this page, but one difference is worth recording because it
+explains the split: `wifi_v2` carries four `(pm, protocol)` mode tuples — `(0, 8)`, `(1, 8)`,
+`(0, 7)`, `(1, 7)` — a `set_mode` method that applies them, and an `is_conn_wifi` that
+returns `True` only when the interface is associated **and** `wlan.config('protocol') < 8`
+(`f_lib_wifi_v2.dis:100`, `:308`–`:330`, `:967`). Protocol bit 8 is the long-range mode the
+ESP-NOW [mesh](/protocols/overview) runs in; `f_lib/wifi.py` has no concept of it and always
+forces protocol `7`.
+
+### `WiFi.__init__` *(CONFIRMED, `:234`–`:263`)*
+
+```python
+class WiFi:
+    wlan = None                       # class attribute
+
+    def __init__(self, mode=CLIENT, protocol=7, pm=1):
+        self.protocol = protocol
+        self.pm = pm
+        self.nearby_networks = []
+        self.reconnects = 3
+        if self.wlan is None:
+            self.wlan = WLAN(mode)
+```
+
+`protocol=7` is `11B | 11G | 11N`; `pm=1` is `WLAN.PM_PERFORMANCE`. Both are overridden
+before the OTA join: `f_ota/main.py:prep_wlan` sets `local_wifi.protocol = 7` and
+`local_wifi.pm = 0` and pushes them to the driver (`f_ota_main.dis:437`–`:490`), and
+`connect` then sets `pm` to `network.WLAN.PM_NONE` regardless (`:356`–`:365`).
+
+`wlan` is declared on the *class* but assigned on the *instance*, so the `is None` guard only
+ever fires once per instance, not once per process. The firmware builds exactly one:
+`local_wifi = WiFi(mode=CLIENT)` at `f_ota/main.py` import time (`f_ota_main.dis:294`–`:298`).
+
+### `WiFi.connect` *(CONFIRMED, `:264`–`:549`)*
+
+```python
+async def connect(self, ssid=None, pwd=None, hostname=None):
+    await self.power_on()
+    if self.wlan.isconnected():
+        reconnect = False
+        if self.wlan.config('ssid') != ssid:            reconnect = True
+        if self.wlan.config('pm') != self.pm:           reconnect = True
+        if self.wlan.config('protocol') != self.protocol: reconnect = True
+        if not reconnect:
+            print('Already connected')
+            return
+    await self.disconnect(power_off=False)
+    await asyncio.sleep_ms(10)
+    self.wlan.config(reconnects=self.reconnects)        # 3
+    self.wlan.config(protocol=self.protocol)
+    self.wlan.config(pm=network.WLAN.PM_NONE)
+    if hostname:
+        network.hostname(hostname)
+    if pwd == '':
+        pwd = None
+    print('Connecting to: {}'.format(ssid))
+    try:
+        self.wlan.connect(ssid, pwd)
+        while not self.wlan.isconnected():
+            await asyncio.sleep_ms(30)
+        ip, subnet, gateway, dns = self.wlan.ifconfig()
+        print('{:.<36}{}'.format('Device IPv4:', ip))
+        print('{:.<36}{}'.format('Device Subnet:', subnet))
+        print('{:.<36}{}'.format('Device Gateway:', gateway))
+        print('{:.<36}{}'.format('Device DNS:', dns))
+        print('{:.<36}{}'.format('Device Hostname:', network.hostname()))
+    except asyncio.TimeoutError:
+        raise ConnErr('Asyncio timeout connecting to WiFi', ErrCode.timeout)
+    except OSError as e:
+        log.err('WiFi OSError: {}'.format(e.errno), is_write=False)
+        if e.errno == 110:
+            raise ConnErr('WiFi connection timeout', ErrCode.timeout)
+        status = self.wlan.status()
+        if status == 201:  raise ConnErr('WiFi SSID not found',       ErrCode.not_found)
+        if status == 202:  raise ConnErr('WiFi password incorrect',   ErrCode.invalid_auth)
+        if status == 1001: raise ConnErr('WiFi conn taking too long', ErrCode.timeout)
+        raise ConnErr('Could not connect to network', ErrCode.conn_failed)
+```
+
+- **The association wait has no timeout of its own** — it is a bare
+  `while not isconnected(): await sleep_ms(30)` (`:392`–`:404`). The 15-second ceiling comes
+  entirely from the `asyncio.wait_for` in `connect_to_known`; anything that calls `connect`
+  directly gets an unbounded wait. Nothing in the image does.
+- **`reconnects=3`** is `self.reconnects`, set in `__init__` and never changed (`:250`, `:343`).
+  This is the driver-level retry count, distinct from the two application-level attempts below.
+- The status codes `201`, `202` and `1001` are compared numerically and never named
+  (`:505`, `:515`, `:525`). That they are `STAT_NO_AP_FOUND`, `STAT_WRONG_PASSWORD` and
+  `STAT_CONNECTING` is **inferred** from the MicroPython ESP32 port; likewise `errno == 110`
+  as `ETIMEDOUT` (`:490`).
+- `network.hostname(hostname)` is a **global** setting, not per-interface (`:366`–`:372`).
+- The `except asyncio.TimeoutError` arm inside `connect` is unreachable from
+  `connect_to_known`: `wait_for` cancels the coroutine, and the `TimeoutError` is raised in
+  the *caller*, which has its own handler. It would only fire if something inside the `try`
+  awaited its own `wait_for`.
+- **The five `Device …:` banner lines print unconditionally** (`:410`–`:470`) — not gated on
+  `cfg.is_verbose`, unlike the OTA banner.
+
+<Note>
+  **Whether the join is constrained to a particular security mode is not recoverable here.**
+  `connect` passes exactly `(ssid, pwd)` to the native `WLAN.connect` (`:387`–`:391`) and sets
+  no authmode threshold; whether the ESP-IDF driver applies one by default is a property of
+  the C layer, which is not in these disassemblies. The stored-network record does carry a
+  `security_algo` field elsewhere in the image (`ble_manager.dis:473`), but `f_lib/wifi.py`
+  never reads it — `connect_to_known` passes only `networks[ssid]` as the password.
+</Note>
+
+### `WiFi.connect_to_known` *(CONFIRMED, `:550`–`:726`)*
+
+```python
+async def connect_to_known(self, networks=None, hostname=None, max_n=10, attempts=2, priority_nw=None):
+    if not networks:
+        raise ConnErr('No network creds were provided', ErrCode.invalid_auth)
+
+    for i in range(attempts):
+        if self.nearby_networks:
+            break
+        await asyncio.sleep_ms(200)
+        await self.get_nearby_networks()
+    if not self.nearby_networks:
+        raise ConnErr('No networks within range', ErrCode.conn_failed)
+
+    nw = None
+    found = []
+    for ssid in self.nearby_networks:
+        if ssid in networks:
+            found.append(ssid)
+            if priority_nw and priority_nw == ssid:
+                nw = ssid
+                break
+    if not found:
+        raise ConnErr('Known-network not found within range', ErrCode.conn_failed)
+    if not nw:
+        nw = found[0]
+
+    delay = 15                                     # dead, see below
+    for i in range(attempts):
+        print('Connecting to: {} | Attempt {} of {}...'.format(nw, i + 1, attempts))
+        try:
+            await asyncio.wait_for(self.connect(nw, networks[nw], hostname), 15)
+            break
+        except asyncio.TimeoutError:
+            print('Timed out connecting to WiFi, trying again...')
+            delay = 30
+    if not self.wlan.isconnected():
+        raise ConnErr('Unable to establish connection with {}'.format(nw), ErrCode.conn_failed)
+```
+
+This verifies the numbers quoted on [OTA](/subsystems/ota#the-install-path-in-detail) and adds
+the rest:
+
+| Claim | Status |
+| --- | --- |
+| 2 connection attempts | **Confirmed** — `attempts=2` in the defaults tuple at `:208`–`:216` |
+| 15 s per-attempt timeout | **Confirmed** — the literal `15` passed to `asyncio.wait_for` at `:681`, in seconds |
+| `wlan.config(reconnects=3)` | **Confirmed** — `:343`–`:345`, from `self.reconnects` |
+| a dead 30 s backoff | **Confirmed** — local 10 is assigned `15` at `:652` and `30` at `:698` and is **never loaded**; the `wait_for` uses the literal `15` at `:681`, not the local |
+| 10 scan results max | **Confirmed but never applied here** — `max_n=10` is a parameter of `connect_to_known` and is not read anywhere in its body. `scan` has its own, separate `max_n=10` default |
+
+Further **confirmed** behaviour:
+
+- **The scan loop is normally a no-op.** It breaks immediately if `self.nearby_networks` is
+  already populated (`:562`–`:566`), and `nearby_networks` persists on the instance across
+  calls. A stale list from an earlier scan is reused rather than refreshed.
+- **`priority_nw` only wins if it is also in range and known.** It is matched against the scan
+  results, not against `networks` (`:614`–`:634`). If it is absent, the first *scan-ordered*
+  match is taken — and `scan` sorts by RSSI descending, so that is the strongest known
+  network, not the first in the caller's dict.
+- **Attempts do not re-scan and do not try a second network.** `nw` is chosen once, before the
+  attempt loop; both attempts target the same SSID (`:645`–`:706`).
+- The final check is `self.wlan.isconnected()`, not the loop outcome, so a connection that
+  came up by driver auto-reconnect after a `TimeoutError` still counts as success.
+
+`f_ota/main.py` calls it as
+`await local_wifi.connect_to_known(networks=…, hostname='{}_{}'.format(cfg.hostname, cfg.mac[-4:]), priority_nw=user_cfg.wifi_ssid or None)`
+(`f_ota_main.dis:670`–`:682`) — so `max_n` and `attempts` stay at their defaults, and every
+`ConnErr` is re-raised as `OtaErr('{} | code: {}', ErrCode.conn_failed)`.
+
+### Scanning *(CONFIRMED, `:785`–`:930`)*
+
+```python
+async def scan(self, max_n=10):
+    await self.power_on()
+    nets = self.wlan.scan()
+    if nets:
+        nets.sort(key=lambda x: x[3], reverse=True)
+        if len(nets) > max_n:
+            return nets[:max_n]
+        return nets
+    return []
+
+async def get_nearby_networks(self):
+    log.debug('Scanning for nearby WiFi networks')
+    self.nearby_networks.clear()
+    nets = await self.scan()
+    if not nets:
+        return
+    for n in nets:
+        if n[0] == b'':
+            continue
+        try:
+            ssid = n[0].decode('utf-8')
+        except UnicodeError:
+            continue
+        if ssid not in self.nearby_networks:
+            self.nearby_networks.append(ssid)
+```
+
+- `x[3]` is the RSSI field of MicroPython's scan tuple, so the sort is **strongest first**
+  (`:907`–`:913`, lambda at `:931`).
+- `self.wlan.scan()` is **not awaited** (`:897`–`:901`). It is a blocking driver call; the
+  asyncio loop stalls for its whole duration. This is why `connect_to_known` sleeps 200 ms
+  before calling it rather than after.
+- Hidden networks (empty SSID) and SSIDs that are not valid UTF-8 are skipped
+  (`:812`–`:848`). Duplicates — the same SSID on two bands or two APs — collapse to one entry,
+  so the RSSI ordering is by the strongest sighting.
+- `get_nearby_networks` returns `None`; its output is the `self.nearby_networks` side effect.
+
+### Power and teardown *(CONFIRMED, `:727`–`:886`)*
+
+```python
+async def power_on(self):
+    if not self.wlan.active():
+        self.wlan.active(True)
+        await asyncio.sleep_ms(10)
+
+async def disconnect(self, power_off=True):
+    is_active = self.wlan.active()
+    is_conn = self.wlan.isconnected()
+    if is_active and is_conn:
+        try:
+            self.wlan.disconnect()
+            await asyncio.sleep_ms(10)
+        except RuntimeError:
+            pass
+    if power_off:
+        self.wlan.active(False)
+```
+
+`disconnect` swallows `RuntimeError` silently and, with `power_off=True` (the default),
+deactivates the interface even if the disconnect itself failed. `connect` calls it with
+`power_off=False` so that the radio stays up between the teardown and the new association.
+
+## What could not be recovered
+
+Stated plainly, because the absence matters as much as the findings:
+
+- **Whether the ESP-IDF driver enforces a minimum authmode** on `WLAN.connect(ssid, pwd)`.
+  That is C, not frozen bytecode.
+- **What the native `tls` module does** once `verify_mode` is `CERT_NONE` — cipher suite
+  selection, protocol version floor, session reuse. `ssl.py` is a thin shim; everything below
+  it is compiled into the firmware binary.
+- **Intent.** That `timeout=10000` was meant as milliseconds, that the missing `await` on the
+  redirect branches is an oversight rather than a deliberate return of a coroutine, and that
+  `use_ssl` / `max_n` / `delay` were meant to be read — all of these are readings of dead or
+  inconsistent code, not recorded facts. The code paths themselves are confirmed; the reasons
+  are not.
+- **Any runtime evidence.** Nothing on this page was observed on hardware. The
+  [ESP32 emulator](/reference/esp32-emulator#wifi-ota) exercises the OTA exchange against
+  this client, but the TLS branch, the redirect branches and the DNS retry loop are not
+  covered by it.
+- **The `f_lib/wifi_v2.py` decode.** Only its method list, its four mode tuples and
+  `is_conn_wifi` were read, enough to establish that it is not on the OTA path.
