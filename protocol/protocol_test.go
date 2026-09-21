@@ -490,8 +490,10 @@ func TestCleanName(t *testing.T) {
 	for in, want := range map[string]string{
 		"  Base Camp \t":        "Base Camp",
 		"Zażółć":                "Zażółć",
-		strings.Repeat("🧭", 16): strings.Repeat("🧭", 16), // 32 UTF-16 units
 		strings.Repeat("x", 32): strings.Repeat("x", 32),
+		// 32 bytes of UTF-8 in 16 characters: the byte budget is what
+		// the mesh frame spends, so this is the most a name may carry.
+		strings.Repeat("ż", 16): strings.Repeat("ż", 16),
 	} {
 		if got, err := CleanName(in); err != nil || string(got) != want {
 			t.Errorf("CleanName(%q) = %q, %v, want %q", in, got, err, want)
@@ -499,8 +501,13 @@ func TestCleanName(t *testing.T) {
 	}
 	// U+2028/U+2029 always JSON-encode to 6-byte escapes: 32 of them passed
 	// CleanName and then overflowed the frame.
+	//
+	// The emoji and the CJK run are the case the character count misses:
+	// both are inside MaxNameLen and far past what the peer frame holds,
+	// and the device does not truncate — it stops sending peer frames.
 	for _, in := range []string{"", " \t ", "\xff", "a\x00b", strings.Repeat("x", 33), strings.Repeat("🧭", 17),
-		strings.Repeat("\u2028", 32), "a\u2029b"} {
+		strings.Repeat("\u2028", 32), "a\u2029b",
+		strings.Repeat("🧭", 16), strings.Repeat("日", 32), strings.Repeat("é", 20)} {
 		if got, err := CleanName(in); err == nil {
 			t.Errorf("CleanName(%q) = %q, want an error", in, got)
 		}

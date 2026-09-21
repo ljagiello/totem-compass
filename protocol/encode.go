@@ -254,6 +254,25 @@ func SetCompassPrefs(p CompassPrefs) Frame {
 // name fits the signed length byte Static Data reports it with.
 const MaxNameLen = 32
 
+// MaxNameBytes is the longest name the mesh can carry, counted in UTF-8
+// bytes rather than characters — a different limit from MaxNameLen, and
+// the one the device actually breaks on.
+//
+// ENOW_PEER_BUFF is 108 bytes, the name is written at offset 71 by
+// pack_utf8_str, and gen_peer_msg packs a 5-byte tail directly after it.
+// So the name has 108-71-5 = 32 bytes, and nothing on the device checks:
+// pack_utf8_str takes a max_size argument and never reads it, and the
+// BLE rename handler stores what it is given. A longer name does not
+// truncate. It either overwrites the bytes the tail needs, so every
+// later gen_peer_msg raises packing past the end of the buffer, or it
+// fails the slice assignment outright — and either way the Totem stops
+// putting peer frames on the air until it is renamed back.
+//
+// Counting characters is not enough to prevent that: MaxNameLen counts
+// UTF-16 units, so 32 CJK characters pass it and encode to 96 bytes,
+// and twenty accented Latin characters come to 40.
+const MaxNameBytes = 32
+
 // DeviceName is a name the Totem can store and report back, as CleanName
 // makes it.
 type DeviceName string
@@ -281,6 +300,13 @@ func CleanName(name string) (DeviceName, error) {
 		return "", errors.New("name must not contain line or paragraph separators")
 	case units > MaxNameLen:
 		return "", fmt.Errorf("name is %d characters, max %d", units, MaxNameLen)
+	case len(name) > MaxNameBytes:
+		// Refused for the device's sake rather than the frame's: see
+		// MaxNameBytes. A name that passes the character count can still
+		// be three times this long once encoded, and the Totem does not
+		// survive it — it stops sending peer frames.
+		return "", fmt.Errorf("name is %d bytes of UTF-8, max %d (it fits in %d characters, "+
+			"but the mesh frame counts bytes)", len(name), MaxNameBytes, units)
 	}
 	return DeviceName(name), nil
 }
