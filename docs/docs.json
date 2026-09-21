@@ -28,7 +28,8 @@
               "firmware/changes-5.0.3",
               "firmware/architecture",
               "firmware/memory-map",
-              "firmware/boot-flow"
+              "firmware/boot-flow",
+              "firmware/hotspot-server"
             ]
           },
           {
@@ -55,6 +56,7 @@
             "group": "Reference",
             "pages": [
               "reference/modules",
+              "reference/f-lib",
               "reference/building-a-client",
               "reference/esp32-emulator",
               "reference/download-url",

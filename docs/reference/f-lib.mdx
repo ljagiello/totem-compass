@@ -1,0 +1,629 @@
+---
+title: "f_lib: bit packing and logging"
+description: "f_lib/bitwise.py and f_lib/logger.py decoded from the v5.0.3 bytecode — the pack/unpack primitives underneath every wire format on this site, and the logger that produced every log line they are quoted from."
+---
+
+Two modules sit underneath most of the rest of this documentation. `f_lib/bitwise.py` is
+where every flags byte, bit field and embedded UTF-8 string in the
+[protocols](/protocols/overview) is actually built. `f_lib/logger.py` owns `errors.log` and
+formats every log line quoted elsewhere as evidence. Both were listed as **NAME-ONLY** in
+the [module reference](/reference/modules); this page is the decode.
+
+<Note>
+  **Evidence convention on this page.** Claims are **confirmed** when they were read
+  directly out of the v5.0.3 disassembly (cited as `file.dis:line`), **inferred** when they
+  are reasoned from strings or structure, and called out explicitly when they are **not
+  recoverable** from the frozen bytecode. Line numbers refer to `re/v5.0.3/mpy/*.dis`.
+
+  The Python shown below is **reconstructed**: the source is not in the image. The
+  operations, their order and the constants are exact; names of local variables that the
+  bytecode does not carry are ours, and are marked where it matters.
+</Note>
+
+| Module | Lines of disassembly | Importers | What rests on it |
+| --- | --- | --- | --- |
+| `f_lib/bitwise.py` | 526 | 18 | Every documented wire format |
+| `f_lib/logger.py` | 688 | 41 | Every log line quoted as evidence |
+
+`f_lib/logger.py` is the most-imported module in the image. All 41 importers import the
+same thing — the module-level singleton `log` — and 11 of them also import `ErrCode`
+(**confirmed**: `IMPORT_FROM log` appears 41 times across the 94 disassemblies,
+`IMPORT_FROM ErrCode` 11 times). Nothing anywhere constructs its own `Logger`.
+
+## `f_lib/bitwise.py`
+
+The module body is thirteen functions and one import, `binascii`
+(`f_lib_bitwise.dis:62`–`113`). No classes, no constants, no module state. `machine` is
+imported lazily, inside `get_mac_addr` only.
+
+### The public surface *(CONFIRMED)*
+
+Defaults below are exact — they are the `MAKE_FUNCTION_DEFARGS` tuples built in the module
+body (`f_lib_bitwise.dis:66`–`111`).
+
+| Function | Signature | Returns | Disassembly |
+| --- | --- | --- | --- |
+| `bin_to_hex` | `(data, sep=None)` | `bytes` of hex | `:115` |
+| `bin_to_str` | `(data, sep=None)` | `str` of hex | `:134` |
+| `get_mac_addr` | `()` | 12 lower-case hex chars | `:158` |
+| `hex_to_bin` | `(val)` | `bytes` | `:197` |
+| `pack_2bit_value` | `(byte_val, value, start_bit)` | `int` | `:215` |
+| `pack_bits` | `(byte_val, start_bit, bit_width, value)` | `int` | `:270` |
+| `pack_flags` | `(flags)` | `int` | `:343` |
+| `pack_utf8_str` | `(buff=None, start=0, text=None, max_size=32)` | byte count written | `:370` |
+| `str_to_bin` | `(val)` | `bytes` | `:394` |
+| `unpack_2bit_value` | `(byte_val, start_bit)` | `int` 0-3 | `:428` |
+| `unpack_bits` | `(byte_val, start_bit, bit_width)` | `int` | `:456` |
+| `unpack_flags` | `(packed_byte=None)` | `list` of 8 `bool` | `:474` |
+| `unpack_utf8_str` | `(buff=None, start=0, b_len=0)` | `str` | `:506` |
+
+### Bit fields *(CONFIRMED, `f_lib_bitwise.dis:270`–`342`, `:456`–`473`)*
+
+```python
+def pack_bits(byte_val, start_bit, bit_width, value):
+    if not (0 <= start_bit <= 7) or bit_width < 1 or start_bit + bit_width > 8:
+        raise ValueError('Bit range must satisfy 0 <= start_bit and start_bit + bit_width <= 8')
+    max_val = (1 << bit_width) - 1
+    if not (0 <= value <= max_val):
+        raise ValueError('Value must be 0-%d for a %d-bit range' % (max_val, bit_width))
+    mask = max_val << start_bit
+    return (byte_val & ~mask) & 0xFF | (value << start_bit)
+
+
+def unpack_bits(byte_val, start_bit, bit_width):
+    return (byte_val >> start_bit) & ((1 << bit_width) - 1)
+```
+
+Both error strings are verbatim from `obj_table` (`f_lib_bitwise.dis:56`). The three
+validation branches are three separate jumps at `:286`, `:290` and `:296`, all landing on
+the same `raise`.
+
+The pair is **asymmetric**. `pack_bits` validates the range, the width and the value and
+masks the result to a byte; `unpack_bits` validates nothing. `unpack_bits(v, 6, 4)` reads
+past bit 7 and returns whatever is there rather than raising, which matters when reading a
+field out of a value that is not a single byte — the UBX parsers in
+[navigation](/subsystems/navigation) call it directly on parsed words.
+
+### Two-bit tri-state fields *(CONFIRMED, `f_lib_bitwise.dis:215`–`268`, `:428`–`454`)*
+
+```python
+def pack_2bit_value(byte_val, value, start_bit):
+    if not (0 <= value <= 2):
+        raise ValueError('Value must be 0, 1, or 2')
+    if not (0 <= start_bit <= 6):
+        raise ValueError('start_bit must be 0-6 to fit 2 bits')
+    byte_val &= ~(3 << start_bit)
+    byte_val |= value << start_bit
+    return byte_val
+
+
+def unpack_2bit_value(byte_val, start_bit):
+    if not (0 <= start_bit <= 6):
+        raise ValueError('start_bit must be 0-6 to fit 2 bits')
+    return (byte_val >> start_bit) & 3
+```
+
+<Warning>
+  **A two-bit field here holds three values, not four.** `pack_2bit_value` rejects `3`
+  (`'Value must be 0, 1, or 2'`, `f_lib_bitwise.dis:233`) while `unpack_2bit_value` returns
+  `(byte_val >> start_bit) & 3` with no such restriction (`:449`–`453`). A `3` in one of
+  these fields on the wire is therefore a value this firmware cannot have written — a
+  corrupt byte, a foreign sender, or a field that a different function packed.
+
+  **The argument order differs from `pack_bits`.** `pack_2bit_value(byte_val, value,
+  start_bit)` puts the value *before* the position; `pack_bits(byte_val, start_bit,
+  bit_width, value)` puts it last. Both are **confirmed** from the `args` lists at
+  `f_lib_bitwise.dis:218` and `:273`.
+</Warning>
+
+`pack_2bit_value` also does not mask its result to 8 bits, where `pack_bits` does
+(`22:81:7f` / `LOAD_CONST_SMALL_INT 255` at `f_lib_bitwise.dis:335`, with no counterpart in
+`pack_2bit_value`). For a `byte_val` already in 0-255 the two agree; for a larger
+accumulator they do not.
+
+The one caller in the image is `nav_logger`, which packs `fusion.orientation` at bit 5 of a
+flags byte (`nav_logger.dis:885`–`891`). That a `fusion.orientation` of 3 would raise
+`ValueError` inside the navigation logger is **inferred** — the orientation's own value
+range was not checked.
+
+### Flags bytes *(CONFIRMED, `f_lib_bitwise.dis:343`–`368`, `:474`–`504`)*
+
+```python
+def pack_flags(flags):
+    packed = 0
+    for i, f in enumerate(flags):
+        if f:
+            packed |= 1 << i
+    return packed
+
+
+def unpack_flags(packed_byte=None):
+    flags = []
+    for i in range(8):
+        flags.append(bool(packed_byte & (1 << i)))
+    return flags
+```
+
+This is the function behind every `pack_flags(...)` bit order quoted in
+[message format](/protocols/message-format) and
+[building a client](/reference/building-a-client). Three properties are worth stating
+explicitly, because the wire-format pages assume them:
+
+- **Element 0 is bit 0.** The index from `enumerate` is the shift
+  (`f_lib_bitwise.dis:360`–`364`), so the first item in a `pack_flags` tuple is the least
+  significant bit.
+- **Truthiness, not `bool`.** The test is a bare `POP_JUMP_IF_FALSE` on the element
+  (`:359`). Any truthy object sets the bit; `0`, `None`, `''` and `False` all clear it. The
+  `pack_flags(is_sos, is_eco_mode, ...)` expressions documented elsewhere are passing raw
+  mode attributes, not normalised booleans.
+- **`pack_flags` has no eight-element limit; `unpack_flags` has nothing else.**
+  `pack_flags` iterates the whole sequence, so a nine-element argument can return a value
+  above 255 (which `struct.pack` into a `B` would then reject). `unpack_flags` is a fixed
+  `range(8)` loop (`:481`–`501`) and always returns exactly eight `bool`s, so it cannot
+  round-trip such a value.
+
+`unpack_flags`'s `packed_byte=None` default (`:474`, defargs tuple at `:100`–`103`) is not
+usable: `None & 1` raises `TypeError`. The same is true of the `buff=None` default on
+`pack_utf8_str`.
+
+### Strings *(CONFIRMED, `f_lib_bitwise.dis:370`–`426`, `:506`–`525`)*
+
+```python
+def str_to_bin(val):
+    if val:
+        if isinstance(val, str):
+            return val.encode('utf-8')
+        if isinstance(val, bytes):
+            return val
+        return str(val).encode('utf-8')
+    return b''
+
+
+def pack_utf8_str(buff=None, start=0, text=None, max_size=32):
+    data = str_to_bin(text)
+    n = len(data)
+    buff[start:start + n] = data
+    return n
+
+
+def unpack_utf8_str(buff=None, start=0, b_len=0):
+    return bytes(buff[start:start + b_len]).decode('utf-8')
+```
+
+<Warning>
+  **`pack_utf8_str` accepts a `max_size` and never reads it.** The parameter is declared
+  (`args: ['buff', 'start', 'text', 'max_size']`, `f_lib_bitwise.dis:373`) with a default of
+  32 (`:89`), and `LOAD_FAST 3` — the only opcode that could read it — does not appear
+  anywhere in the body, which is nine instructions long (`:375`–`392`). The function is a
+  bare `buff[start:start+n] = str_to_bin(text)` that returns `n`. **Confirmed.**
+
+  It is dead on the calling side too: a search of all 94 disassemblies for the qstr
+  `max_size` returns only `f_lib_bitwise.dis` itself. No caller has ever passed a bound, and
+  passing one would not have helped.
+
+  The consequence on the ESP-NOW peer message — a device name long enough to overwrite the
+  fields after it — is worked through under *Peer frame* in
+  [message format](/protocols/message-format).
+</Warning>
+
+Two more edges in `str_to_bin`, both **confirmed** from the branch structure at
+`f_lib_bitwise.dis:399`–`426`:
+
+- **Falsy input returns `b''`**, not an error. `None`, `''`, `0` and `b''` all take the
+  first jump (`POP_JUMP_IF_FALSE` at `:400`) to `LOAD_CONST_OBJ b''`. So
+  `pack_utf8_str(buff=b, start=i, text=None)` writes nothing and returns `0`.
+- **Only `str` and `bytes` are handled directly.** Anything else goes through
+  `str(val).encode('utf-8')` (`:418`–`424`). That a `bytearray` or `memoryview` therefore
+  serialises as its `repr` — `bytearray(b'...')` — rather than its contents is **inferred**
+  from MicroPython's type hierarchy, in which `bytearray` is not a subclass of `bytes`; it
+  was not observed on a device.
+
+`unpack_utf8_str` copies through `bytes(...)` before decoding (`:511`–`519`), so it accepts
+a `memoryview` or `bytearray` slice as well as `bytes`. It has no length or validity
+guard: a `b_len` that runs past the end of `buff` silently yields a shorter string (Python
+slice semantics), and a truncated multi-byte sequence raises from `decode`. The latter is
+**inferred** — the `decode` call is confirmed, its failure mode is standard MicroPython
+behaviour rather than something read out of this module.
+
+### Hex and the MAC address *(CONFIRMED, `f_lib_bitwise.dis:115`–`214`)*
+
+```python
+def bin_to_hex(data, sep=None):
+    if sep:
+        return binascii.hexlify(data, sep)
+    return binascii.hexlify(data)
+
+
+def bin_to_str(data, sep=None):
+    if isinstance(data, str):
+        return data
+    return bin_to_hex(data, sep=sep).decode('utf-8')
+
+
+def hex_to_bin(val):
+    if isinstance(val, str):
+        return binascii.unhexlify(val)
+    return val
+
+
+def get_mac_addr():
+    from machine import unique_id
+    return ''.join(['{:02x}'.format(b) for b in unique_id()])
+```
+
+`bin_to_str` and `hex_to_bin` are both idempotent by design — handed something already in
+the target form they return it unchanged (`:144`, `:212`). `bin_to_hex` tests `if sep:`
+rather than `if sep is not None:` (`:120`), so an empty separator is silently ignored.
+
+`get_mac_addr` is the identifier in every cloud URL on the [OTA](/subsystems/ota) and
+[WiFi](/protocols/wifi-ota) paths. The `'{:02x}'` format string (`f_lib_bitwise.dis:189`)
+is the reason it is **lower-case**, and the `''.join` (`:170`–`176`) is the reason there are
+no separators. The `machine` import is function-local (`:166`), not module-level. That the
+result is *twelve* characters follows from `machine.unique_id()` returning the 6-byte base
+MAC on ESP32 — an ESP32 property, **inferred**, not something this bytecode states.
+
+### Who uses which primitive *(CONFIRMED)*
+
+Counting the `IMPORT_FROM` opcodes that follow each `IMPORT_NAME f_lib.bitwise` across the
+18 importing modules:
+
+| Primitive | Modules | Which |
+| --- | --- | --- |
+| `pack_flags` | 7 | `ble_core`, `ble_manager`, `espnow_conn_v2`, `espnow_msg`, `f_ble/chunking`, `nav_logger`, `project_data` |
+| `bin_to_str` | 6 | `ble_manager`, `compass`, `espnow_conn_v2`, `f_ble/chunking`, `peer_auto_bond`, `peer_management` |
+| `get_mac_addr` | 5 | `compass`, `data_upload_v2`, `f_ota/config`, `f_ota/main`, `ota_callback` |
+| `hex_to_bin` | 5 | `ble_core`, `ble_manager`, `chat_msg`, `compass`, `espnow_conn_v2` |
+| `pack_utf8_str` | 4 | `ble_core`, `ble_manager`, `espnow_conn_v2`, `f_ble/chunking` |
+| `str_to_bin` | 3 | `ble_manager`, `data_upload_v2`, `f_lib/wifi_v2` |
+| `unpack_utf8_str` | 3 | `ble_manager`, `espnow_conn_v2`, `ota_ble` |
+| `unpack_bits` | 2 | `ble_manager`, `ubx_gnss` |
+| `unpack_flags` | 2 | `ble_manager`, `project_data` |
+| `pack_2bit_value` | 1 | `nav_logger` |
+| `pack_bits` | 1 | `ble_manager` |
+
+Two functions are never imported by any module: `bin_to_hex`, which is reached only
+indirectly through `bin_to_str`, and **`unpack_2bit_value`, which is dead code** — no
+`IMPORT_FROM` and no `LOAD_GLOBAL` for it exists outside `f_lib_bitwise.dis`. The 2-bit
+orientation field `nav_logger` writes is never read back on the device.
+
+The single `pack_bits` user is `ble_manager.gen_live_data`, which builds one byte from two
+calls (`ble_manager.dis:6161`–`6175`): `pack_bits(0, 0, 3, config.power_mode)` puts the
+power mode in bits 0-2, then `pack_bits(b, 3, 5, 31)` sets bits 3-7 to a constant `0b11111`.
+
+Overall the device packs far more than it unpacks — the mesh and BLE payloads are written
+here and parsed on the phone.
+
+## `f_lib/logger.py`
+
+The module imports `const` from `micropython`, `stat` from `os`, `print_exception` from
+`sys` and the `rtc` singleton from `f_lib.rtc_v2`; defines `ErrCode` and `Logger`;
+instantiates `log = Logger()`; and defines a module-level `exists(file=None)`
+(`f_lib_logger.dis:97`–`144`). `const` is a compile-time marker — mpy-cross folds it away,
+so no named level constants survive into the image and every level below is an inline
+integer.
+
+### `log` is a singleton created with level 4 *(CONFIRMED)*
+
+```python
+log = Logger()   # f_lib_logger.dis:135-137
+
+
+class Logger:
+    def __init__(self, print_lvl=4, write_lvl=4):
+        self._print_lvl = print_lvl
+        self._write_lvl = write_lvl
+```
+
+Both defaults are `LOAD_CONST_SMALL_INT 4` in the defargs tuple at `f_lib_logger.dis:197`–
+`201`. `log = Logger()` passes no arguments, and nothing in the image ever constructs
+another `Logger` (**confirmed**: no `LOAD_GLOBAL Logger` or `LOAD_NAME Logger` outside
+`f_lib_logger.dis`).
+
+<Warning>
+  **`_write_lvl` is set once, to 4, and never changed again.** The qstr `_write_lvl` does
+  not appear in any of the other 93 disassemblies. There is no setter for it — the class
+  has `set_print_level` and nothing else. Every path that could lower it would have to
+  assign the private attribute, and none does.
+
+  So on any shipped device, `errors.log` can only ever contain `ERR` and `EXC` records.
+  Any `DBG`, `INF` or `WAR` line quoted anywhere in these docs is a **console** line that
+  was never written to flash.
+</Warning>
+
+### Levels *(CONFIRMED)*
+
+The names come from the tuple in `obj_table` (`f_lib_logger.dis:91`), indexed by level in
+`_log` (`:374`–`376`).
+
+| Level | Name | Method | Printed when | Written when |
+| --- | --- | --- | --- | --- |
+| 0 | `NOT` | — | no wrapper emits level 0 | — |
+| 1 | `DBG` | `debug` | `_print_lvl <= 1` | never, in practice |
+| 2 | `INF` | `info` | `_print_lvl <= 2` | never, in practice |
+| 3 | `WAR` | `warn` | `_print_lvl <= 3` | never, in practice |
+| 4 | `ERR` | `err` | **always** | `is_write` and `4 >= _write_lvl` |
+| 5 | `EXC` | `exc` | **always** | `is_write` and `5 >= _write_lvl` |
+
+`NOT` has no wrapper. Only `_log`'s own `lvl=0` default (`f_lib_logger.dis:208`) can produce
+it, so a level-0 record requires a direct `_log` call; nothing in the image makes one.
+
+### The gate lives in the wrappers, not in `_log` *(CONFIRMED)*
+
+```python
+    def debug(self, title=None, body=None, exc=None, is_write=False):
+        if self._print_lvl <= 1:
+            self._log(lvl=1, title=title, body=body, exc=exc, is_write=is_write)
+
+    def info(self, title=None, body=None, exc=None, is_write=False):
+        if self._print_lvl <= 2:
+            self._log(lvl=2, title=title, body=body, exc=exc, is_write=is_write)
+
+    def warn(self, title=None, body=None, exc=None, is_write=True):
+        if self._print_lvl <= 3:
+            self._log(lvl=3, title=title, body=body, exc=exc, is_write=is_write)
+
+    def err(self, title=None, body=None, exc=None, is_write=True):
+        self._log(lvl=4, title=title, body=body, exc=exc, is_write=is_write)
+
+    def exc(self, title=None, body=None, exc=None, is_write=True):
+        self._log(lvl=5, title=title, body=body, exc=exc, is_write=is_write)
+```
+
+Bodies at `f_lib_logger.dis:449`–`573`; the `is_write` defaults are the
+`LOAD_CONST_FALSE` / `LOAD_CONST_TRUE` entries in the defargs tuples at `:217`–`255`. Every
+wrapper calls `_log` with five keyword arguments (`CALL_METHOD 1280` = 0 positional, 5
+keyword).
+
+Two consequences that matter when reading the rest of this site:
+
+- **`_print_lvl` gates the record entirely, not just the console.** A `debug` call at print
+  level 4 never reaches `_log`, so its `is_write` is irrelevant. Raising verbosity is the
+  only way to get lower-severity records anywhere at all.
+- **`err` and `exc` cannot be silenced.** They have no gate, and `_log` itself has no level
+  check — it formats and prints unconditionally. Setting the print level to 5 does not
+  suppress errors.
+
+Call sites in the image, counted as `LOAD_GLOBAL log` immediately followed by a
+`LOAD_METHOD` (a lower bound — module-level calls use `LOAD_NAME`):
+
+| Method | Call sites |
+| --- | --- |
+| `debug` | 291 |
+| `info` | 108 |
+| `warn` | 96 |
+| `exc` | 45 |
+| `err` | 31 |
+| `set_print_level` | 1 |
+
+At the boot default of level 4, the first three rows — 495 of 571 call sites, about **87%**
+of the logging in this firmware — produce nothing at all.
+
+### What a record looks like *(CONFIRMED, `f_lib_logger.dis:289`–`447`)*
+
+```python
+    def _log(self, lvl=0, title=None, body=None, exc=None, is_write=True):
+        title = '--' if title is None else title.strip()
+        body = '--' if body is None else body.strip()
+        exc_txt = '--'
+        if exc:
+            from io import StringIO
+            _ = exc.__class__.__name__          # computed, never used
+            buf = StringIO()
+            print_exception(exc, buf)
+            exc_txt = buf.getvalue()
+            if exc_txt[-1:] == '\n':
+                exc_txt = exc_txt[:-1]
+            exc_txt = exc_txt.replace('\n', ' » ')
+            exc_txt = ' '.join(exc_txt.split())
+        out = '{} | {} | {} | {} | {}'.format(
+            rtc.timestamp, ('NOT', 'DBG', 'INF', 'WAR', 'ERR', 'EXC')[lvl],
+            title, body, exc_txt)
+        if lvl <= 1:
+            print('\x1b[37m' + out + '\x1b[0m')     # grey
+        elif lvl == 2:
+            print('\x1b[94m' + out + '\x1b[0m')     # bright blue
+        elif lvl == 3:
+            print('\x1b[33m' + out + '\x1b[0m')     # yellow
+        elif lvl > 3:
+            print('\x1b[31m' + out + '\x1b[0m')     # red
+        if is_write and lvl >= self._write_lvl:
+            self._write(out)
+```
+
+The five fields are **timestamp, level name, title, body, exception**. An absent title or
+body becomes the literal `--`, and so does an absent exception, which is why `--` appears so
+often in log evidence on this site.
+
+`rtc.timestamp` is a `property` on `RTCv2`, not a call — the opcode is `LOAD_ATTR`
+(`f_lib_logger.dis:373`), and `f_lib_rtc_v2.dis:143`–`145` wraps it in `property()`. It
+formats `machine.RTC().datetime()` as
+`'{}-{:02}-{:02} {:02}:{:02}:{:02}.{:06}'` — year, month, day, hour, minute, second,
+microsecond, skipping the weekday field (`f_lib_rtc_v2.dis:239`–`280`). A record therefore
+looks like this (assembled from the confirmed format, not a captured line):
+
+```text
+2025-06-01 12:34:56.000123 | ERR | Battery critical | pct=3 | --
+```
+
+Multi-line exception text is flattened to a single line: newlines become ` » `, then
+`' '.join(x.split())` collapses every whitespace run. A traceback in `errors.log` is one
+long line with `»` where its line breaks were.
+
+Three details that are easy to get wrong:
+
+- **`exc.__class__.__name__` is computed and discarded.** It is stored to a local
+  (`f_lib_logger.dis:326`–`328`) that no later opcode reads — `LOAD_FAST 8` does not appear
+  again in the function. The exception type still reaches the record, but only as part of
+  `print_exception`'s traceback text.
+- **Only `is None` is tested for title and body**, then `.strip()` is called. A non-string
+  title (an `int`, say) raises `AttributeError` from inside the logger. **Confirmed** from
+  the `<is>` comparison at `:296`.
+- **`if exc:` is truthiness**, so an exception object that is somehow falsy is skipped. In
+  practice every caller passes a caught exception.
+
+### Writing to flash: the 8000-byte cliff *(CONFIRMED, `f_lib_logger.dis:627`–`664`)*
+
+```python
+    def _write(self, out):
+        if exists('errors.log') and stat('errors.log')[6] > 8000:
+            return
+        f = open('errors.log', 'a')
+        f.write(out + '\n')
+        f.close()
+```
+
+`stat(...)[6]` is `st_size`; the threshold `8000` is `LOAD_CONST_SMALL_INT 8000` at
+`f_lib_logger.dis:641`.
+
+<Warning>
+  **There is no rotation.** When `errors.log` passes 8000 bytes, `_write` returns and the
+  device stops recording errors to flash — permanently, until something external removes
+  the file. Nothing in `f_lib/logger.py` truncates, renames or trims it, and the check is a
+  plain `> 8000` with no else branch.
+
+  This is a real gap in any post-mortem taken off a device: a log that is a little over 8000
+  bytes is not a log that filled up and rotated, it is a log that stopped at some unknown
+  point in the past, and everything after that moment is gone.
+</Warning>
+
+`_write` opens, writes and closes on every record — no buffering — and has no `try`/`except`
+around the file operations. An `OSError` (full filesystem, corrupt VFS) therefore propagates
+out of `log.err(...)` and into whatever called it. **Confirmed**: the function contains no
+`SETUP_EXCEPT`. Callers that cannot afford that pass `is_write=False`; for example
+`ble_manager.dis:1596`–`1603` logs `'pending_tx gate unavailable; kicking'` with
+`exc=e, is_write=False`.
+
+### Who deletes `errors.log` *(CONFIRMED)*
+
+The qstr `errors.log` appears in exactly three modules across the whole image.
+
+| Site | What it does |
+| --- | --- |
+| `f_lib_logger.dis:580`, `:598`, `:633`, `:637`, `:647` | `print_logs` reads it; `_write` stats, opens and appends to it |
+| `project_main.dis:764`–`790` | `show_logs(del_logs=None)` prints the log, then `os.remove('errors.log')` if `del_logs` is truthy — a REPL helper |
+| `ota_callback.dis:757`–`763` | On OTA step 7 completion, `if exists('errors.log'): remove('errors.log')` |
+
+So the only automatic reset is **a successful OTA**. On a device that never updates and
+never has `show_logs(True)` run against it from the REPL, `errors.log` grows to 8000 bytes
+once and then freezes for the life of the device.
+
+### `print_logs` *(CONFIRMED, `f_lib_logger.dis:574`–`625`)*
+
+```python
+    def print_logs(self):
+        if not exists('errors.log'):
+            print('No log file on device')
+            return
+        print('\x1b[94m' + '--- Logged Events ---' + '\x1b[0m')
+        with open('errors.log') as f:
+            for line in f:
+                print(line.strip())
+        print('\x1b[94m' + '--- End Logged Events ---' + '\x1b[0m')
+```
+
+The three literals are in `obj_table` (`f_lib_logger.dis:91`). This is what
+`project_main.show_logs()` calls.
+
+### `exists` *(CONFIRMED, `f_lib_logger.dis:666`–`687`)*
+
+```python
+def exists(file=None):
+    try:
+        stat(file)
+        return True
+    except OSError:
+        return False
+```
+
+A module-level function, not a method, defined after `log = Logger()`. Note that
+`f_lib/file_mgr.py` exports its own `exists`, which `project_main` imports separately —
+they are different functions with the same name.
+
+### `ErrCode` *(CONFIRMED, `f_lib_logger.dis:146`–`186`)*
+
+A bare class used as a string enum: fifteen class attributes, each a `str`. Eleven modules
+import it.
+
+| Attribute | Value | Attribute | Value |
+| --- | --- | --- | --- |
+| `conn_failed` | `ConnFailed` | `param_invalid` | `ParamInvalid` |
+| `invalid_auth` | `InvalidAuth` | `syntax_err` | `SyntaxErr` |
+| `limit_reached` | `LimitReached` | `timeout` | `Timeout` |
+| `mem_err` | `MemError` | `hardware_err` | `HardwareErr` |
+| `not_found` | `NotFound` | `invalid_len` | `InvalidLength` |
+| `not_ready` | `NotReady` | `invalid_val` | `InvalidValue` |
+| `operation_failed` | `OperationFailed` | `unknown_msg` | `UnknownMsg` |
+| `param_missing` | `ParamMissing` | | |
+
+<Note>
+  The [module reference](/reference/modules) lists only the eight of these that appear in
+  `obj_table`. The other seven — `ConnFailed`, `MemError`, `NotFound`, `NotReady`,
+  `SyntaxErr`, `Timeout`, `UnknownMsg` — are short enough that mpy-cross interned them as
+  qstrs instead (`f_lib_logger.dis:4`–`90`), which is why reading `obj_table` alone
+  undercounts them. The full set is the fifteen above.
+</Note>
+
+### Changing the level: `debug.mode` *(CONFIRMED)*
+
+The print level is set in exactly two ways.
+
+**At boot, to 4.** `project_main`'s module body runs `log.set_print_level(lvl=4)`
+(`project_main.dis:319`–`326`), immediately after importing the singleton. The level a
+device runs at is therefore 4 unless the file below changes it.
+
+**Via a one-shot file.** `project_main.debug(lvl)` writes
+`save_obj('debug.mode', {'lvl': lvl})` and then `machine.soft_reset()`
+(`project_main.dis:992`–`1020`). On the next boot, `start` does
+(`project_main.dis:1242`–`1270`):
+
+```python
+if exists('debug.mode'):
+    d = rebuild_obj('debug.mode')
+    if 'lvl' in d:
+        log.set_print_level(lvl=d['lvl'])
+    os.remove('debug.mode')
+```
+
+The file is deleted as it is read, so a lowered level survives **exactly one boot**. This is
+the mechanism behind the debug features elsewhere in this firmware that key off
+`log._print_lvl == 1`: `espnow_conn_v2` (8 sites), `f_ble/file_upload.py` (6), `compass`
+(4), `ble_manager` (3), `svc_ble_transfer` (2) and `f_ble/ble_lite.py` (1) all read the
+private attribute directly rather than calling a method — 24 `LOAD_ATTR _print_lvl` sites
+across six modules (**confirmed**).
+
+`f_ota/main.py` is the one place that **writes** the private attribute instead of calling
+the setter: `log._print_lvl = 1 if cfg.is_verbose else 4` (`f_ota_main.dis:1272`–`1280`).
+
+### `WdtBlockers.LOG_ROTATE` is not this module *(CONFIRMED)*
+
+`WdtBlockers.LOG_ROTATE = 0` (`wdt_manager.dis:142`; `VFS_WRITE = 1`, `WLAN_KICK = 2`
+follow). The qstr `LOG_ROTATE` appears in only two disassemblies: `wdt_manager.dis`, which
+defines it, and `nav_logger.dis`, which uses it in `check_log_storage` — a `try`/`finally`
+that sets the blocker, warns `'VFS free space too low to safely write log'` when
+`statvfs('/')[3]` (free blocks) is below 39, removes old logs, and clears the blocker on the
+way out (`nav_logger.dis:1226`–`1245`, `:1399`–`1407`).
+
+That is the **navigation** event log (`events.bin`), not `errors.log`. `f_lib/logger.py`
+imports neither `wdt_manager` nor `WdtBlockers` and never touches the watchdog. Its 8000-byte
+write is unguarded — which is consistent, since the write is a single small append rather
+than the multi-second rotation the blocker exists to protect.
+
+## What is not recoverable
+
+- **Docstrings, comments and parameter intent.** Frozen `.mpy` files carry no docstrings.
+  Whether `pack_utf8_str`'s `max_size` was meant as a truncation bound or a buffer-capacity
+  assertion cannot be answered from the image; only that it does neither.
+- **Why the write level is fixed at 4.** Whether `write_lvl` was intended to be
+  configurable and the setter was never written, or 4 was always the design, is not
+  recoverable.
+- **Original local variable names** inside function bodies. The bytecode carries argument
+  names but not locals, so names like `max_val`, `mask`, `exc_txt` and `out` in the
+  reconstructions above are ours except where a qstr fixes them (`data`, `b_len`,
+  `packed_byte`, `out`, `file`).
+- **The `const` import in `logger.py`.** `micropython.const` is folded at compile time, so
+  whether the level numbers had names like `LVL_ERR` in the source, and what they were, is
+  gone.
+- **Runtime behaviour of the string paths on non-`str`/`bytes` input.** The branch structure
+  is confirmed; the exact MicroPython semantics for `bytearray` in `isinstance(x, bytes)`
+  and for resizing slice assignment on a `bytearray` are inferred from the interpreter, not
+  observed on hardware.
