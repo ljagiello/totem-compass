@@ -29,18 +29,29 @@ the only part worth decoding — is:
 
 | Status | Modules | Share of modules | Lines of disassembly | Share of bytecode |
 | --- | --- | --- | --- | --- |
-| DECODED | 28 | 41% | 50,828 | 55% |
-| PARTIAL | 27 | 40% | 31,817 | 35% |
-| NAME-ONLY | 13 | 19% | 9,534 | 10% |
+| DECODED | 46 | 68% | 68,314 | 74% |
+| PARTIAL | 22 | 32% | 23,865 | 26% |
+| NAME-ONLY | 0 | 0% | 0 | 0% |
+
+<Note>
+  **No module is documented by name alone any more.** When this audit first ran the
+  split was 28 / 27 / 13 — 55% of the bytecode decoded, and thirteen modules, 9,534
+  lines, never read at all. Those thirteen have since been read, and five modules moved
+  from PARTIAL to DECODED with them.
+
+  What remains is 22 PARTIAL modules, 23,865 lines: real internals documented and
+  verified, main logic not. That is a different and smaller claim than "not decoded",
+  and the per-module tables below say which is which.
+</Note>
 
 <Warning>
-  **The firmware is not "fully decoded."** Roughly **55%** of the Totem bytecode is
-  genuinely understood; about **35%** is partly understood; about **10%** — thirteen
-  modules, 9,534 lines — is documented by name only and has never been read.
-
-  The inventory, by contrast, *is* complete: all 94 modules are accounted for, and
-  every module appears somewhere in these docs. Completeness of the list is not the
-  same as completeness of the analysis.
+  **"Decoded" still does not mean "correct".** The same audit that produced these ratings
+  found roughly sixty-five false claims across these pages, several of them stamped
+  **confirmed** — a driver that is dead code, a deep-sleep mode that does not exist, a
+  BLE central role the firmware does not compile, and an OTA hash that is never computed.
+  Every rating here is a statement about how much was read, not a warranty on every
+  sentence. Where a page marks a claim *inferred* or *not recoverable*, that is the
+  honest state of it.
 </Warning>
 
 The counts above are module counts and raw disassembly line counts, which are a proxy for
@@ -49,30 +60,36 @@ depends on each module.
 
 ## What is left to do, in priority order
 
-Ranked by disassembly size × number of importing modules — that is, how much of the rest
-of the firmware is resting on code nobody has read.
+Every module that was documented by name alone has now been read. What remains is
+PARTIAL: modules where a surface was decoded and the main body was not. Ranked by
+disassembly size × number of importing modules — how much of the rest of the firmware
+rests on code nobody has read through.
 
-| # | Module | Lines | Importers | Status | What is in there, and why it matters |
+| # | Module | Lines | Importers | Status | What is still missing |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `f_lib/logger.py` | 688 | **41** | NAME-ONLY | The most-imported module in the entire image. Owns `errors.log` on flash, so it is the source of every log artifact the other pages quote. |
-| 2 | `project_data.py` | 2,642 | 27 | PARTIAL | The global config/constants object. Many constants are documented; the `Config`/`ActiveModes` persistence and mutation paths are not. |
-| 3 | `imu_fusion_auto.py` | 4,392 | 6 | PARTIAL | Calibration state machine is documented; the actual Madgwick fusion maths and the 2D↔3D switch criteria are not. Largest single undecoded body of logic. |
-| 4 | `f_lib/file_mgr.py` | 1,470 | 18 | PARTIAL | Only the v5.0.3 additions (`gen_file_hash`, `get_oldest_file`) are documented. The VFS layout, log rotation and `save_obj`/`rebuild_obj` config serialisation are not. |
-| 5 | `f_lib/bitwise.py` | 526 | 18 | NAME-ONLY | The bit-packing primitives every wire format on this site is built from: `pack_bits`, `pack_2bit_value`, `pack_flags`, `pack_utf8_str` and their inverses. The formats are documented; the primitives are not. |
-| 6 | `f_lib/requests.py` | 1,772 | 4 | NAME-ONLY | Full async HTTP client with a `Downloader` class, `SocketWrapper`, and REST verbs. Carries every cloud request the device makes. |
-| 7 | `f_ota/hotspot.py` | 1,776 | 0 | NAME-ONLY | A complete **HTTP + WebSocket server** (`ws_handshake`, `websockets`, `parse_request`, `get_file`, `get_mime`, `get_device_info`). Nothing imports it, but it is in the shipped image. Largest unexamined network-facing surface. |
-| 8 | `f_lib/rtc_v2.py` | 815 | 13 | PARTIAL | Now correctly identified (see below), but its calendar maths are undocumented. |
-| 9 | `f_lib/task_mgr.py` | 305 | 28 | PARTIAL | Second-most-imported module. The scheduling/cancellation semantics that the concurrency model rests on are asserted, not decoded. |
-| 10 | `debugger.py` | 1,192 | 2 | NAME-ONLY | Not "debug hooks" — an on-device telemetry recorder with its own log writer and rotation (`WriteLog`, `_scheduled_rotation`, `rotate_logs`, `save`). |
-| 11 | `ble_controller.py` | 924 | 2 | NAME-ONLY | The BLE enable/disable blocker engine (`ble_check_loop`, `_should_enable`, `_start_ble`, `stop_ble`, `set_reconn_params`). **The only module that changed in v5.0.3 and has never been read** — see [what changed](/firmware/changes-5.0.3). |
-| 12 | `ubx_gnss.py` | 3,060 | 1 | PARTIAL | UBX framing and a few constants are documented; message parsing and AssistNow handling are not. |
-| 13 | `compassing.py` | 1,956 | 3 | PARTIAL | Heading maths partly documented; peer-proximity LED mapping is not. |
-| 14 | `f_lib/wifi.py` | 940 | 2 | NAME-ONLY | `WiFi` class with `connect_to_known`, `scan`, `get_nearby_networks`. Superseded by `wifi_v2` but still imported by `f_ota/`. |
-| 15 | `f_lib/tarfile.py` | 725 | 1 | NAME-ONLY | The `.tgz` reader the asset/OTA path depends on. |
+| 1 | `project_data.py` | 2,642 | 27 | PARTIAL | The global config/constants object. The `config.json` shape and many constants are documented; the `ActiveModes` mutation paths are not. |
+| 2 | `ubx_gnss.py` | 3,060 | 1 | PARTIAL | The fix pipeline, CFG-VALSET frames and AssistNow transfer are now documented; the remaining UBX message handlers are not. |
+| 3 | `compassing.py` | 1,956 | 3 | PARTIAL | The dial rendering and peer-proximity mapping are documented; `start_rotation`'s full frame loop is not. |
+| 4 | `espnow_conn_v2.py` | — | — | PARTIAL | The frame formats, radio windows and light-sleep rules are documented; the supervisor and outbox internals only partly. |
+| 5 | `compass.py` | — | — | PARTIAL | The largest module in the image. Most subsystems' entry points are decoded through it; it has never been read end to end. |
 
-The remaining NAME-ONLY modules are small or unreferenced: `f_lib/async_helpers.py` (348),
-`f_lib/unpack.py` (229), `peer_auto_bond.py` (190, single function `bond_to_group`, no
-importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
+Everything else is either DECODED or stock MicroPython. The per-module tables below
+carry the rating for each.
+
+<Note>
+  **What closed, and where it went.** Thirteen modules moved from NAME-ONLY to DECODED,
+  and five from PARTIAL to DECODED:
+
+  - `f_lib/logger.py`, `f_lib/bitwise.py`, `f_lib/task_mgr.py`, `f_lib/file_mgr.py`,
+    `f_lib/rtc_v2.py`, `f_lib/rtc_mem.py`, `f_lib/async_helpers.py`, `f_lib/tarfile.py`,
+    `f_lib/gzip.py`, `f_lib/unpack.py`, `f_lib/firmware_helpers.py` →
+    [f_lib](/reference/f-lib)
+  - `f_lib/requests.py`, `f_lib/wifi.py` → [networking](/reference/networking)
+  - `f_ota/hotspot.py` → [hotspot server](/firmware/hotspot-server)
+  - `ble_controller.py` → [BLE](/protocols/ble)
+  - `imu_fusion_auto.py` → [navigation](/subsystems/navigation)
+  - `debugger.py`, `peer_auto_bond.py` → [telemetry](/subsystems/telemetry)
+</Note>
 
 ## Registry notes
 
@@ -109,7 +126,7 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 | `new_vibe.py` | DECODED | Vibe Mode — microphone-driven sound-reactive ring LED effect (`mic.read_u16` → `ring.buf`; `newvibe-1.10`, v5.0.2: `newvibe-1.9`). Not magnetometer calibration |
 | `chat_msg.py` | PARTIAL | Peer-to-peer chat messages (`Messenger`, `gen_msg_uid`, `MSG_IN_BUFF`, `MSG_OUT_BUFF`). **Imported by no module in v5.0.3** |
 | `stats.py` | PARTIAL | Runtime statistics counters |
-| `debugger.py` | NAME-ONLY | On-device telemetry recorder with its own log writer and rotation — *not* decoded |
+| `debugger.py` | DECODED | On-device telemetry recorder with its own log writer and rotation — *not* decoded |
 | `demi_god.py` | DECODED | Privileged broadcast command system |
 
 ## Boot & filesystem
@@ -127,7 +144,7 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 | `ubx_gnss.py` | PARTIAL | u-blox UBX GNSS driver |
 | `nav_helpers.py` | DECODED | Navigation math helpers (`get_azimuth`, `get_heading_mot`, distance, odometer) |
 | `nav_logger.py` | PARTIAL | Navigation event logging (v5.0.3: fast `events.bin` rotation at ≥1024 B when `is_nav_log_fast_rotate`) |
-| `imu_fusion_auto.py` | PARTIAL | Accel/gyro sensor fusion and 2D/3D magnetometer calibration; the sole fusion module in v5.0.3 (byte-identical to v5.0.2), defines `_spin_deg` |
+| `imu_fusion_auto.py` | DECODED | **Madgwick fusion** over an ICM-20948, plus the 2D/3D magnetometer calibration state machine; the sole fusion module in v5.0.3 (byte-identical to v5.0.2), defines `_spin_deg`. See [navigation](/subsystems/navigation) |
 | `mag_wmm_data.py` | DECODED | World Magnetic Model data — a single constant, `WMM_2025`. Pure data, nothing to decode |
 | `task_mag_declination.py` | PARTIAL | Periodic declination recompute against `WMM_2025` |
 
@@ -164,7 +181,7 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 
 | Module | Status | Role |
 | --- | --- | --- |
-| `ble_controller.py` | NAME-ONLY | BLE enable/disable blocker engine. The class is `BleController`; `BleBlockers` is real. **`BleCtrl` is only a log-line prefix, not a class** — an earlier revision of this page listed it as one |
+| `ble_controller.py` | DECODED | BLE enable/disable blocker engine. The class is `BleController`; `BleBlockers` is real. **`BleCtrl` is only a log-line prefix, not a class** — an earlier revision of this page listed it as one |
 | `ble_core.py` | DECODED | Core BLE glue — characteristic/service registration, secrets |
 | `ble_manager.py` | DECODED | Connection/session manager (`BleManager`, `send_data_v2`, `gen_live_data`, `execute_cmd`) |
 | `svc_ble_transfer.py` | PARTIAL | Chunked transfer GATT service; entered at boot via the RTC category-0 handoff |
@@ -178,7 +195,7 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 | `espnow_conn_v2.py` | DECODED | Connection/session layer; message schema maps (`TOTEM_MSG_MAP`, `EXTENDED`, `COMM_SPEED`). Largest module in the image; the protocol surface is decoded, the radio queue internals less so |
 | `espnow_msg.py` | DECODED | ESP-NOW message builders (`*_gen_*` payload generators, `pack_flags`, `rot13`) |
 | `aioespnow.py` | STOCK | Stock asyncio ESP-NOW wrapper (`AIOESPNow`) |
-| `peer_auto_bond.py` | NAME-ONLY | One function, `bond_to_group`. No module imports it |
+| `peer_auto_bond.py` | DECODED | One function, `bond_to_group`. No module imports it |
 | `peer_helpers.py` | PARTIAL | Peer utilities (`is_peer_stale`: 7200 s in v5.0.3, v5.0.2: 14400 s) |
 | `peer_management.py` | PARTIAL | Peer registry / lifecycle; `auto_bond_to_peers` is decoded, the rest is not |
 
@@ -216,7 +233,7 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 | --- | --- | --- |
 | `f_ota/__init__.py` | — | Empty package init (15 lines) |
 | `f_ota/main.py` | PARTIAL | OTA orchestration (`install_firmware_update`, `get_release_from_api`) |
-| `f_ota/hotspot.py` | NAME-ONLY | An HTTP + WebSocket server, not just a "hotspot updater". Nothing imports it. **Largest unexamined network surface in the image** |
+| `f_ota/hotspot.py` | DECODED | An HTTP + WebSocket server, not just a "hotspot updater". **Nothing imports it and its one entry point is retired**, so it is dead code. See [hotspot server](/firmware/hotspot-server) |
 | `f_ota/install_ota.py` | PARTIAL | Write + activate new slot |
 | `f_ota/config.py` | PARTIAL | OTA configuration and status (`OtaStatus`, `OtaErr`) |
 | `f_ota/system.py` | DECODED | System helpers; `release_code` `5.0.3`, `release_id` 339 (v5.0.2: 335) |
@@ -227,25 +244,25 @@ importers), `f_lib/gzip.py` (149), `f_lib/firmware_helpers.py` (75).
 | Module | Status | Role |
 | --- | --- | --- |
 | `f_lib/__init__.py` | — | Empty package init (15 lines) |
-| `f_lib/wifi.py` | NAME-ONLY | `WiFi` class: `connect`, `connect_to_known`, `scan`, `get_nearby_networks`, `power_on`. Used by `f_ota/` |
+| `f_lib/wifi.py` | DECODED | `WiFi` class: `connect`, `connect_to_known`, `scan`, `get_nearby_networks`, `power_on`. Used by `f_ota/` |
 | `f_lib/wifi_v2.py` | PARTIAL | Station/AP control with power/protocol modes (`MODE_ESP_NOW_WIFI`, `PM_PERF`, `PM_PWRSAVE`) |
-| `f_lib/requests.py` | NAME-ONLY | Async HTTP client: `Response`, `SocketWrapper`, `Downloader`, and `get`/`post`/`put`/`patch`/`delete`/`head`/`rest` |
-| `f_lib/task_mgr.py` | PARTIAL | asyncio task manager — 28 importers, semantics not decoded |
-| `f_lib/async_helpers.py` | NAME-ONLY | `EventTimeout` (a context manager with `_countdown`) and `AsyncDeque` |
+| `f_lib/requests.py` | DECODED | Async HTTP client: `Response`, `SocketWrapper`, `Downloader`, and `get`/`post`/`put`/`patch`/`delete`/`head`/`rest` |
+| `f_lib/task_mgr.py` | DECODED | asyncio task manager, 28 importers. **A task that raises is killed permanently and never reaches `errors.log`.** See [f_lib](/reference/f-lib) |
+| `f_lib/async_helpers.py` | DECODED | `EventTimeout` (a context manager with `_countdown`) and `AsyncDeque` |
 | `f_lib/generators.py` | PARTIAL | Generator helpers (`breathe_effect`, `sos_timing`) |
 | `f_lib/rtc_mem.py` | DECODED | **The RTC-memory allocator.** `RtcMem` over `machine.RTC().memory()`. See the frame format below |
-| `f_lib/rtc_v2.py` | PARTIAL | **Not RTC-memory storage.** `class RTCv2(machine.RTC)` adding calendar/timestamp maths |
-| `f_lib/file_mgr.py` | PARTIAL | File management; v5.0.3 adds async SHA-256 `gen_file_hash(path, buff=None, yield_every=4)` and `get_oldest_file(prefix)` (used by `remove_oldest_log`) |
-| `f_lib/gzip.py` | NAME-ONLY | gzip decompression for `.tgz` OTA |
-| `f_lib/tarfile.py` | NAME-ONLY | `TarFile` / `TarInfo` / `FileSection` reader |
-| `f_lib/unpack.py` | NAME-ONLY | `unzip_tar` / `unpack_tar` — glues `gzip` to `tarfile` |
+| `f_lib/rtc_v2.py` | DECODED | **Not RTC-memory storage.** `class RTCv2(machine.RTC)` adding calendar/timestamp maths. See [f_lib](/reference/f-lib) |
+| `f_lib/file_mgr.py` | DECODED | File management. `save_obj` is a plain write, **not** the atomic `.tmp`+rename — that lives in `project_data.update_config`. v5.0.3 adds async SHA-256 `gen_file_hash` and `get_oldest_file`. See [f_lib](/reference/f-lib) |
+| `f_lib/gzip.py` | DECODED | gzip decompression for `.tgz` OTA |
+| `f_lib/tarfile.py` | DECODED | `TarFile` / `TarInfo` / `FileSection` reader |
+| `f_lib/unpack.py` | DECODED | `unzip_tar` / `unpack_tar` — glues `gzip` to `tarfile` |
 | `f_lib/firmware_ota.py` | PARTIAL | OTA slot writing (`BlockDevWriter`, `from_firmware_file`) |
 | `f_lib/firmware_rollback.py` | DECODED | Rollback logic (`mark_app_valid_cancel_rollback`, `OTA_MIN`/`OTA_MAX`) |
-| `f_lib/firmware_helpers.py` | NAME-ONLY | `running_partition` |
+| `f_lib/firmware_helpers.py` | DECODED | `running_partition` |
 | `f_lib/neopixel_v2.py` | PARTIAL | The LED driver `leds.py` actually uses |
-| `f_lib/bitwise.py` | NAME-ONLY | Bit manipulation — see below |
+| `f_lib/bitwise.py` | DECODED | Bit manipulation — see below |
 | `f_lib/helpers.py` | PARTIAL | Misc utilities (`rot13`, `fallback`) |
-| `f_lib/logger.py` | NAME-ONLY | Structured logging — see below |
+| `f_lib/logger.py` | DECODED | Structured logging — see below |
 
 ### `f_lib/rtc_mem.py` — RTC-memory frame format *(CONFIRMED)*
 

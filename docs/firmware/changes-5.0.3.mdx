@@ -17,7 +17,12 @@ MicroPython's own `mpy-tool.py`, and diffs them function by function (see
   **The 73/21 split is CONFIRMED** by two independent comparisons of the 94 modules
   common to both images: SHA-256 of the raw `.mpy` files, and a line diff of the
   disassembly with the source-path header stripped. Both agree exactly, and neither
-  reports a module that the other does not. An earlier revision of this page said 74/20.
+  reports a module that the other does not.
+
+  The [methodology](/reference/methodology#diffing-firmware-versions) page says 74/20,
+  and is not contradicting this: it compares decoded functions, which ignores the
+  line-number table a `.mpy` carries. The next note is the one module that separates
+  the two counts.
 
   The 21 changed modules are `espnow_conn_v2`, `compass`, `ble_manager`, `ubx_gnss`,
   `project_data`, `f_ble/file_upload`, `compassing`, `peripherals`, `new_vibe`, `ota_ble`,
@@ -26,11 +31,28 @@ MicroPython's own `mpy-tool.py`, and diffs them function by function (see
 </Note>
 
 <Note>
+  **Twenty of those 21 changed their code. `ble_controller.py` did not.**
+
+  A `.mpy` differs whenever the module is recompiled, because source line numbers move
+  and the line-number table is embedded in the file. Comparing the disassemblies with the
+  source path, the raw bytecode blob and the line-info table stripped — leaving qstrs,
+  object tables, preludes and decoded instructions — `ble_controller` is **byte-for-byte
+  identical** between the two releases: the same 105-entry qstr table, the same 17-entry
+  object table, the same instructions in all 14 code objects (**confirmed**). Every
+  line-info entry moved by exactly +2 without compounding, which is two blank or comment
+  lines inserted above `class BleBlockers` and nothing else.
+
+  So a hash diff is the right tool for "what might have changed" and the wrong one for
+  "what did". The other twenty differ in instructions, not just in line numbers.
+</Note>
+
+<Note>
   The diff is complete across all 94 modules — it compares bytecode, so it does not depend
   on anyone having understood the module. Knowing *that* a function changed is not the
-  same as knowing what it does. Of the 21 changed modules, 14 are rated DECODED, 6
-  PARTIAL, and one — `ble_controller.py` — NAME-ONLY on the
-  [module reference](/reference/modules). Where a change below is described in
+  same as knowing what it does. Of the 21, 15 are rated DECODED and 6 PARTIAL on the
+  [module reference](/reference/modules) — `ble_controller.py` was the last NAME-ONLY one
+  and has since been read, which is how the recompile-only finding above came out. Where
+  a change below is described in
   behavioural terms, that description comes from reading the bytecode; where it is
   described as "internal", it does not.
 </Note>

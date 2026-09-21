@@ -349,9 +349,14 @@ Three artefacts previously read as evidence of deep sleep, and what they actuall
   button press (`button.dis`, `pressed`), together with
   `esp32.gpio_deep_sleep_hold(False)`. These arm a deep-sleep wake source that is never
   used — vestigial code from an earlier power design (**inferred**).
-- `f_lib/rtc_mem.py` is real, but its only users are `ble_core`, `ble_manager` and
-  `device_power`, and they store **BLE bonding secrets**, not sleep state
-  (**confirmed** — those are the only modules that mention `rtc_mem`).
+- `f_lib/rtc_mem.py` is real, and what it stores is **not sleep state**. It has six
+  importers, not the three an earlier revision of this page claimed as confirmed:
+  `ble_core`, `ble_manager` and `device_power` (BLE bonding secrets, category 1),
+  `project_data` (the category 2 device snapshot), `project_main` (which calls `reload()`
+  at boot and reads the category 0 reboot-into-service mailbox), and
+  `f_lib/firmware_ota`, which imports it and never uses it (**confirmed** — counted from
+  `IMPORT_NAME f_lib.rtc_mem` across all 94 modules). See
+  [f_lib](/reference/f-lib) for the frame format and the three categories.
 
 ## Watchdog
 

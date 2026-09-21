@@ -155,23 +155,19 @@ watchdog block (`wdt_mgr.set_condition(WdtConditions.BLE_ACTIVE, False)`).
 
 ### Blockers
 
-`BleController` (`ble_controller.py`, recovered in full) lets two subsystems veto BLE:
+`BleController` (`ble_controller.py`) lets two subsystems veto BLE:
 
-| Index | `BleBlockers` | Name in logs |
-| --- | --- | --- |
-| `0` | `BONDING` | `bonding` |
-| `1` | `SMART_GRP` | `smart group` |
+| Index | `BleBlockers` | Name in logs | Held while |
+| --- | --- | --- | --- |
+| `0` | `BONDING` | `bonding` | a peer bonding/pairing countdown is running |
+| `1` | `SMART_GRP` | `smart group` | a smart group is forming |
 
-`set_block(index, is_blocked)` logs `[BleCtrl] Setting BLE block to: {} | for index: {}`,
-and when it *sets* a block it also sets the app-facing reconnect hint to
-`app_delay=5000, app_duration=10000, attempts=4`. `update()` then launches either
-`stop_ble` (`[BleCtrl] Stopping BLE for blocker`) or `_start_ble`
-(`[BleCtrl] No BLE Blocks`). `stop_ble` calls `BleManager.stop(reconn_start=5000,
-reconn_duration=10000)`, so the app is told when to come back. `_start_ble` waits until
-**10 s** have passed since the last blocker cleared, refuses if the previous link ended
-with `disconn_by in (1, 3)` (`[BleCtrl] Last BLE conn timed out or was disabled by user`),
-and otherwise silently reconnects with `is_reconn=True, max_attempts=4, conn_mode=1`
-(`[BleCtrl] Silently reconnecting BLE after blocker cleared`). **Confirmed.**
+While either flag is set the controller tears BLE down
+(`[BleCtrl] Stopping BLE for blocker`); when both clear it waits out a 10 s settle window
+and silently reconnects (`[BleCtrl] Silently reconnecting BLE after blocker cleared`). The
+full decode — every call site, the enable rule, the gate-by-gate burst loop, and the
+`status_id` / `disconn_by` value tables — is in
+[the BLE controller](#the-ble-controller) below.
 
 ### Scheduled disconnect and fast-reconnect bursts
 
@@ -508,6 +504,290 @@ first action, and the condition is cleared in `_on_disconnect`, in `burst_cleanu
 the end of `start_reconnect` when BLE really is down. While BLE is up the hardware watchdog
 is therefore blocked — which is why a hung link that the app never confirms is treated as a
 fault worth scheduling a disconnect for. **Confirmed.**
+
+## The BLE controller
+
+`ble_controller.py` decides *when BLE is allowed to be on*. It is a small module: a
+constant holder `BleBlockers`, a class `BleController`, and a module-level singleton
+`ble_ctrl = BleController()` built at import time (`ble_controller.dis:166-178`). Exactly
+two modules import it, both as `from ble_controller import ble_ctrl, BleBlockers` —
+`compass.py` (`compass.dis:1024-1033`) and `espnow_conn_v2.py`
+(`espnow_conn_v2.dis:747-756`). **Confirmed.**
+
+<Note>
+  `BleCtrl` is a log-line prefix, not a class. The module defines two classes and nothing
+  else: `BleBlockers` and `BleController`.
+</Note>
+
+### Wiring, and why it starts inert
+
+`BleController.__init__` (`ble_controller.dis:238-277`, **Confirmed**) sets ten attributes
+and does nothing else:
+
+| Attribute | Initial | Later written by |
+| --- | --- | --- |
+| `ble` | `None` | `Compass.start_ble` — the live `BleManager` (`compass.dis:6228-6231`) |
+| `_cb_start_ble` | `None` | `Compass.start_ble` — a reference to itself (`compass.dis:6232-6235`) |
+| `_cb_wlan_mode` | `None` | `Compass.start_ble` — `enow_v2.check_mode` (`compass.dis:6236-6239`) |
+| `blockers` | `[False, False]` | `set_block`, `release_all_blocks` |
+| `app_reconn_delay` | `0` | `set_reconn_params` |
+| `app_reconn_duration` | `0` | `set_reconn_params` |
+| `reconn_attempts` | `4` | `set_reconn_params` |
+| `no_blocks_ticks` | `None` | `update` |
+| `is_user_disconn` | `0` | nothing — never written or read again |
+| `_block_names` | `('bonding', 'smart group')` | nothing — read only by `debug()` |
+
+Two of those are dead. `_cb_wlan_mode` is assigned by `Compass.start_ble` and **never
+read**: `ble_check_loop` reaches ESP-NOW through its own
+`from espnow_conn_v2 import enow_v2, radio_timer` instead. `is_user_disconn` is written
+once in `__init__` and appears nowhere else in any of the 94 modules. **Confirmed.**
+
+Because all three live wires are attached inside `Compass.start_ble`, **the controller does
+nothing at all until BLE has been started at least once** — both `update()` and
+`ble_check_loop()` return immediately while `self.ble is None`
+(`ble_controller.dis:387-393`, `ble_controller.dis:511-517`).
+
+### The blocker engine
+
+`BleBlockers` is two integers and no methods (`ble_controller.dis:182-197`): `BONDING = 0`,
+`SMART_GRP = 1`. `_should_enable` is a single expression
+(`ble_controller.dis:743-748`, **Confirmed**):
+
+```python
+def _should_enable(self):
+    return not any(self.blockers)
+```
+
+<Note>
+  **This is a different shape from `wdt_manager._should_enable`.** That one calls
+  `_has_active_blocks()`, records the answer in `self.is_blocking_tasks` as a side effect,
+  and then walks a second `conditions` list, returning `False` if any entry is truthy
+  (`wdt_manager.dis`, `simple_name: _should_enable`). `BleController` has **no conditions
+  list and no side effect** — BLE is allowed exactly when both blocker flags are `False`.
+  The watchdog's "zero blockers *and* all conditions false" rule does not carry over.
+  **Confirmed.**
+</Note>
+
+Every `ble_ctrl.set_block` call site in the image (**Confirmed**; the other `set_block`
+hits in `compass.dis` and `espnow_conn_v2.dis` belong to `wdt_mgr`, not to this
+controller):
+
+| Blocker | Set `True` by | Cleared by |
+| --- | --- | --- |
+| `BONDING` | `Compass.start_pairing`, right after `modes.bonding_start = 1` (`compass.dis:7070-7076`) | `Compass.cancel_pairing` (`compass.dis:7230-7236`); `Compass.start_bonding_countdown` on `Bonding countdown canceled before bonding started`, guarded by a read of `ble_ctrl.blockers[BleBlockers.BONDING]` (`compass.dis:7959-7971`) |
+| `SMART_GRP` | `Compass.start_smart_group` (`compass.dis:9324-9330`); `_smart_group` in `espnow_conn_v2` (`espnow_conn_v2.dis:10244-10250`) | `Compass.smart_group_auto_exit` on `Exit Smart Group due to vertical orientation` (`compass.dis:4328-4334`); `Compass.stop_auto_bond` on `Host Exit stopping auto-bonding` (`compass.dis:9216-9222`); `_smart_group` (`espnow_conn_v2.dis:10690-10696`); `auto_bond_client_timeout` (`espnow_conn_v2.dis:10889-10895`) |
+
+`set_block(block_index, is_blocked)` (`ble_controller.dis:331-381`) logs
+`[BleCtrl] Setting BLE block to: {} | for index: {}`, writes
+`self.blockers[block_index]`, and — only when *setting* a block — calls
+`set_reconn_params(app_delay=5000, app_duration=10000, attempts=4)` before calling
+`update()`. Two quirks are visible in the bytecode: it computes `any(self.blockers)` into a
+local *before* the write and never reads it (a dead store,
+`ble_controller.dis:345-349`), and the `set_reconn_params` call is guarded by
+`block_index == 0 or block_index == 1` (`ble_controller.dis:357-364`), which is always true
+for a two-element list. **Confirmed.**
+
+`set_reconn_params(app_delay=0, app_duration=0, attempts=10)` has no caller outside
+`set_block`, so its `attempts=10` default is never used; `reconn_attempts` is `4` from
+`__init__` and `4` from every real call. **Confirmed.**
+
+`update()` (`ble_controller.dis:382-438`) is the whole decision:
+
+```python
+def update(self):
+    if self.ble is None:
+        return
+    if self._should_enable():
+        log.debug('[BleCtrl] No BLE Blocks')
+        if not self.no_blocks_ticks:
+            self.no_blocks_ticks = time.ticks_ms()
+        tasks.launch(self._start_ble, task_name='ble_ctrl_start')
+    else:
+        log.debug('[BleCtrl] BLE Blockers')
+        self.no_blocks_ticks = None
+        tasks.launch(self.stop_ble, task_name='ble_ctrl_stop')
+```
+
+`no_blocks_ticks` records **when the last blocker cleared**; the `if not` guard stops a
+repeated clear from pushing the timestamp forward. `tasks.launch` de-duplicates by
+`task_name` (`f_lib_task_mgr.dis`, `simple_name: launch`), so neither task can run twice
+concurrently.
+
+`release_all_blocks()` (`ble_controller.dis:278-313`) zeroes both flags — and **does not
+call `update()`**. Its only caller is `Compass.user_enable_ble`, the physical double-press
+handler, which stops the `ble_check` task, clears `modes.is_silent_reconn`, calls
+`release_all_blocks()` and then launches `start_ble(is_user_triggered=True)` itself
+(`compass.dis:6039-6073`). **Confirmed.**
+
+<Warning>
+  **The power-button double-press overrides both vetoes.** A Totem the mesh has parked for
+  smart-group formation or peer bonding still comes up advertising on a double-press, with
+  the blockers discarded rather than re-evaluated. Nothing restores them: they come back
+  only when the bonding or smart-group path calls `set_block(..., True)` again. Combined
+  with the fact that the link itself requires no pairing or encryption, physical access to
+  the button is enough to put a Totem on the air whatever the mesh had decided.
+  **Confirmed** (`compass.dis:6039-6073` and `ble_controller.dis:278-313`).
+</Warning>
+
+`debug()` (`ble_controller.dis:439-473`) prints `[BleCtrl {}] blocks=[{}]` with the builtin
+`print` rather than the logger, and **has no caller anywhere in the image** — a development
+helper left in the frozen build. **Confirmed.**
+
+### `status_id` and `disconn_by`
+
+Every controller gate reads these two `ble_conn` fields, and both are fully recoverable.
+
+`status_id` is a `property` over `_status_id`, written only by `Conn.set_conn_status`,
+which indexes a literal name tuple for the log line `[set_conn_status] BLE {}`
+(`f_ble_ble_data.dis:656-745`, **Confirmed**):
+
+| `status_id` | Name in the log | What `set_conn_status` does |
+| --- | --- | --- |
+| `0` | `Not Connected` | `connected.clear()`, `disconnected.set()`, `conn_ticks = None` |
+| `1` | `Disconnecting` | `connected.clear()`, `disconnected.clear()` |
+| `2` | `Connecting` | same as `1` |
+| `3` | `Connected` | `disconnected.clear()`, `connected.set()`, `conn_ticks = ticks_ms()`, and clears `is_reconnecting`, `is_graceful_disconn`, `is_scheduled_reconn`, `is_stalled` |
+
+<Note>
+  `ble_conn.status_id` is **not** `Controller.status__conn`. The latter is the app's
+  ConnStatus command id on the `ble_manager` side (see
+  [ConnStatus Ready frame](#connstatus-ready-frame)); `ble_controller.py` never reads or
+  writes it.
+</Note>
+
+`disconn_by` records *who* ended the last link. All four writers (**Confirmed**):
+
+| `disconn_by` | Written by | Meaning |
+| --- | --- | --- |
+| `0` | `Conn.__init__` (`f_ble_ble_data.dis:606-609`), `BleLite.enable` (`f_ble_ble_lite.dis:1113-1116`), `Compass.start_ble` (`compass.dis:6438-6441`) | cleared |
+| `1` | `BleLite.irq_cb` on `_IRQ_CENTRAL_DISCONNECT`, only if still falsy (`f_ble_ble_lite.dis:854-857`) | the **central** dropped the link |
+| `2` | `BleManager.stop`, only if still falsy, together with `is_graceful_disconn = True` (`ble_manager.dis:4953-4962`) | the **device** stopped BLE itself |
+| `3` | `BleLite.advertise` on `asyncio.TimeoutError`, after `Timeout connecting to BLE` (`f_ble_ble_lite.dis:519-527`) | the advertising window **expired unconnected** |
+
+That is what makes `_start_ble`'s refusal legible: it declines on `1` and `3` — the app
+walked away, or never arrived — but deliberately **not** on `2`, which is the link the
+controller itself tore down and the one it wants back.
+
+### `_start_ble`
+
+Launched by `update()` as task `ble_ctrl_start` (`ble_controller.dis:821-924`,
+**Confirmed**):
+
+1. Logs `[BleCtrl] Starting BLE`.
+2. If `no_blocks_ticks` is set, sleeps out the remainder of a **10 000 ms settle window**
+   measured from the moment the last blocker cleared.
+3. Re-checks `_should_enable()` and returns if a blocker reappeared during that sleep.
+   (`stop_ble` also calls `tasks.stop('ble_ctrl_start')`, so the usual outcome is
+   cancellation; this re-check covers the race.)
+4. If `status_id == 0` **and** `disconn_by in (1, 3)`, logs
+   `[BleCtrl] Last BLE conn timed out or was disabled by user` and gives up. Note the
+   conjunction: when `status_id` is anything other than `0`, this refusal is skipped
+   entirely and the reconnect goes ahead.
+5. If `_cb_start_ble` is `None`, logs
+   `[BleCtrl] No start_ble callback set; cannot reconnect` and gives up.
+6. Otherwise logs `[BleCtrl] Silently reconnecting BLE after blocker cleared`, sets
+   `ble_conn.is_scheduled_reconn = True` and `modes.is_silent_reconn = True`, and awaits
+   `Compass.start_ble(is_reconn=True, max_attempts=self.reconn_attempts, conn_mode=1)`.
+
+### `stop_ble`
+
+Launched by `update()` as task `ble_ctrl_stop`; its signature takes `**kwargs`
+(`ble_controller.dis:750-820`, **Confirmed**):
+
+1. Logs `[BleCtrl] Stopping BLE for blocker`.
+2. Returns immediately if `self.ble` is unset.
+3. Cancels four tasks in order — `start_ble`, `restart_ble`, `ble_ctrl_start`, `ble_check`
+   — so a blocker kills a pending controller start, an auto-reconnect and a fast-reconnect
+   burst loop as well as the main start.
+4. **Returns without touching the radio if `ble_conn.status_id in (0, 1)`**: there is
+   nothing to tear down when the link is already Not Connected or Disconnecting, and in
+   that case the app is never sent a reconnect promise.
+5. Otherwise awaits `BleManager.stop(reconn_start=..., reconn_duration=...)`, taking the
+   values from `kwargs` and falling back to `app_reconn_delay` / `app_reconn_duration`.
+   That is what emits the `[0x00, 0x05]` scheduled-disconnect frame.
+
+The only call site passes no kwargs beyond `task_name` (which `tasks.launch` consumes), so
+in this firmware the two values always come from the attributes — the `5000` / `10000` that
+`set_block` wrote a moment earlier. **Confirmed.**
+
+### `ble_check_loop`, gate by gate
+
+The 1.2 s-burst-every-8 s behaviour is described under
+[scheduled disconnect](#scheduled-disconnect-and-fast-reconnect-bursts). What reading the
+bytecode adds is that **the gates are not equivalent**
+(`ble_controller.dis:496-737`, **Confirmed**). `Compass.ble_schedule_mgr` launches it as
+task `ble_check` with `window_ms` set to the off window, 30 000 or 90 000 ms
+(`compass.dis:5972-5981`); the signature's own default is `window_ms=30000`.
+
+On each pass, after sleeping to the next 8 s tick and re-arming it:
+
+| Check | On failure |
+| --- | --- |
+| more than 5 000 ms left in the window | **exits** — stop bursting 5 s before the window ends |
+| `modes.evt_ble_schedule_disconn.is_set()` | **exits** — the scheduled disconnect was called off |
+| `ble_conn.status_id == 0` | **exits** — a link is up, connecting or closing |
+| `ble_conn.disconn_by != 1` | **exits** — the app dropped the last link on purpose |
+| `not modes.is_power_down` | **exits** |
+| `self._should_enable()` | **skips this burst and loops** |
+| `modes.evt_bonded.is_set()` | **skips this burst and loops** |
+| `modes.evt_battery_charged.is_set()` | **skips this burst and loops** |
+
+So a blocker, an unbonded device or a flat battery suppresses only individual bursts — the
+loop keeps running and bursts again as soon as the condition lifts. The five state checks
+above them end the loop for good.
+
+Between the tick and the gates, when `modes.evt_rtc_ready` is set, the loop aligns itself
+to the mesh radio: it sleeps `ticks_diff(radio_timer(mpm=15), ticks_ms()) + 500` and then
+awaits `modes.evt_comms_sent.wait()` (`ble_controller.dis:574-607`).
+
+A burst sets `modes.is_silent_reconn = True` and `self.ble.conn_mode = 0`, powers ESP-NOW
+on if it was off, awaits `enow_v2.check_mode(mode_id=2)`, then awaits
+`BleManager.start(burst_ms=1200, is_ble_breathe=False)` inside a `try`. On
+`asyncio.CancelledError` it calls `self.ble.burst_cleanup()` **only when `status_id != 3`**
+— a burst that actually connected is left alone — and re-raises. If the start returns
+truthy it logs `[BLE Check] App connected via fast reconnect` and returns; otherwise it
+clears `is_silent_reconn`, calls `enow_v2.power_off_soft()` if ESP-NOW had been off, and
+loops.
+
+<Note>
+  Every `return` in `ble_check_loop` returns `True` — the successful fast reconnect, the
+  window expiring and every state exit alike — so the coroutine's result carries no
+  information. Nothing awaits it: `tasks.launch` wraps it in `asyncio.create_task`.
+  **Confirmed.**
+</Note>
+
+### v5.0.3 vs v5.0.2: no functional change
+
+`ble_controller.mpy` does differ between the two images (MD5 `1f69ca62…` → `5c0b59be…`),
+which is why the [module diff](/firmware/changes-5.0.3) counts it among the 21 changed
+modules. But the difference is **entirely source line numbers**. Stripping the `line info`
+and `raw bytecode` lines from both disassemblies leaves two byte-for-byte identical files:
+the 105-entry qstr table, the 17-entry object table, every prelude, and every decoded
+instruction across all 14 code objects match exactly.
+
+Every line-info entry that changed did so by exactly **+2 lines**, at the same position in
+each function's table, and the shift does not compound. Decoding the module-level table
+gives:
+
+| Statement | v5.0.2 line | v5.0.3 line |
+| --- | --- | --- |
+| `from project_data import modes` (last import) | 11 | 11 |
+| `class BleBlockers` | 30 | 32 |
+| `class BleController` | 43 | 45 |
+| `ble_ctrl = BleController()` | 66 | 68 |
+
+**Two source lines — blank or comment — were inserted between the import block and
+`class BleBlockers`, and nothing else in the module changed.** `ble_controller.py` behaves
+identically in v5.0.2 and v5.0.3, so nothing on this page is version-dependent.
+**Confirmed** (`re/v5.0.2/mpy/ble_controller.dis` vs `re/v5.0.3/mpy/ble_controller.dis`).
+
+### What is not recoverable
+
+The frozen bytecode carries no comments, docstrings or original blank lines, so the two
+lines added in v5.0.3 cannot be read — only their existence and position. Local variable
+names inside every method are also gone (the disassembly shows `LOAD_FAST 4`, not a name);
+the names used above for locals are descriptions, not recovered identifiers. Argument and
+attribute names survive because they are qstrs, and all of those are quoted verbatim.
 
 ## OTA over BLE
 

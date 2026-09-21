@@ -1,12 +1,13 @@
 ---
-title: "f_lib: bit packing and logging"
-description: "f_lib/bitwise.py and f_lib/logger.py decoded from the v5.0.3 bytecode — the pack/unpack primitives underneath every wire format on this site, and the logger that produced every log line they are quoted from."
+title: "f_lib: the support library"
+description: "Twelve f_lib modules decoded from the v5.0.3 bytecode — the task manager every coroutine on this device is launched through, the file manager, the RTC calendar and the RTC-memory allocator, the pack/unpack primitives underneath every wire format, and the logger that produced every log line quoted on this site."
 ---
 
-Two modules sit underneath most of the rest of this documentation. `f_lib/bitwise.py` is
-where every flags byte, bit field and embedded UTF-8 string in the
+`f_lib/` is the layer everything else in this firmware sits on. `f_lib/bitwise.py` is where
+every flags byte, bit field and embedded UTF-8 string in the
 [protocols](/protocols/overview) is actually built. `f_lib/logger.py` owns `errors.log` and
-formats every log line quoted elsewhere as evidence. Both were listed as **NAME-ONLY** in
+formats every log line quoted elsewhere as evidence. `f_lib/task_mgr.py` is how every
+coroutine in the image gets started. All of them were listed as **NAME-ONLY** or partial in
 the [module reference](/reference/modules); this page is the decode.
 
 <Note>
@@ -22,8 +23,24 @@ the [module reference](/reference/modules); this page is the decode.
 
 | Module | Lines of disassembly | Importers | What rests on it |
 | --- | --- | --- | --- |
-| `f_lib/bitwise.py` | 526 | 18 | Every documented wire format |
 | `f_lib/logger.py` | 688 | 41 | Every log line quoted as evidence |
+| `f_lib/task_mgr.py` | 305 | 28 | Every async task in the firmware |
+| `f_lib/bitwise.py` | 526 | 18 | Every documented wire format |
+| `f_lib/file_mgr.py` | 1470 | 18 | Config files, logs, OTA file install |
+| `f_lib/rtc_v2.py` | 815 | 13 | Every timestamp and Unix time on the wire |
+| `f_lib/rtc_mem.py` | 970 | 6 | Reboot mailbox, BLE bonds, device snapshot |
+| `f_lib/async_helpers.py` | 348 | 2 | BLE timeouts and the BLE RX queue |
+| `f_lib/tarfile.py` | 725 | 1 | Unpacking the OTA `.tgz` |
+| `f_lib/unpack.py` | 229 | 1 | Unpacking the OTA `.tgz` |
+| `f_lib/gzip.py` | 149 | 1 | Unpacking the OTA `.tgz` |
+| `f_lib/firmware_helpers.py` | 75 | 1 | Reporting the running partition |
+| `f_lib/__init__.py` | 15 | — | Nothing: the file is empty |
+
+"Importers" counts modules containing an `IMPORT_NAME f_lib.<name>` for that module, across
+all 94 disassemblies. The eight `f_lib` modules not on this page — `wifi.py`, `wifi_v2.py`,
+`requests.py`, `generators.py`, `helpers.py`, `neopixel_v2.py`, `firmware_ota.py` and
+`firmware_rollback.py` — belong to the subsystem pages that use them; see the
+[module reference](/reference/modules).
 
 `f_lib/logger.py` is the most-imported module in the image. All 41 importers import the
 same thing — the module-level singleton `log` — and 11 of them also import `ErrCode`
@@ -608,6 +625,929 @@ imports neither `wdt_manager` nor `WdtBlockers` and never touches the watchdog. 
 write is unguarded — which is consistent, since the write is a single small append rather
 than the multi-second rotation the blocker exists to protect.
 
+## `f_lib/task_mgr.py`
+
+Everything asynchronous in this firmware is started here. 28 modules import it and **all 28
+import exactly one name — the module-level singleton `tasks`** (**confirmed**: an
+`IMPORT_NAME f_lib.task_mgr` in 28 disassemblies, each followed by `IMPORT_FROM tasks` and
+nothing else). Nothing constructs its own `Tasks`.
+
+The whole module is 305 lines of disassembly and fits on one screen.
+
+### The module *(CONFIRMED, `f_lib_task_mgr.dis:35`–`304`)*
+
+```python
+import asyncio
+from asyncio import Event          # imported, then never referenced again
+
+
+class Tasks:
+    def __init__(self):
+        self.cur = {}
+
+    def cleanup(self):
+        if self.cur:
+            done = []
+            for name in self.cur:
+                if self.cur[name].done():
+                    done.append(name)
+            for name in done:
+                del self.cur[name]
+
+    def launch(self, cb, task_name=None, **kwargs):
+        if task_name:
+            if task_name not in self.cur:
+                self.cur[task_name] = asyncio.create_task(cb(**kwargs))
+        else:
+            asyncio.create_task(cb(**kwargs))
+
+    def schedule(self, cb, delay_ms=None, event=None, task_name=None, **kwargs):
+        asyncio.create_task(self._schedule(
+            task_name=task_name, delay_ms=delay_ms, event=event, cb=cb, **kwargs))
+
+    async def _schedule(self, cb=None, task_name=None, delay_ms=None, event=None, **kwargs):
+        if delay_ms:
+            await asyncio.sleep_ms(delay_ms)
+        if event:
+            await event.wait()
+        self.launch(cb, task_name=task_name, **kwargs)
+
+    def show_tasks(self):
+        for name in self.cur:
+            print(name)
+
+    def stop(self, task_name=None):
+        if task_name not in self.cur:
+            return
+        self.cur[task_name].cancel()
+        del self.cur[task_name]
+
+
+tasks = Tasks()
+```
+
+Details behind the reconstruction, all **confirmed**:
+
+- The two `del` statements are `LOAD_NULL` / `ROT_THREE` / `STORE_SUBSCR`
+  (`f_lib_task_mgr.dis:151`–`153` and `:300`–`:302`) — MicroPython's encoding for
+  `del obj[key]`.
+- The `**kwargs` on `launch`, `schedule` and `_schedule` are the var-keyword scope flag in
+  each prelude, and the calls are `CALL_FUNCTION_VAR_KW` / `CALL_METHOD_VAR_KW` (`:177`,
+  `:190`, `:216`, `:254`).
+- `Event` is imported at `:48` and no opcode in the module loads it again. It is a dead
+  import; `_schedule` calls `event.wait()` on whatever object the caller passed.
+- `tasks = Tasks()` is `STORE_NAME tasks` at `:58`.
+
+### The registry *(CONFIRMED)*
+
+| Method | What it does | Returns |
+| --- | --- | --- |
+| `launch(cb, task_name=None, **kwargs)` | Registers `task_name` and creates a task for `cb(**kwargs)`; with no name, creates an untracked task | `None` |
+| `schedule(cb, delay_ms=None, event=None, task_name=None, **kwargs)` | Creates an untracked wrapper task that waits, then calls `launch` | `None` |
+| `stop(task_name=None)` | Cancels the registered task and drops the entry | `None` |
+| `cleanup()` | Drops every entry whose task reports `done()` | `None` |
+| `show_tasks()` | Prints the registered names | `None` |
+
+Four consequences of this design matter elsewhere on this site.
+
+<Warning>
+  **A task name stays occupied after the task finishes.** `launch` tests
+  `task_name not in self.cur` (`f_lib_task_mgr.dis:168`–`169`); nothing removes the entry
+  when the coroutine ends. A one-shot task launched under a name therefore blocks every
+  later `launch` of that name — silently, with no log line and no return value to check —
+  until something calls `stop(name)` or `cleanup()`.
+
+  `cleanup()` is called from exactly **four** sites in the whole image (**confirmed**:
+  `LOAD_METHOD cleanup` on the `tasks` global): `device_power.shut_down_tasks`
+  (`device_power.dis:273`–`275`), `compass.backend_checks` (`compass.dis:1957`–`1959`),
+  `svc_ble_transfer.backend_checks` (`svc_ble_transfer.dis:271`–`273`) and
+  `touch_button_v2.stop` (`touch_button_v2.dis:1052`–`1054`). There is no periodic sweep.
+  Names whose owner does not also call `stop` depend on one of those four running.
+
+  `show_tasks` is **dead code**: the qstr appears in no other disassembly, so the only way
+  to list the registry is from the REPL.
+</Warning>
+
+<Warning>
+  **`task_mgr` does nothing about exceptions — and neither does anything else by default.**
+  There is no `SETUP_EXCEPT` anywhere in `f_lib/task_mgr.py`. `launch` hands the coroutine
+  to `asyncio.create_task` and forgets it: it does not wrap `cb`, does not await the task,
+  does not register a done-callback, and never restarts anything.
+
+  What happens to a raising task is therefore entirely MicroPython's frozen `asyncio`. In
+  `run_until_complete`, a task that ends on an exception and is not being awaited on
+  (`t.state is None`) has its exception stored, and the loop calls
+  `Loop.call_exception_handler` with the module-level `_exc_context` dict
+  (`asyncio_core.dis:919`–`939`). `_exc_context` is built once at import with
+  `message = "Task exception wasn't retrieved"` (`:177`–`:187`).
+  `call_exception_handler` falls back to `Loop.default_exception_handler` whenever
+  `Loop._exc_handler` is unset (`:1134`–`1150`), and that handler prints to `sys.stderr`
+  (`:1093`–`1133`):
+
+  ```text
+  Task exception wasn't retrieved
+  future: <Task> coro= <generator>
+  Traceback (most recent call last): ...
+  ```
+
+  **No exception handler is ever installed.** `set_exception_handler` is defined at
+  `asyncio_core.dis:1073` and the qstr appears in no other disassembly. So an uncaught
+  exception in a launched task:
+
+  1. **kills that task permanently** — it is not retried, and its name stays in
+     `tasks.cur` until `cleanup()` or `stop()` removes it;
+  2. **prints to the console, not to the logger** — it goes through
+     `sys.print_exception`, never `log.exc`, so **it is not written to `errors.log`** and
+     cannot be recovered from a device after the fact;
+  3. **leaves the rest of the event loop running**, so the device stays up with one
+     subsystem quietly dead.
+
+  This is the failure shape behind several of the stories elsewhere on this site. It is
+  also why the one place that cares wraps the coroutine itself:
+  `espnow_conn_v2.communicate_supervised` is a `while True` around
+  `await self.communicate_v2()` that catches `(RuntimeError, OSError)`, logs
+  `'communicate_v2 died; restarting'`, sleeps 500 ms and loops
+  (`espnow_conn_v2.dis:2745`–`2810`). That restart behaviour belongs to the supervisor,
+  not to `task_mgr` — and note it catches only those two types, so any other exception
+  escapes it and ends the mesh task for good.
+</Warning>
+
+<Note>
+  **`launch` passes keyword arguments only.** The call it builds is `cb(**kwargs)` — zero
+  positional arguments, one double-star pair (`CALL_FUNCTION_VAR_KW 256` at
+  `f_lib_task_mgr.dis:177`, whose operand decodes as 0 positional and 1 keyword). Every
+  `tasks.launch(fn, task_name='x', foo=1)` in the image therefore reaches `fn` as
+  `fn(foo=1)`. A coroutine that takes a positional-only first argument cannot be launched
+  this way.
+
+  **`launch` never returns the task.** Both branches end in `POP_TOP` or `STORE_SUBSCR`,
+  and the function returns `None` (`:182`–`:194`). The only handle to a running task is
+  `tasks.cur[name]`, which four modules reach into directly — `compass` (5 sites),
+  `compassing` and `peer_management` (2 each) and `ota_callback` (1).
+</Note>
+
+<Note>
+  **An unnamed launch cannot be stopped.** `launch(cb)` with no `task_name` takes the
+  `else` branch, which creates the task and discards it (`f_lib_task_mgr.dis:184`–`192`).
+  Nothing holds a reference, so it can only end by finishing or raising.
+
+  **`schedule`'s wrapper is not tracked either.** `schedule` creates a task for
+  `_schedule(...)` and drops it (`:202`–`:218`); only the eventual inner `launch` registers
+  anything. Calling `stop(name)` before the delay elapses removes nothing, and the wrapper
+  still fires and re-registers the name afterwards. `schedule` is used from six modules —
+  `compass` (5 sites), `debugger`, `espnow_conn_v2`, `f_ota/hotspot`, `imu_fusion_auto` and
+  `nav_logger` (1 each).
+</Note>
+
+`cleanup` calls `.done()` on the stored task. `Task` comes from the **native** `_asyncio`
+module — `asyncio/core.py` does `from _asyncio import TaskQueue, Task` inside a `try`, and
+the pure-Python fallback `asyncio/task.py` is *not* frozen into this image
+(`asyncio_core.dis:145`, with the fallback `IMPORT_NAME task` at `:157`; there is no
+`asyncio_task.dis` among the 94 modules). So what `done()` counts as done is C code that is
+not in the bytecode, and is **not recoverable** from it.
+
+## `f_lib/file_mgr.py`
+
+Nineteen module-level names, no state, two constants: `VFS_DIR = 16384` and
+`VFS_FILE = 32768` (`f_lib_file_mgr.dis:161`–`164`) — the `os.stat` / `os.ilistdir` mode
+values for a directory and a regular file. `asyncio`, `os` and `log` are imported at module
+level; `deflate`, `hashlib` and `json` are imported lazily inside the functions that need
+them.
+
+### The public surface *(CONFIRMED)*
+
+Defaults are the `MAKE_FUNCTION_DEFARGS` tuples in the module body
+(`f_lib_file_mgr.dis:164`–`272`).
+
+| Name | Signature | Notes | Disassembly |
+| --- | --- | --- | --- |
+| `FileErr` | `(msg='', code=None)` | `Exception` subclass; stores both | `:275` |
+| `compress_file` | `async (file_path=None, pause_ms=10, is_delete=True, output_path=None)` | zlib, 256-byte chunks | `:315` |
+| `copyfileobj` | `(src, dest, length=512)` | `readinto` path or `read` path | `:434` |
+| `exists` | `(file=None)` | `os.stat` in `try`/`except OSError` | `:498` |
+| `gen_file_hash` | `async (file_path=None, buff=None, yield_every=4)` | raw SHA-256 digest | `:522` |
+| `get_files` | `generator (dir_path='', prefix=None)` | files only, not directories | `:644` |
+| `get_file_diambig` | `(file_name=None)` | middle field of `prefix-NNN.ext` | `:687` |
+| `is_dir` | `(path=None)` | `os.stat(path)[0] == 16384` | `:715` |
+| `make_parents` | `(file_path=None, root='')` | `mkdir` each component | `:730` |
+| `move_files` | `(source_dir=None, dest_dir='', excluded=[])` | the OTA file install | `:783` |
+| `rebuild_obj` | `(file_path=None, obj=None, is_strict=False)` | JSON into an object | `:934` |
+| `get_oldest_file` | `(prefix=None)` | lowest `-NNN.` number | `:1030` |
+| `remove_oldest_log` | `(prefix=None)` | `get_oldest_file` then `os.remove` | `:1094` |
+| `rmtree` | `(dir_path=None, is_del_root=True)` | recursive delete | `:1150` |
+| `save_obj` | `(file_path=None, obj=None)` | JSON out | `:1202` |
+| `vfs_del` | `(dir_path='/', file_types=('mpy',))` | delete by extension | `:1269` |
+| `vfs_storage` | `()` | `(total, free, used)` in bytes | `:1346` |
+| `walk_up` | `(root_dir, path_list=[])` | recursive file list | `:1382` |
+| `write_bin_line` | `(filename, memview, data_len=0)` | append a record plus `b'\n'` | `:1432` |
+
+`exists` is the most-used export (10 modules), then `save_obj` (8) and `rebuild_obj` (5).
+Note that `f_lib/logger.py` defines its own separate `exists` — same name, different
+function, as the logger section above says.
+
+### `save_obj` and `rebuild_obj` *(CONFIRMED, `f_lib_file_mgr.dis:934`–`998`, `:1202`–`1268`)*
+
+```python
+def save_obj(file_path=None, obj=None):
+    from json import dump
+    try:
+        with open(file_path, 'w') as f:
+            if isinstance(obj, dict):
+                dump(obj, f)
+            else:
+                dump(obj.__dict__, f)
+    except OSError as e:
+        if e.errno == 28:                                    # ENOSPC
+            print('No space left on device to save file')
+            return False
+    return True
+
+
+def rebuild_obj(file_path=None, obj=None, is_strict=False):
+    from json import load
+
+    def get_file_contents():
+        try:
+            with open(file_path) as f:
+                return load(f)
+        except (OSError, ValueError):
+            return False
+
+    data = get_file_contents()
+    if not data:
+        return False
+    if obj is None:
+        return data
+    keys = []
+    if is_strict:
+        keys = list(obj.__dict__)
+    for k in data:
+        if hasattr(obj, k) and (not is_strict or k in keys):
+            setattr(obj, k, data[k])
+    return obj
+```
+
+`save_obj` opens the destination with mode `'w'`, which truncates it before anything is
+written. There is no temporary file, no rename and no `sync` — as
+[OTA](/subsystems/ota) already states. The atomic dance that *is* in this firmware lives one
+level up, in `project_data.update_config`, which calls
+`save_obj('config.json.tmp', config)` and renames the result over `config.json` only if it
+returned truthy (`project_data.dis:2430`–`2441`).
+
+<Warning>
+  **`save_obj` returns `True` for every `OSError` except `ENOSPC`.** The handler tests
+  `e.errno == 28` (`f_lib_file_mgr.dis:1249`–`1251`); when that test fails, control falls
+  through the handler to the function's tail, which is `LOAD_CONST_TRUE` / `RETURN_VALUE`
+  (`:1266`–`1267`). There is no re-raise and no other return.
+
+  So an I/O error, a corrupt filesystem or a bad path produces a **truncated or empty file
+  and a `True` return**. Any caller that treats the return value as "the write succeeded"
+  is wrong in exactly the case it was checking for. Only a non-`OSError` — for example a
+  `TypeError` from `obj.__dict__` on an object that has none — actually propagates.
+</Warning>
+
+<Warning>
+  **`rebuild_obj` will overwrite methods.** The guard is `hasattr(obj, k)`
+  (`f_lib_file_mgr.dis:976`–`980`), which is true for class attributes and bound methods,
+  not just instance data. A JSON file whose key happens to be a method name puts the JSON
+  value on the instance, shadowing the method. `is_strict=True` narrows the set to
+  `list(obj.__dict__)` — instance attributes only — and is the safe mode; it is **off by
+  default** (`:225`–`231`).
+
+  `rebuild_obj` also cannot distinguish "file missing", "file corrupt" and "file contains
+  an empty object": `get_file_contents` catches `OSError` and `ValueError` and returns
+  `False` (`:999`–`1029`), and the caller then does `if not data: return False`
+  (`:953`–`956`), which an empty dict also satisfies. All three cases come back as `False`
+  with nothing logged.
+</Warning>
+
+### The OTA file install: `move_files` *(CONFIRMED, `f_lib_file_mgr.dis:783`–`933`)*
+
+```python
+def move_files(source_dir=None, dest_dir='', excluded=[]):
+    source_dir = source_dir.strip('/')
+    dest_dir = dest_dir.strip('/')
+    print('\nUpdating files on device...')
+    if source_dir not in os.listdir():
+        print('Source directory: ... not found, cannot move files'.format(move_files()))
+        return False
+    print('Excluded files:')
+    print(excluded)
+    ok = True
+    for src in walk_up(source_dir, []):
+        rel = src.replace(source_dir + '/', '', 1)
+        if rel in excluded:
+            continue
+        dst = (dest_dir + '/' + rel).strip('/')
+        if '/' in dst:
+            make_parents(dst)
+        if is_dir(src):
+            if not exists(dst):
+                os.mkdir(dst)
+        else:
+            try:
+                os.rename(src, dst)
+            except OSError as e:
+                print('OSError replacing: ... errno: ...'.format(dst, e.errno))
+                ok = False
+                continue
+            print('Updated: ...'.format(dst))
+    if ok:
+        rmtree(dir_path=source_dir)
+    return ok
+```
+
+The two `print` format strings are shown abbreviated here because their literal text
+contains brace placeholders; the exact strings are
+`'Source directory: {} not found, cannot move files'`,
+`'OSError replacing: {} | errno: {}'` and `'{:.<16}{}'` with `'Updated:'`, all from
+`obj_table` and the qstr table (`f_lib_file_mgr.dis:133` and `:60`–`:61`).
+
+Three things in this function are worth stating plainly.
+
+<Warning>
+  **The "source directory missing" path crashes instead of reporting.** The opcodes are
+  `LOAD_GLOBAL move_files` / `CALL_FUNCTION 0` inside the `format` call
+  (`f_lib_file_mgr.dis:812`–`813`) — it calls **itself with no arguments**, and
+  `source_dir` then defaults to `None`, so the first line of the recursive call raises
+  `AttributeError` on `None.strip('/')`. The `return False` two instructions later is
+  unreachable. **Confirmed**; whatever the source meant to interpolate, this is what the
+  bytecode does.
+</Warning>
+
+- **The directory branch is dead.** `walk_up` appends a path only when the entry mode is
+  not `VFS_DIR` and recurses otherwise (`:1408`–`1425`), so every element of the list is a
+  regular file and `is_dir(src)` is always false. The `os.mkdir` arm can never run;
+  directories are created by the `make_parents(dst)` call above it.
+- **A partial install is not rolled back.** Each file is moved with an individual
+  `os.rename`, and a failure sets `ok = False` and *continues* with the rest of the list.
+  The staging directory is kept (the `rmtree` is inside `if ok`), but the files already
+  renamed stay renamed. A half-installed update is a state this function can leave behind.
+
+### The rest, briefly *(CONFIRMED)*
+
+- **`gen_file_hash`** is a coroutine. It returns `hashlib.sha256(...).digest()` — 32 raw
+  bytes, not hex (`:561`, `:612`) — reading the file in `len(buff)`-sized chunks through
+  `readinto` into a `memoryview`, with `buff` defaulting to `bytearray(256)`. It awaits
+  `asyncio.sleep_ms(0)` every `yield_every` reads (default 4), so hashing a large file does
+  not stall the event loop. A missing file logs `'File not found, cannot gen hash for: {}'`
+  at `err` level and returns `None`; any other exception logs `'Cannot gen hash for: {}'`
+  at `exc` level and returns `None`. Both pass `is_write=False`, so **neither reaches
+  `errors.log`**.
+- **`compress_file`** is also a coroutine: `deflate.DeflateIO(out, deflate.ZLIB)` over
+  256-byte reads, awaiting `asyncio.sleep_ms(pause_ms)` after each chunk (default 10 ms).
+  It raises `FileErr(..., 'NotFound')` for a missing input and a plain `FileErr` if the
+  name's second dot-separated field is already `gz`; the output path defaults to the input
+  with `.gz` appended to its first field. Despite the `.gz` name the stream is **zlib**,
+  not gzip (`:361`, `:389`).
+- **`vfs_storage()`** returns `(total, free, used)` in bytes, computed from
+  `os.statvfs('/')` as `f_bsize * f_blocks` and `f_bsize * f_bfree` (`:1352`–`1375`).
+  Note it uses `f_bsize` (index 0), not `f_frsize` (index 1).
+- **`get_files`** yields names, not paths, and only for entries whose mode is exactly
+  `VFS_FILE`; directories are skipped entirely. Its `dir_path` default is the empty string,
+  so `get_oldest_file` and `remove_oldest_log`, which never pass one, scan **only the
+  filesystem root**.
+- **`vfs_del`** joins with no separator — `os.remove(dir_path + entry_name)`
+  (`:1312`–`1318`). That is correct only because `dir_path` defaults to `'/'`; a caller
+  passing `'logs'` would try to remove `logsfoo.bin`. It is also non-recursive, and it
+  returns early when `file_types` is falsy.
+- **`rmtree`** recurses with `is_del_root=True` regardless of the caller's argument
+  (`:1168`–`1177`), so `is_del_root=False` spares only the top directory. It has no
+  `try`/`except`: one `OSError` aborts the walk part-way through.
+- **`write_bin_line`** opens with `'ab'` and appends `b'\n'` after every record
+  (`:1459`–`1463`). This is the newline-terminated binary-record convention used by the
+  event and message logs.
+
+<Warning>
+  **`walk_up` has a mutable default argument.** The default for `path_list` is
+  `BUILD_LIST 0` in the `MAKE_FUNCTION_DEFARGS` tuple (`f_lib_file_mgr.dis:262`–`266`) —
+  one list object, created once at import, shared by every call that does not pass its own.
+  `walk_up(d)` called twice returns the first walk's results appended to the second's.
+
+  In this image it never bites, because the only caller in the module passes an explicit
+  `[]` (`move_files`, `:829`–`832`), and no other module imports `walk_up`. It is a loaded
+  gun rather than a fired one — but anything reusing this module needs to know.
+  `move_files`'s own `excluded=[]` default (`:218`–`224`) is the same shape, though it is
+  only read.
+</Warning>
+
+## `f_lib/rtc_v2.py`
+
+Not RTC storage. `class RTCv2(machine.RTC)` plus six module-level calendar functions and a
+singleton `rtc = RTCv2()` (`f_lib_rtc_v2.dis:91`–`93`). Thirteen modules import it;
+all thirteen import `rtc`, and three also import a calendar function
+(`ubx_gnss` takes `time_to_unix` and `unix_to_time`, `espnow_conn_v2` takes `unix_to_time`,
+`compass` takes `ms_until_sub_interval`).
+
+`machine.RTC().datetime()` on ESP32 returns an eight-tuple
+`(year, month, day, weekday, hour, minute, second, microsecond)`. Every property below
+indexes into it.
+
+### The class *(CONFIRMED, `f_lib_rtc_v2.dis:118`–`361`)*
+
+```python
+class RTCv2(RTC):
+    def __init__(self):
+        super().__init__()
+
+    @property
+    def itod(self):                                      # ms into the day
+        dt = self.datetime()
+        return (dt[4] * 3600 + dt[5] * 60 + dt[6]) * 1000 + int(dt[7] / 1000)
+
+    @property
+    def itos(self):                                      # ms into the current second
+        return int(self.datetime()[7] / 1000)
+
+    @property
+    def sec(self):                                       # wall-clock seconds field, 0-59
+        return self.datetime()[6]
+
+    @property
+    def timestamp(self):
+        dt = self.datetime()
+        return '{}-{:02}-{:02} {:02}:{:02}:{:02}.{:06}'.format(
+            dt[0], dt[1], dt[2], dt[4], dt[5], dt[6], dt[7])
+
+    def unix(self, precision=2):
+        return timestamp_to_unix(time_str=self.timestamp, precision=precision)
+
+    def ms_until(self, f_time=None):
+        target = f_time[0] * 3600 + f_time[1] * 60 + f_time[2] + f_time[3] / 1000000
+        now = self.datetime()
+        cur = now[4] * 3600 + now[5] * 60 + now[6] + now[7] / 1000000
+        if f_time[0] < now[4]:
+            target += 86400
+        return round((target - cur) * 1000)
+```
+
+`itod`, `itos`, `sec` and `timestamp` are **properties** (each wrapped by a `property()`
+call in the class body, `:130`–`:145`); `unix` and `ms_until` are ordinary methods. That
+asymmetry is easy to get wrong — the logger reads `rtc.timestamp` with `LOAD_ATTR`, while
+every caller of `unix` uses `LOAD_METHOD`.
+
+<Note>
+  **`ms_until` compares hours only.** The roll-forward test is `f_time[0] < now[4]`
+  (`f_lib_rtc_v2.dis:343`–`348`) — the target *hour* against the current *hour*. A target
+  earlier in the same hour than now returns a **negative** number of milliseconds rather
+  than wrapping to tomorrow. `f_time` is a four-tuple of
+  `(hour, minute, second, microsecond)`. **No caller in the image uses it** — the only
+  `ms_until` qstrs elsewhere belong to `espnow_conn_v2`'s unrelated `ms_until_radio_on`.
+</Note>
+
+### The calendar functions *(CONFIRMED, `f_lib_rtc_v2.dis:362`–`814`)*
+
+```python
+days_per_month = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def is_leap_year(yyyy):
+    return (yyyy - 1968) % 4 == 0
+
+
+def leap_years_since(yyyy):
+    return int((yyyy - 1968) / 4)
+
+
+def days_since_jan_1st(yyyy, mm, dd):
+    days = dd
+    for i in range(mm - 1):
+        days += days_per_month[i]
+    if is_leap_year(yyyy) and mm > 2:
+        days += 1
+    return days - 1
+
+
+def time_to_unix(tt):                     # tt = (year, month, day, hour, minute, second)
+    days = days_since_jan_1st(tt[0], tt[1], tt[2])
+    total = tt[5] + tt[4] * 60 + tt[3] * 3600 + days * 86400
+    total += (tt[0] - 1970) * 31536000
+    ly = leap_years_since(tt[0])
+    if is_leap_year(tt[0]):
+        ly -= 1
+    total += ly * 86400
+    return total
+
+
+def ms_until_sub_interval(interval_sec=6):
+    s = rtc.sec
+    if s % interval_sec == 0:
+        return interval_sec * 1000 - rtc.itos
+    return (interval_sec - s % interval_sec) * 1000 - rtc.itos
+```
+
+**The epoch is 1970-01-01 UTC** — the `- 1970` and the `31536000` (365 days) at
+`f_lib_rtc_v2.dis:511`–`513`. There is no timezone term anywhere in the module, so what
+`time_to_unix` returns is UTC if and only if the RTC was set to UTC.
+
+`1968` in `is_leap_year` is a leap year chosen as the base, which makes the test
+arithmetically identical to `yyyy % 4 == 0`. `leap_years_since(y)` counts the leap years in
+`[1969, y)`, plus `y` itself when `y` is a leap year — which is why both `time_to_unix` and
+`unix_to_time` carry a correction for that case.
+
+<Note>
+  **`time_to_unix` is exact for the whole plausible life of the device.** Re-implementing
+  the reconstruction above and comparing it against Python's `datetime` for **every day
+  from 1970-01-01 to 2099-12-31** (47,482 days, at 12:34:56 each) gives **zero
+  mismatches**. The maths is right.
+
+  `is_leap_year` disagrees with the Gregorian calendar at exactly one year in
+  1970-2199: **2100**, which it calls a leap year and which is not one.
+</Note>
+
+<Warning>
+  **`unix_to_time` is not the inverse of `time_to_unix` at the end of a year.** Running the
+  same check in reverse — `unix_to_time(true_unix_seconds)` against the true date, every
+  day from 1970 to 2099 — gives **1,681 wrong days out of 47,482**, spread over **97 of the
+  130 years**. They are always a contiguous window at the end of December, and the window
+  grows by roughly one day every four years as the leap-day offset accumulates:
+
+  | Year | Wrong days | First wrong day | What 31 December returns |
+  | --- | --- | --- | --- |
+  | 2024 | 15 | 2024-12-17 | `(2025, 1, 0, ...)` |
+  | 2025 | 15 | 2025-12-17 | `(2026, 1, 0, ...)` |
+  | 2026 | 15 | 2026-12-17 | `(2027, 1, 0, ...)` |
+  | 2028 | 16 | 2028-12-16 | `(2029, 1, 0, ...)` |
+  | 2030 | 16 | 2030-12-16 | `(2031, 1, 0, ...)` |
+  | 2098 | 33 | 2098-11-29 | `(2099, 1, 0, ...)` |
+
+  Every affected year's window is a **contiguous run ending on 31 December**, with no
+  isolated bad days elsewhere in the year; 33 of the 130 years — 2027 and 2031 among them —
+  have none at all.
+
+  Inside the window the result is **one day ahead**; on 31 December it rolls into the next
+  year and returns **day 0 of January**, a date that does not exist. The cause is the pair
+  of corrections at `f_lib_rtc_v2.dis:760`–`773`: `if is_leap_year(yyyy2): days += 1` and
+  `if yyyy2 != yyyy1: days += 1`, which both fire once the first `days // 365` estimate
+  lands in the following year.
+
+  The function is used in two places — `espnow_conn_v2` and `ubx_gnss`
+  (**confirmed**, from the `IMPORT_FROM unix_to_time` sites at `espnow_conn_v2.dis:731`
+  and `ubx_gnss.dis:313`). Anything on those paths that formats or compares a converted
+  date in late December is working from a wrong day.
+</Warning>
+
+### `timestamp_to_unix` and what goes on the wire *(CONFIRMED, `f_lib_rtc_v2.dis:542`–`690`)*
+
+`rtc.unix(precision=...)` is a thin wrapper over `timestamp_to_unix`, which parses the
+string `timestamp` produces rather than reading the RTC tuple again. It validates with
+`re.match` against `\d\d\d\d-\d\d-\d\d\s\d\d:\d\d:\d\d` (`:560`) and returns `None` for a
+falsy, blank or non-matching input — three separate early returns. The match is anchored at
+the start only, so the trailing fractional seconds are allowed through and then split off
+on `'.'`.
+
+| `precision` | Returns |
+| --- | --- |
+| `1` | `int` — whole Unix seconds |
+| `2` *(the default)* | `float` — seconds plus the fraction rounded to 3 places |
+| anything else | `float` — seconds plus the fraction rounded to 6 places |
+
+<Note>
+  **Every mesh call site passes `precision=1`.** All seven `rtc.unix(...)` calls in
+  `espnow_conn_v2` load `LOAD_CONST_SMALL_INT 1` for the `precision` keyword
+  (`espnow_conn_v2.dis:1726`, `:1809`, `:7059`, `:7213`, `:7361`, `:7991`, `:9565`), so the
+  value that reaches the ESP-NOW frames is a plain integer second count, not a float. That
+  is consistent with the signed 32-bit time field described in
+  [message format](/protocols/message-format).
+
+  Callers that omit `precision` get the **float** default, which is why some log lines
+  carry a fractional Unix time and others do not.
+</Note>
+
+`ms_until_sub_interval(interval_sec=6)` returns the milliseconds until the next wall-clock
+second that is a multiple of `interval_sec`, minus the milliseconds already elapsed in the
+current second. On an exact boundary it returns a full interval rather than zero. Its only
+caller is `compass` (`compass.dis:9737`). The default of 6 seconds is the
+`MAKE_FUNCTION_DEFARGS` constant at `f_lib_rtc_v2.dis:100`.
+
+## `f_lib/rtc_mem.py`
+
+A byte-packed allocator over `machine.RTC().memory()`. One class, one singleton
+`rtc_mem = RtcMem()` (`f_lib_rtc_mem.dis:85`–`87`), six importers. That RTC slow memory
+survives a reset but not a power cycle is an ESP32 property, **inferred**, not something
+this module states.
+
+### Frame format *(CONFIRMED)*
+
+Every frame is five header bytes plus a payload:
+
+| Offset | Bytes | Meaning | Where it is read |
+| --- | --- | --- | --- |
+| 0-1 | 2 | Magic, always `b'\xa7t'` | **nowhere in this module** |
+| 2 | 1 | Category id — the key of `contents` | `f_lib_rtc_mem.dis:254`, `:495`, `:760` |
+| 3 | 1 | A per-category value byte | read by the consumers, not here |
+| 4 | 1 | Payload length `N` | `:177`, `:470`, `:741` |
+| 5 | `N` | Payload | — |
+
+<Warning>
+  **`rtc_mem` never checks the magic.** `add` validates only that the payload is at least 5
+  bytes and that `len(payload) == 5 + payload[4]` (`f_lib_rtc_mem.dis:161`–`196`); `reload`
+  walks the blob taking `blob[i + 4]` as a length and `blob[i + 2]` as a category with no
+  signature test at all. `b'\xa7t'` is a convention the *writers* observe
+  (`ble_manager.dis:6912`, `project_data.dis:2243`) — it is not validated on the way back
+  in.
+
+  The practical consequence: a corrupted length byte does not fail a magic check, it
+  re-frames the rest of RTC memory. `reload` stops when the next frame would run past the
+  end of the blob, but everything up to that point has already been indexed under whatever
+  category bytes the garbage happened to contain.
+</Warning>
+
+The three categories in use, all **confirmed** from their producers and consumers:
+
+| Id | Contents | Written by | Read by |
+| --- | --- | --- | --- |
+| 0 | Reboot-into-service mailbox. 5-byte frame, payload length 0; byte 3 is the service id | `ble_manager.execute_cmd` (`ble_manager.dis:6905`–`6952`) | `project_main.start` (`project_main.dis:1168`–`1193`) |
+| 1 | Byte-for-byte mirror of `ble_keys.bin`, the BLE bonding secrets | `device_power` (`device_power.dis:461`–`479`), `ble_core` | `ble_core` (`ble_core.dis:405`–`424`), `device_power.save_ble_secrets` (`device_power.dis:529`–`600`) |
+| 2 | 7-byte device snapshot: 5-byte header, payload length 2, byte 6 is a `pack_flags` byte | `project_data.set_device_snapshot` (`project_data.dis:2240`–`2330`) | `project_data.get_device_snapshot` (`:2185`–`2215`) |
+
+Category 0's writer is worth reading: it builds `bytearray(5)`, writes the magic into
+`[0:2]`, the category into `[2]`, the service id (1 or 2) into `[3]` and **0** into `[4]`,
+then calls `delete_cat` followed by `add` (`ble_manager.dis:6906`–`6952`). `project_main`
+reads `frame[3]`, deletes the frame and dispatches on it — see
+[boot flow](/firmware/boot-flow).
+
+For category 1, `device_power` reads `ble_keys.bin` whole and hands the bytes straight to
+`add`, and writes `get(offset)` straight back to the file. The file on flash therefore
+**already contains the 5-byte frame header**; it is not a bare key blob.
+
+### The API *(CONFIRMED)*
+
+| Method | Returns | Guard |
+| --- | --- | --- |
+| `reload()` | `None` | — |
+| `add(payload, is_del_if_exists=False)` | `True` / `False` | Needs `reload()`; 2048-byte cap |
+| `get(byte_index)` | `bytes` or `None` | Needs `reload()`; bounds-checked |
+| `delete(byte_index)` | `True` / `False` | Needs `reload()`; bounds-checked |
+| `delete_cat(cat_id)` | `None` | — |
+| `clear()` | `None` / `False` | — |
+
+`add` refuses to grow the blob past **2048 bytes** (`f_lib_rtc_mem.dis:214`, warning
+`'Not enough space in RTC mem'`), appends at `self.mem_size`, and writes the whole buffer
+back with `self._rtc.memory(bytes(buf))`. `delete` compacts the blob by copying the tail
+down over the removed frame, truncates, writes back, and then rebuilds the index in its
+`finally` (`:582`–`584`). Every method except `delete_cat` wraps its body in
+`try`/`except Exception` (`SETUP_EXCEPT` at `:198`, `:336`, `:445`, `:617`, `:702` and
+`:854`) and logs at `exc` level with **`is_write=False`**, so none of this module's
+failures reach `errors.log`.
+
+Four behaviours that are not obvious from the names:
+
+<Warning>
+  **`add`'s `is_del_if_exists` parameter is never read.** It is declared with a default of
+  `False` (`f_lib_rtc_mem.dis:102`–`106`, `:149`) and `LOAD_FAST 2` — the only opcode that
+  could read it — appears nowhere in the 184-line body (`:146`–`329`). Callers that want replace-not-append semantics must call `delete_cat` first,
+  which is exactly what `ble_manager` and `project_data` do. This is the same dead-parameter
+  shape as `pack_utf8_str`'s `max_size` above.
+
+  **`delete_cat` deletes only the *first* frame of a category.** It takes
+  `self.contents[cat_id][0]` and passes it to `delete` (`:392`–`405`). If a category ever
+  holds two frames, the second survives.
+</Warning>
+
+<Warning>
+  **`clear()` does not clear `self.contents`.** It writes `b''` to RTC memory and zeroes
+  `frame_count` and `mem_size` (`f_lib_rtc_mem.dis:335`–`351`), but the category index is
+  left populated — `LOAD_METHOD clear` on `contents` appears only in `_rebuild_contents`
+  (`:862`, `:951`). After a `clear()` the object still reports offsets that no longer exist;
+  a following `delete_cat` takes one of them and `delete` rejects it as an invalid byte
+  index. It fails safe, but it fails noisily and for the wrong reason.
+
+  `clear()` also returns `None` on success and `False` on error, where every sibling returns
+  a real boolean.
+</Warning>
+
+<Note>
+  **`reload()` appends to the index; `_rebuild_contents()` replaces it.** `reload` never
+  clears `self.contents` before walking (`f_lib_rtc_mem.dis:701`–`805`), so calling it
+  twice registers every offset twice. `_rebuild_contents` calls `self.contents.clear()`
+  first (`:855`–`862`) and is the one used after a `delete`. In practice `reload()` runs
+  once, from `project_main`'s module body — see [boot flow](/firmware/boot-flow).
+
+  On an exception, `reload` logs and then sets `frame_count = 0`, `mem_size = 0` and
+  `_is_reloaded = True` (`:824`–`830`) — **without clearing the RTC blob itself**. The next
+  `add` then writes at offset 0 into a copy of the old blob and stores the whole thing back,
+  so the stale tail past the new frame is preserved on the device while `mem_size` says it
+  is not there. **Confirmed** from the code; the resulting re-parse on the next boot is
+  **inferred**.
+</Note>
+
+<Note>
+  **`get` and `add` share an error string.** Both log
+  `'Uncaught error recording volume'` (`f_lib_rtc_mem.dis:305` and `:671`, the same
+  `obj_table` entry). Neither has anything to do with volume. A log line with that text
+  identifies the module but not the operation.
+</Note>
+
+## The small modules
+
+### `f_lib/async_helpers.py` *(CONFIRMED, 348 lines, 2 importers)*
+
+Two classes, both used exactly once in the image.
+
+```python
+class EventTimeout:
+    def __init__(self, timeout_ms=None):
+        self._task = asyncio.current_task()
+        self._timeout_task = None
+        self._timeout_ms = timeout_ms
+
+    def __enter__(self):
+        if self._timeout_ms:
+            self._timeout_task = asyncio.create_task(self._countdown())
+
+    def __exit__(self, e_type, e_val, e_tb):
+        try:
+            if (e_type == asyncio.CancelledError
+                    and self._timeout_ms and self._timeout_task is None):
+                raise asyncio.TimeoutError
+        finally:
+            if self._timeout_task:
+                self._timeout_task.cancel()
+
+    async def _countdown(self):
+        try:
+            await asyncio.sleep_ms(self._timeout_ms)
+        except asyncio.CancelledError:
+            return
+        self._timeout_task = None
+        self._task.cancel()
+```
+
+`EventTimeout` turns "my own task was cancelled" into a `TimeoutError`. The countdown task
+sleeps, then clears `_timeout_task` and cancels the task that built the object; `__exit__`
+uses that cleared attribute as the signal that the cancellation was its own doing rather
+than someone else's. It is a **synchronous** context manager — `__enter__` / `__exit__`,
+used with `with`, not `async with` — and `__enter__` returns `None`, so binding it with
+`as` yields `None`. `f_ble/ble_lite.py` is the only user, at three sites
+(`f_ble_ble_lite.dis:490`, `:598`, `:721`).
+
+```python
+class AsyncDeque(deque):
+    def __init__(self, seq=[], queue_size=10):
+        super().__init__(seq, queue_size)
+        self._max_len = queue_size
+        self._evt_not_empty = asyncio.ThreadSafeFlag()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        return await self.get()
+
+    async def get(self):
+        if not len(self):
+            await self._evt_not_empty.wait()
+        elif len(self) == 1:
+            self._evt_not_empty.clear()
+        return self.popleft()
+
+    def put(self, item):
+        self.append(item)
+        self._evt_not_empty.set()
+```
+
+An async-iterable bounded queue, used once, by `f_ble/ble_data.py`
+(`f_ble_ble_data.dis:350`). Three notes:
+
+- **The queue silently drops the oldest item when it is full.** `super().__init__` passes
+  only `(seq, queue_size)` — no third `flags` argument
+  (`f_lib_async_helpers.dis:257`–`262`) — and MicroPython's `deque` raises on overflow only
+  when the overflow-check flag is set. This is **inferred** from MicroPython's `deque`
+  semantics, not from this bytecode, but the absent argument is confirmed.
+- **`_max_len` is stored and never read.** The qstr appears nowhere else in the image.
+- **The default `seq` is a shared mutable `[]`** (`:233`–`237`), the same shape as
+  `walk_up`'s. Harmless here, since MicroPython's `deque` only accepts an empty initial
+  sequence anyway.
+
+### `f_lib/gzip.py` *(CONFIRMED, 149 lines, 1 importer)*
+
+A thin shim over the native `deflate` module. `GzipFile(fileobj)` is a **function**, not a
+class: it returns `deflate.DeflateIO(fileobj, deflate.GZIP, 15)`
+(`f_lib_gzip.dis:64`–`77`). `open(filename, mode='rb')` wraps `builtins.open` the same way
+with a fourth argument `True`, which makes the `DeflateIO` close the underlying file
+(`:78`–`96`). `compress` and `decompress` round-trip through `io.BytesIO`.
+
+The interesting line is in the module body: `compress` and `decompress` are defined **only
+if** `hasattr(deflate.DeflateIO, 'write')` (`:51`–`60`). On a build without deflate write
+support the two names simply do not exist. Its only importer is `f_lib/unpack.py`, which
+uses `gzip.open` alone.
+
+### `f_lib/tarfile.py` *(CONFIRMED, 725 lines, 1 importer)*
+
+The upstream micropython-lib read-only tar reader: `_roundup`, `FileSection`, `TarInfo`,
+`TarFile`. `TarFile` is iterable and yields `TarInfo` objects; `extractfile(tarinfo)`
+returns the `FileSection` positioned at that member's bytes.
+
+Two things are worth knowing before trusting a tar on this device.
+
+<Warning>
+  **The header parser reads two fields and ignores the rest.** `_TAR_HEADER` is a
+  `uctypes` descriptor with exactly `name` (bytes 0-99) and `size` (bytes 124-134, octal
+  ASCII) — `f_lib_tarfile.dis:93`–`116`. The 512-byte POSIX header's **checksum is never
+  computed or compared**, and neither are the typeflag, mode, uid, gid, mtime, linkname,
+  magic or prefix fields.
+
+  `TarInfo.type` is derived from the **name** alone: `mode` is set to `16384` if the name
+  ends in `/` and `32768` otherwise (`:350`–`371`), and `isdir` / `isreg` test that
+  synthetic mode. A corrupted or hostile archive is not detected here.
+
+  Write support is optional and **absent from this image**: `TarFile`'s class body does
+  `from .write import _open_write, _close_write, addfile, add` inside a
+  `try`/`except ImportError` (`:459`–`485`), and there is no such module among the 94. A
+  `TarFile` opened in any mode other than `'r'` raises
+  `NotImplementedError('Install tarfile-write')` (`:533`–`538`).
+</Warning>
+
+`TarFile.next()` returns `None` at end-of-archive — either a short read or a header whose
+first name byte is `0` (`:578`–`605`) — and `__next__` turns that into `StopIteration`.
+Member content is read through `FileSection`, which tracks the declared length and the
+padding to the next 512-byte boundary and skips it on the way to the next header.
+
+### `f_lib/unpack.py` *(CONFIRMED, 229 lines, 1 importer)*
+
+The two-step OTA archive unpacker, and the only importer of `f_lib/tarfile.py` and
+`f_lib/gzip.py`. Its own only importer is `f_ota/install_ota.py`
+(`f_ota_install_ota.dis:278`, `:280`).
+
+```python
+def unzip_tar(tar_path=None, dest_path=None, is_del=True):
+    with gzip.open(tar_path, 'rb') as src:
+        with open(dest_path, 'wb') as dest:
+            copyfileobj(src, dest)
+    src.close()
+    dest.close()
+    if is_del:
+        os.remove(tar_path)
+
+
+def unpack_tar(tar_path=None, dest_path=None):
+    dest_path = dest_path.strip('/')
+    t = TarFile(tar_path)
+    for info in t:
+        if 'PaxHeader' in info.name:
+            continue
+        out = dest_path + '/' + info.name
+        print('Unpack ... to: ... | ...'.format(info.name, out, info.type))
+        if info.type == DIRTYPE:
+            if info.name != './':
+                os.mkdir(out.strip('/'))
+        else:
+            make_parents(out)
+            f = t.extractfile(info)
+            with open(out, 'wb') as dest:
+                copyfileobj(f, dest)
+                dest.close()
+```
+
+`unzip_tar` decompresses `.tgz` to `.tar`; `unpack_tar` then extracts it. `PaxHeader`
+members are skipped by substring match on the name (`f_lib_unpack.dis:156`–`161`).
+
+<Warning>
+  **Member names are not sanitised.** `out` is `dest_path + '/' + info.name` with no check
+  for a leading `/` or for `..` components, and `make_parents(out)` will happily create the
+  path (`f_lib_unpack.dis:162`–`168`, `:199`–`202`). An archive member named
+  `../../boot.py` writes outside the destination directory. Nothing in this module, in
+  `f_lib/tarfile.py` or in `f_lib/file_mgr.make_parents` rejects it. **Confirmed** from the
+  absence of any such check; whether the OTA archives are attacker-reachable is a question
+  for [OTA](/subsystems/ota), not for this page.
+
+  Both `with` blocks also call `close()` on the handle *inside* or immediately after the
+  block (`:121`–`126`, `:219`–`221`), which is redundant — the context manager has already
+  closed it.
+</Warning>
+
+### `f_lib/firmware_helpers.py` *(CONFIRMED, 75 lines, 1 importer)*
+
+One function, and the smallest module in the package that contains any code.
+
+```python
+def running_partition():
+    try:
+        return Partition(Partition.RUNNING).info()[4]
+    except Exception as e:
+        from sys import print_exception
+        print_exception(e)
+        return False
+```
+
+`esp32.Partition.info()` returns a six-tuple whose element 4 is the partition **label**, so
+this reports which app slot the device booted from. It reports failure by returning `False`
+and prints the traceback straight to the console with `sys.print_exception` rather than
+through `f_lib/logger.py`, so a failure here leaves nothing in `errors.log`.
+
+**Nothing calls it.** `project_main` imports the name into its module namespace
+(`project_main.dis:415`–`419`) and then never loads it again — the qstr `running_partition`
+appears four times in `project_main.dis`, all in that import, and in no other disassembly.
+Since `ota_daemon` does `from project_main import *`, the effect is to make
+`running_partition()` available at the REPL, which is **inferred** to be the point of it.
+
+### `f_lib/__init__.py` *(CONFIRMED)*
+
+Empty. The entire module body is `LOAD_CONST_NONE` / `RETURN_VALUE`
+(`f_lib___init__.dis:13`–`14`). `f_lib` is a plain namespace with no package-level exports,
+which is why every importer names a submodule explicitly.
+
 ## What is not recoverable
 
 - **Docstrings, comments and parameter intent.** Frozen `.mpy` files carry no docstrings.
@@ -619,7 +1559,29 @@ than the multi-second rotation the blocker exists to protect.
 - **Original local variable names** inside function bodies. The bytecode carries argument
   names but not locals, so names like `max_val`, `mask`, `exc_txt` and `out` in the
   reconstructions above are ours except where a qstr fixes them (`data`, `b_len`,
-  `packed_byte`, `out`, `file`).
+  `packed_byte`, `out`, `file`). The same applies to every reconstruction further down this
+  page — `done`, `rel`, `dst`, `ok`, `blob`, `buf`, `size`, `cat_id`, `doy` and the loop
+  variables are ours.
+- **What `Task.done()` actually tests.** `Task` comes from the native `_asyncio` module,
+  which is C compiled into the firmware binary and is not part of the frozen bytecode. So
+  the exact condition `Tasks.cleanup` is filtering on is outside this image. The same is
+  true of `deque`'s overflow behaviour behind `AsyncDeque` and of `deflate.DeflateIO`'s
+  stream handling behind `f_lib/gzip.py`.
+- **The timezone the RTC holds.** `f_lib/rtc_v2.py` has no timezone term anywhere. Whether
+  `time_to_unix` yields real UTC depends entirely on what set the RTC, which is a question
+  for the modules that set it, not for this one.
+- **Whether the known defects were known.** `unix_to_time`'s end-of-year drift, the
+  `move_files` error path that calls itself, the `save_obj` return value that is `True` on
+  most failures, `rtc_mem.clear`'s stale index and the never-read `is_del_if_exists` and
+  `_max_len` parameters are all confirmed from the bytecode. Whether any of them was known,
+  intended or simply never hit is not something the image can answer.
+- **Byte 3 of an RTC-memory frame.** It is a header slot whose meaning is set entirely by
+  the producer and consumer of each category — a service id for category 0, whatever
+  `ble_keys.bin` happens to carry for category 1, zero for category 2. There is no
+  module-level definition of it to recover.
+- **The provenance of OTA archives.** `f_lib/tarfile.py` and `f_lib/unpack.py` validate
+  neither the tar checksum nor member paths. Whether that matters depends on how the
+  archives are built and served, which is not in this image.
 - **The `const` import in `logger.py`.** `micropython.const` is folded at compile time, so
   whether the level numbers had names like `LVL_ERR` in the source, and what they were, is
   gone.

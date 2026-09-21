@@ -80,7 +80,9 @@ ratings, published per module on the [module reference](/reference/modules):
    that appear in at most two modules across the image — its *distinctive* symbols, which
    excludes shared names like `config` or `Event` — were checked against the full text of
    `docs/`. The fraction of them that appear is a mechanical proxy for decode depth.
-   `f_lib/logger.py`, `f_lib/bitwise.py` and `f_lib/async_helpers.py` each score zero.
+   When the audit ran, `f_lib/logger.py`, `f_lib/bitwise.py` and `f_lib/async_helpers.py`
+   each scored zero; all three have since been read and are written up on
+   [f_lib](/reference/f-lib).
 3. **Manual adjudication.** The proxy is unreliable for small modules (a module with one
    distinctive symbol scores 0% or 100%), so every rating was set by reading what the docs
    actually claim about that module and checking it against the disassembly. The proxy
@@ -261,9 +263,16 @@ by function:
   </Step>
   <Step title="Diff">
     Split each disassembly into functions, drop the byte-offset column, and compare
-    added, removed and changed functions plus the qstr and constant tables. 74 modules are
-    identical, 20 changed and 2 were removed. See
+    added, removed and changed functions plus the qstr and constant tables. **20 modules
+    changed, 74 are identical** and 2 were removed. See
     [What changed in 5.0.3](/firmware/changes-5.0.3).
+
+    That page says 21 changed, and both numbers are right: it compares the `.mpy` files
+    themselves, and a `.mpy` also carries the source line-number table, which moves
+    whenever a file is recompiled. `ble_controller.py` is the one module that differs
+    that way and no other — same qstrs, same constant table, same instructions, every
+    line-info entry shifted by exactly +2. Twenty-one modules were rebuilt; twenty had
+    their code changed.
   </Step>
 </Steps>
 
@@ -276,6 +285,27 @@ was shifted by one: `keys` stood for `len`, `find` for `format`, `sep` for `set`
 `Ellipsis` for `Exception`. Frozen and const-pool names were unaffected, and so were all
 constants, struct formats and control flow. The protocol findings on these pages were
 re-checked against the corrected disassembly.
+</Warning>
+
+<Warning>
+**Immediate-object mapping: `True` disassembled as `Ellipsis`.** In `REPR_A` an immediate
+object is `(v << 3) | 6`, and `py/obj.h` assigns `none = 0`, `false = 1`, **`true = 3`** —
+the gap at 2 is deliberate, so that `(v >> 3) & 1` is the boolean. The reconstructor read
+`0x16` (v = 2, unassigned) as `True` and `0x1E` (v = 3) as `Ellipsis`, so **every `True`
+in a constant table came out as `Ellipsis`**, in the rebuilt `.mpy` as well as the
+printed disassembly. Ellipsis is not an immediate at all; it is a ROM object pointer, and
+none occurs in these images.
+
+`compassing`'s constant table showed it plainly — a family of `(bool, int)` return tuples
+reading `(False, 3)`, `(False, 1)`, `(False, 0)` and `(Ellipsis, 0)` — and
+`f_lib/requests` carried the scheme table `(80, False)`, `(443, Ellipsis)`, where the
+second entry is the HTTPS branch.
+
+Fixed, and every version regenerated: across all four images only `compassing`,
+`f_lib/requests`, `f_ota/f_assets` and (in 3.2.12 and 4.1.3) `touch_button` changed, by
+ten lines or fewer each, and every other module came back byte-identical — which is also
+a check on the reconstructor being deterministic. Anything on these pages that turned on
+a `True` in a constant table was re-read against the corrected output.
 </Warning>
 
 ## Artifacts
