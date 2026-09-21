@@ -25,7 +25,7 @@ func TestBattPctMatchesTheFirmware(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var checked, overHundred int
+	var checked int
 	for line := range strings.Lines(string(b)) {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -47,12 +47,9 @@ func TestBattPctMatchesTheFirmware(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// The firmware can exceed 100 when it has learned no maximum;
-		// battPctFor caps there, because the frame's field is a signed
-		// byte and the device would have faulted packing it.
-		if want > 100 {
-			overHundred++
-			want = 100
+		if want < 0 || want > 100 {
+			t.Fatalf("the golden file says %d%% at %.2f V (max %.2f), which is not a "+
+				"percentage — get_batt_pct clamps at both ends", want, v, top)
 		}
 		if got := battPctFor(float32(v), float32(top)); int(got) != want {
 			t.Errorf("battPctFor(%.2f, top %.2f) = %d, the firmware says %d",
@@ -62,9 +59,6 @@ func TestBattPctMatchesTheFirmware(t *testing.T) {
 	}
 	if checked < 1000 {
 		t.Fatalf("only %d points checked; the golden file looks truncated", checked)
-	}
-	if overHundred == 0 {
-		t.Error("no point in the golden file exercises the over-100 path")
 	}
 }
 

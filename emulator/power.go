@@ -153,11 +153,10 @@ func battPctFor(v float32, top float32) int8 {
 	// conversion implementation-defined when the value will not fit, and
 	// a reading is not always a reading. NaN is not one at all.
 	//
-	// The top of the table is the ceiling because past it every answer is
-	// 100 regardless — the clamp below when a maximum is known, and the
-	// cap in the table walk when it is not — while the arithmetic that
-	// gets there does not survive the trip: an infinity reached the walk
-	// as the largest int32 and came out at 102, because
+	// The top of the table is the ceiling because the clamp below returns
+	// 100 for anything at or past it, while the arithmetic that would
+	// otherwise get there does not survive the trip: an infinity reached
+	// the table walk as the largest int32 and came out at 102, because
 	// (curMv-p.mv)*(hiRaw-p.raw) had overflowed.
 	mv := math.Round(float64(v) * 1000)
 	if math.IsNaN(mv) {
@@ -176,24 +175,35 @@ func battPctFor(v float32, top float32) int8 {
 		if battFlatMv < maxMv && maxMv < battTopMv {
 			curMv = battFlatMv + floorDiv((curMv-battFlatMv)*(battTopMv-battFlatMv), maxMv-battFlatMv)
 		}
-		if curMv >= battTopMv {
-			return 100
-		}
-		if curMv < battFlatMv {
-			return 0
-		}
+	}
+	// Outside the learned-maximum branch, which is where the firmware has
+	// them: in get_batt_pct both the "if max_volts" jump and the inner
+	// chained-compare jump land on the same instruction, the first of
+	// this block. So a device that has learned nothing still reads 100
+	// above the table's top rather than interpolating past it.
+	//
+	// These sat inside the branch here at first, transcribed from a
+	// reading of the bytecode that had not counted the jump offsets. The
+	// answers came out the same either way — the conversion above bounds
+	// curMv to the table's top, so the walk below tops out at 100 on its
+	// own — but the shape was wrong, and the shape is what this file is
+	// for.
+	if curMv >= battTopMv {
+		return 100
+	}
+	if curMv < battFlatMv {
+		return 0
 	}
 	hiMv, hiRaw := battCurve[0].mv, battCurve[0].raw
 	for _, p := range battCurve[1:] {
 		if curMv >= p.mv {
 			raw := p.raw + floorDiv((curMv-p.mv)*(hiRaw-p.raw), hiMv-p.mv)
-			// Both clamps live inside "if max_volts" in the firmware, so
-			// a device that has not learned a maximum yet can come out of
-			// here above 100 — 4.48 V reads 145. On the Totem that value
-			// goes on to struct.pack('<b'), which raises, so it is a fault
-			// the device never survives rather than a number it sends.
-			// Capped instead of reproduced: the frame's field is a signed
-			// byte, and 145 in one is -111.
+			// The cap is belt and braces, not a divergence: curMv is
+			// bounded to the table's top above, so the interpolation
+			// cannot run past the top pair and this never fires. The
+			// firmware's own clamps sit outside its "if max_volts" — both
+			// of its jumps land on the first instruction of the clamp
+			// block — so it cannot return more than 100 either.
 			return int8(min(battPctOf(raw), 100))
 		}
 		hiMv, hiRaw = p.mv, p.raw

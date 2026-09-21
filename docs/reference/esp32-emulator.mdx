@@ -140,7 +140,7 @@ totemctl mesh send batt 40                   # battery level, and "batt 40 charg
 ```
 
 ```text
-→ 8c94df7b0478  status "emu_totem_abb0"  37.586800,-122.002060 ±5m alt 12m 50km/h  azimuth 90° heading 89° upright  batt 94% 4.14V  fw 5.0.3  clock 15:30:35.142
+→ 8c94df7b0478  status "emu_totem_abb0"  37.586800,-122.002060 ±5m alt 12m 50km/h  azimuth 90° heading 89° upright  batt 94% 4.07V  fw 5.0.3  clock 15:30:35.142
 ```
 
 The simulation moves the position along the bearing (a walk wanders, a drive holds its
@@ -239,12 +239,26 @@ also be made by hand.
 
 ### Power
 
-The battery curve is v5.0.3's recalibrated `get_batt_pct`, where 4.12 V
-reads 100%, 4.0 V reads 86% and 3.8 V reads 50%. The mode follows the
-battery — normal, eco, low below about 3.45 V — and at 3.3 V the device
-powers itself down rather than brown out, which a peer sees as the status
-frames stopping. A pack on the charger never hits that cutoff, however
-flat it reads. The mode is not settable by hand, because the next battery
+The battery curve is `get_batt_pct`'s own breakpoint table, decoded from
+the 232-byte constant in `peripherals.py`: 58 pairs of millivolts and a
+raw level, from 4120 mV down to 3190, with the percentage taken as
+`(raw*1000//605 + 5)//10`. So 4.12 V reads 100%, 4.0 V reads 86% and
+3.8 V reads 50%, and anything above 4.12 V reads full — a Totem on its
+charger reports 4.48 V at 100%.
+
+The learned maximum (`config.batt_max_volts`) rescales a reading only
+when it is *below* the table's top, lifting it so a pack that no longer
+reaches 4.12 V still reads full at its own ceiling; above the top there
+is no rescale at all. It is learned the way `one_min_coro` learns it:
+only while charging, and only once the peak stops rising, stored as that
+peak less 0.04 V.
+
+The mode follows the battery — normal, eco, low below 3.45 V — and below
+3.15 V the device powers itself down rather than brown out, which a peer
+sees as the status frames stopping. That is a different number from the
+one the gauge reaches zero at: the table's flat end is 3.19 V, so a
+Totem reports 0% for a stretch and keeps running. A pack on the charger
+never hits the cutoff, however flat it reads. The mode is not settable by hand, because the next battery
 reading five milliseconds later would undo it: change the battery with
 `batt` instead. Light sleep is accounted the way the firmware logs it,
 including the two reasons it stays awake: a radio window about to open,
