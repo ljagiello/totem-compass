@@ -15,3 +15,7 @@ re/
 
 # Built CLI binary
 /totemctl
+
+# Claude Code's working directory: session state, and the git worktrees it
+# checks out under .claude/worktrees. Nothing in here is source.
+.claude/
