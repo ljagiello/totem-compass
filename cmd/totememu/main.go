@@ -5,6 +5,9 @@
 //
 //	tinygo flash -target esp32-generic -ldflags "-X main.owned=8c94df7b0478" ./cmd/totememu
 //
+// Adding -X main.relayUnowned=1 also carries locate frames for Totems that
+// are not in owned, as a real Totem does. See docs/reference/esp32-emulator.
+//
 // Commands on the serial console (115200 baud): pair, unbond <mac>,
 // pos <lat> <lon> [accuracy m] | pos off, heading <deg>, sos on|off,
 // status, log debug|info, format text|json, selftest, help.
@@ -42,6 +45,13 @@ var (
 var (
 	owned = "8c94df7b0478" // comma-separated ESP-NOW MACs of the Totems to bond with
 	name  = ""             // default emu_totem_<last four hex digits of the MAC>
+	// relayUnowned set to "1" carries locate frames for Totems that are
+	// not in owned, which is what a real Totem does. Off unless asked for,
+	// and asked for at build time rather than from the console: turning it
+	// on means this board transmits on behalf of devices its owner does
+	// not own, and that should be a decision made while flashing, not a
+	// keystroke away on a board sitting in someone else's crowd.
+	relayUnowned = ""
 )
 
 func main() {
@@ -110,7 +120,7 @@ func main() {
 	}
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
-		ColorID: boot0.ColorID,
+		ColorID: boot0.ColorID, RelayUnowned: relayUnowned == "1",
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no
 		// credentials for a network, and nothing it does should depend on
@@ -121,6 +131,7 @@ func main() {
 	saved.Restore(node, boot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
+		"relay_unowned", relayUnowned == "1",
 		"channel", mesh.Channel, "phy", "LR 250K", "boots", boot0.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 

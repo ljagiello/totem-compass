@@ -385,22 +385,88 @@ de-duplication, not a routed mesh:
 - **Reply.** A Totem that hears a request from one of its own bonded peers, and has not heard
   that peer directly in the last 60 s, broadcasts its own locate frame (`is_ack` = 0) once,
   plus one repeat with the same UID in a later window. It replies at most once a minute.
-- **Relay.** Every Totem with a fix and a clock relays locate frames it has not seen
-  (`_relay_frame`): the same bytes, hop count at offset 29 plus one, and its own position
-  written over the last-hop coordinates at offset 35. A frame is not relayed at `max_hops`
-  (99), after its expiry (origin time + 120 s), or when the relayer is within
-  `MESH_RELAY_MIN_DIST` (10 m) of the last hop.
-- **Load shedding.** `handle_mesh_msg` drops UIDs already in `parser.recent` (`-5`), frames
-  received before the clock is set (`-2`) and, for origins that are not bonded peers, frames
-  that arrive while the node is overloaded (`-9`, `-10`), past the ack/relay budgets (`-3`,
-  `-4`), from a last hop closer than `relay_min_dist` (`-8`), or outside the node's slots
-  (`-6`: `uid % (active_nodes × MESH_SLOTS_PER_NODE)` not in `node_slots`; with fewer than
-  6 nearby nodes every frame is relayed).
+- **Relay.** `Parser._relay_frame` is the *only* code in the image that puts another
+  Totem's bytes back on the air, and it is reached only from `compass_mesh`, the category 2
+  handler (**confirmed** — one definition, two call sites, both in that function). It
+  rebroadcasts the frame it was given to `ff:ff:ff:ff:ff:ff` with two edits: the hop count
+  at offset 29 plus one, and its own position over the last-hop coordinates at offset 35.
+  It refuses at `max_hops` (`data[19]`, 99 by default) and after the expiry (`data[20]`,
+  origin time + 120 s). With `modes.is_blink_comms` set it also flashes the ring teal for
+  300 ms, so a Totem relaying is visible.
+
+  Whether it is called at all depends on who originated the frame, and the two answers are
+  different:
+
+  | Origin | Relayed? | Under what |
+  | --- | --- | --- |
+  | One of your bonded peers | **Requests only** | `is_ack` set (`data[13]`), `mesh_ack_cnt < 20`, and not within `relay_min_dist` of the last hop |
+  | Any other Totem | Requests **and** replies | the load shedding below |
+
+  **A bonded peer's reply is never relayed** (**confirmed**: the `if data[13]` test skips
+  both relay call sites, and the reply is built as `gen_mesh_msg(cmd_id=0, is_ack=0)`).
+  That has a consequence worth knowing before wiring up a test — see
+  [three Totems in a line](#three-totems-in-a-line).
+- **Load shedding.** `handle_mesh_msg` returns a code that `recv` acts on: negative drops
+  the frame before `compass_mesh` ever sees it (`if action_id < 0: continue`), and 1–5
+  carry on. In order: UIDs already in `parser.recent` (`-5`), then a clock that is not set
+  (`-2`), then the frame's own MAC (`2`, our echo coming back).
+
+  Then **`origin in config.peers` returns `1` immediately** (**confirmed**), so everything
+  below applies *only* to Totems you are not bonded to:
+
+  | Code | Shed when |
+  | --- | --- |
+  | `-9` | `is_rx_overloaded` |
+  | `-10` | `load_fps >= 4` **and** `pending_tx() >= 8` |
+  | `-3` | a request (`is_ack == 1`) and `mesh_ack_cnt >= 20` |
+  | `-4` | a reply (`is_ack != 1`) and `mesh_no_ack_cnt >= 10` |
+  | `-8` | last hop closer than `relay_min_dist` |
+  | `-6` | `rand_tail % (active_nodes × MESH_SLOTS_PER_NODE)` not in `node_slots` |
+
+  The two budgets are separate, which is why a request travels roughly twice as far through
+  a crowd as the answer to it. `3` is returned when there are no slots and `load_fps < 4`,
+  `4` when the frame falls in one of this node's slots — with fewer than six nearby nodes
+  `gen_node_slots` relays everything.
 - **Echo.** An originator that hears its own UID relayed back counts it as honoured (`Relay
   honored by another device. Waiting: {}ms before re-using mesh to find Peer`) and backs off.
 
 A Totem with no GNSS fix ignores the mesh entirely (`recv` drops `(2,0)` frames when
 `gnss_data.location` is unset).
+
+### Nothing else is ever forwarded
+
+A Totem never retransmits another Totem's **status** frame. `aread` dispatches on the
+category — `0` to `_peer`, `1` to `_demi_god`, `2` to `compass_mesh`, `7` to
+`_smart_group` — and only `compass_mesh` reaches `_relay_frame` (all **confirmed**):
+
+- `_peer` (category 0) transmits exactly once, and it is not a forward: it builds a fresh
+  frame with `gen_peer_msg(cmd_id=1, is_ack=1, is_return=True)` from its *own* state and
+  unicasts it back, the "Both devices already bonded" confirmation.
+- `_demi_god` (category 1) never transmits at all.
+- `_smart_group` (category 7) transmits three times, each from a freshly allocated
+  `bytearray(16)` carrying its own SyncWord — new join frames, not copies.
+
+So position, battery, heading, orientation, SOS, name, firmware version, speed, altitude,
+odometer and uptime — everything in the 108-byte peer frame — reach a peer only by direct
+unicast. Across a hop, the locate frame carries the origin's MAC, position, position
+accuracy and SOS flag, and nothing else.
+
+### Three Totems in a line
+
+Given A and C bonded to each other and out of range, with B in between, what B does
+depends on whether it is bonded to them:
+
+- **B bonded to neither** (a stranger's Totem, or a spare): B relays C's request *and* A's
+  reply, because the non-bonded path has no `is_ack` test. C learns where A is.
+- **A, B and C all bonded to each other**: B relays C's request, A answers — and B does
+  **not** relay that answer, because a bonded origin's reply fails the `is_ack` test. C
+  learns nothing about A through B.
+
+The second case is the one a owner is most likely to build, and it is the one that does not
+work. This is read from the bytecode and has **not** been observed on hardware; three
+Totems are needed to try it, and the relay also needs every hop to hold a GNSS fix and to
+sit more than `MESH_RELAY_MIN_DIST` (10 m) from the previous one, so a bench test in one
+room will show nothing either way.
 
 The mesh tunables are resolved from the frozen `project_data` module (and the `gen_mesh_msg`
 defaults); all Confirmed from the disassembly:
