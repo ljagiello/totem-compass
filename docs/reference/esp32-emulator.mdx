@@ -402,7 +402,21 @@ The emulator only listens to and talks to the Totems in `main.owned`:
 - Frames from any other sender are dropped unread.
 - Unicasts go only to owned Totems. `emulator` checks every outgoing frame in one place, and
   the tests assert this for every frame.
-- It relays only locate frames that an owned Totem originated.
+- It relays only locate frames that an owned Totem originated. **This is the one place the
+  emulator knowingly does less than the firmware.** A Totem relays a locate frame from any
+  origin and sheds it only under load, past a budget, too close to the last hop, or outside
+  its node slots; see [the relay rules](/protocols/espnow-mesh#locate-requests--relay).
+  Refusing them outright means the board never transmits on behalf of a device its owner
+  does not own, which near other people's Totems is the difference between joining their
+  mesh and staying out of it.
+
+  `Config.RelayUnowned` turns the firmware's behaviour on, off by default. It opens the
+  locate path — and only the locate path — to senders outside `owned`, and applies the two
+  budgets the firmware applies there (20 requests, 10 replies). Peer, Smart Group and
+  demi-god frames from an unowned sender are still dropped unread either way, and unicasts
+  still only go to owned Totems. What it does not model, because a board sitting beside one
+  Totem cannot reach any of it: `is_rx_overloaded`, the `load_fps`/`pending_tx` pair, and
+  the node slots, which need six or more nearby nodes before they shed anything.
 - It never hosts a Smart Group, because a host's finalize makes every member delete its
   existing peers.
 - It never sends demi-god commands.

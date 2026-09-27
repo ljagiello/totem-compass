@@ -63,6 +63,17 @@ type Message interface {
 // "Invalid ESP-NOW message SyncWord or length").
 var ErrNotTotem = errors.New("mesh: not a Totem frame")
 
+// IsLocate reports whether these bytes are a category 2 locate frame,
+// from the header alone. It is for a caller that has to decide whether to
+// look at a frame at all — the emulator's owned-sender gate, which lets
+// the mesh through from a stranger and nothing else — so it reads only
+// the SyncWord and the (category, command) pair and trusts nothing after
+// them. A true answer does not promise the frame parses.
+func IsLocate(b []byte) bool {
+	return len(b) >= 4 && bytes.HasPrefix(b, SyncWord[:]) &&
+		b[2] == CatMesh && b[3] == 0
+}
+
 // Parse decodes one ESP-NOW payload. Frames with a known SyncWord but an
 // unknown category come back as [Unknown].
 func Parse(b []byte) (Message, error) {

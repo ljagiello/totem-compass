@@ -45,7 +45,12 @@ const (
 	meshSendFreq   = 30 * time.Second // MESH_SEND_FREQ_MS
 	meshPeerLimit  = 999              // MESH_PEER_MSG_LIMIT
 	meshStaleHeard = 15 * time.Second
+	// meshAckLimit and meshNoAckLimit are handle_mesh_msg's two relay
+	// budgets: mesh_ack_cnt >= 20 sheds a request (-3), and
+	// mesh_no_ack_cnt >= 10 sheds a reply (-4). A request therefore
+	// travels twice as far through a crowd as the answer to it.
 	meshAckLimit   = 20
+	meshNoAckLimit = 10
 	meshHopRange   = 75 // MESH_MIN_HOP_RANGE, meters
 	farPeerM       = 30 // a second status copy when the furthest peer is further
 	noSatPeriod    = 5 * time.Second
@@ -61,6 +66,24 @@ type Config struct {
 	MAC   mesh.MAC   // the ESP-NOW (station) address of this device
 	Owned []mesh.MAC // the only Totems this node listens and talks to
 	Name  string     // default DefaultName(MAC)
+	// RelayUnowned lets this node carry locate frames for Totems it does
+	// not own, which is what a real Totem does. Off by default, and the
+	// difference is deliberate rather than an omission.
+	//
+	// A Totem relays a locate frame whose origin is not one of its bonded
+	// peers as a matter of course: handle_mesh_msg only sheds those under
+	// load, past a budget, too close to the last hop, or outside its node
+	// slots. With this off, the node refuses every one of them, so it
+	// never transmits on behalf of a device its owner does not own — near
+	// other people's Totems that is the difference between joining their
+	// mesh and staying out of it.
+	//
+	// With it on, the locate path — and only the locate path — accepts
+	// frames from senders outside Owned, and the shedding below applies.
+	// Nothing else about the owned scope changes: peer, Smart Group and
+	// demi-god frames from an unowned sender are still dropped unread,
+	// and unicasts still only go to owned Totems.
+	RelayUnowned bool
 	// Sensors reads the GNSS receiver, magnetometer, motion sensor and
 	// power chip. Without one the node reports the fixed Position, Heading
 	// and battery below, as a board with no sensors does.
@@ -202,6 +225,7 @@ type Node struct {
 	replyAt    time.Time
 	lastReply  time.Time
 	meshAcks   int
+	meshNoAcks int
 	noSatPhase int
 
 	jobs []job
@@ -524,7 +548,13 @@ func (n *Node) Receive(now time.Time, rx Received) []Packet {
 	// flushing: nothing has run yet that could have queued anything, and
 	// a device that is off has had its outbox cleared by PowerOff. Every
 	// exit after read() drains, because read() can queue.
-	if !slices.Contains(n.cfg.Owned, rx.Src) {
+	// Whoever sent this copy has to be a Totem we own, unless we are
+	// carrying the mesh for strangers and this is the one frame the mesh
+	// is made of. mesh.Category reads the header without trusting the
+	// rest, so a frame that is not a locate frame is refused here on the
+	// header alone rather than after parsing.
+	carryForStranger := n.cfg.RelayUnowned && mesh.IsLocate(rx.Data)
+	if !slices.Contains(n.cfg.Owned, rx.Src) && !carryForStranger {
 		return nil
 	}
 	if n.power.Off() {
@@ -913,7 +943,7 @@ func (n *Node) scheduleWindow(now time.Time) {
 }
 
 func (n *Node) window1(now time.Time) {
-	n.meshAcks = 0
+	n.meshAcks, n.meshNoAcks = 0, 0
 	if n.inGroup && now.After(n.groupUntil) {
 		// Parser.auto_bond_client_timeout
 		n.log.Info("smart group timed out", "uid", n.smartUID)
@@ -1394,7 +1424,19 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 	}
 	p, bonded := n.peers[m.Origin]
 	if !bonded {
-		return // never relay a frame another Totem originated
+		// handle_mesh_msg's other half. A frame from an origin that is
+		// not one of our bonded peers is relayed as a matter of course —
+		// the shedding below is the whole of what stops it — and there is
+		// nothing else to do with it: no peer record to update, and no
+		// reply owed to a device that is not ours.
+		//
+		// The bonded case above returns 1 from handle_mesh_msg before any
+		// of this, so none of these limits apply to our own peers.
+		if !n.cfg.RelayUnowned {
+			return
+		}
+		n.relayStranger(now, rx, m)
+		return
 	}
 	replyOK := (p.viaMesh || !p.heard || now.Sub(p.lastHeard) >= meshReplyHold) &&
 		(n.lastReply.IsZero() || now.Sub(n.lastReply) >= meshReplyHold)
@@ -1419,6 +1461,43 @@ func (n *Node) onLocate(now time.Time, rx Received, m mesh.Locate) {
 	if n.meshAcks < meshAckLimit && n.relay(now, rx.Data, m) {
 		n.meshAcks++
 	}
+}
+
+// relayStranger carries a locate frame whose origin is not one of our
+// bonded peers, under handle_mesh_msg's budgets. Reached only when
+// Config.RelayUnowned is set; a Totem does this unconditionally.
+//
+// The two budgets are separate and are the reason a request travels
+// further than a reply: mesh_ack_cnt >= 20 sheds a request (-3),
+// mesh_no_ack_cnt >= 10 sheds a reply (-4). Both reset with the rest of
+// the run's counters.
+//
+// What is not modeled, because none of it can be reached on a board
+// sitting next to one Totem, and guessing at it would be worse than
+// saying so: is_rx_overloaded (-9), the load_fps and pending_tx pair
+// (-10), and the node slots (-6), which shed a frame whose
+// uid % (active_nodes * MESH_SLOTS_PER_NODE) is not in this node's slots.
+// The last of those only engages with six or more nearby nodes, and
+// gen_node_slots itself relays everything below that.
+func (n *Node) relayStranger(now time.Time, rx Received, m mesh.Locate) {
+	if m.ReplyRequested {
+		if n.meshAcks >= meshAckLimit {
+			return
+		}
+	} else if n.meshNoAcks >= meshNoAckLimit {
+		return
+	}
+	if !n.relay(now, rx.Data, m) {
+		return
+	}
+	if m.ReplyRequested {
+		n.meshAcks++
+	} else {
+		n.meshNoAcks++
+	}
+	n.log.Info("relayed a locate frame for a Totem we do not own",
+		"origin", m.Origin, "via", rx.Src, "request", m.ReplyRequested,
+		"hops", m.Hops, "uid", m.UID)
 }
 
 // relay is Parser._relay_frame: the same frame with our position as the
