@@ -1,4 +1,4 @@
-//go:build tinygo && esp32
+//go:build tinygo && (esp32 || esp32s3)
 
 // Command totememu turns an ESP32 into a Totem on the ESP-NOW mesh. It
 // bonds with, and only talks to, the Totems listed in owned.
@@ -14,18 +14,14 @@
 package main
 
 import (
-	"device/esp"
 	"errors"
 	"fmt"
 	"log/slog"
-	"machine"
 	"math/rand/v2"
 	"os"
-	"runtime/volatile"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"tinygo.org/x/espradio"
 
@@ -380,9 +376,11 @@ func readLines(log *slog.Logger, out chan<- string) {
 	for {
 		b, ok := consoleByte()
 		if !ok {
-			// The UART FIFO holds 128 bytes, which is 11 ms of traffic at
-			// 115200 baud. Sleeping longer than that loses the middle of a
-			// long line — an injected frame is 200-odd characters.
+			// The smaller of the two receive FIFOs behind consoleByte holds
+			// 64 bytes: the ESP32's UART holds 128, the S3's USB endpoint
+			// 64, which is 5.5 ms of traffic at 115200 baud. Sleeping
+			// longer than that loses the middle of a long line — an
+			// injected frame is 200-odd characters.
 			time.Sleep(2 * time.Millisecond)
 			continue
 		}
@@ -395,27 +393,9 @@ func readLines(log *slog.Logger, out chan<- string) {
 	}
 }
 
-// consoleByte returns the next byte typed on the console. The UART receive
-// interrupt stops firing once the WiFi blob runs, so the RX FIFO is polled
-// as well, through its AHB address (UART0 base + 0x200C0000) as TinyGo's
-// driver reads it to avoid an ESP32 silicon erratum.
-func consoleByte() (byte, bool) {
-	if b, err := machine.Serial.ReadByte(); err == nil {
-		return b, true
-	}
-	if esp.UART0.GetSTATUS_RXFIFO_CNT() == 0 {
-		return 0, false
-	}
-	return (*volatile.Register8)(unsafe.Add(unsafe.Pointer(esp.UART0), 0x200C0000)).Get(), true
-}
-
-// hwRandom reads RNG_DATA_REG, which gives true random numbers while the
-// radio runs (ESP32 Technical Reference Manual, Random Number Generator
-// chapter, register RNG_DATA_REG at 0x3FF75144).
-func hwRandom() uint64 {
-	reg := (*volatile.Register32)(unsafe.Pointer(uintptr(0x3ff75144)))
-	return uint64(reg.Get())<<32 | uint64(reg.Get())
-}
+// consoleByte and hwRandom live in chip_esp32.go and chip_esp32s3.go: the
+// console reaches a different peripheral on each chip, and only one of the
+// two has a random number generator TinyGo will drive for us.
 
 func fail(log *slog.Logger, err error) {
 	for {

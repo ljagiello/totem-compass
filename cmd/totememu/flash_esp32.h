@@ -4,7 +4,7 @@
 // same SPI peripheral the ROM's flash driver drives. Touching flash
 // therefore means turning the cache off first — and while it is off the
 // CPU cannot fetch a single instruction or constant from flash. So the
-// operation lives in IRAM (flashop.c), takes every address it needs in a
+// operation lives in IRAM (flashop_esp32.c), takes every address it needs in a
 // struct the caller passes, copies that struct onto the stack before the
 // cache goes off, and calls nothing but ROM routines.
 //
@@ -24,8 +24,8 @@
 // The caller disables interrupts around it: a handler that happens to
 // live in flash would fault the same way.
 
-#ifndef TOTEM_FLASH_H
-#define TOTEM_FLASH_H
+#ifndef TOTEM_FLASH_ESP32_H
+#define TOTEM_FLASH_ESP32_H
 
 #include <stdint.h>
 
@@ -73,7 +73,7 @@ typedef struct {
 // the cache is disabled, and what it fetches instead is nonsense.
 #define TOTEM_IRAM __attribute__((section(".iram1.totem_flash"), noinline))
 
-// The operations, one function each, all defined in flashop.c. addr and
+// The operations, one function each, all defined in flashop_esp32.c. addr and
 // len are in bytes and must be multiples of four, as must data's
 // alignment; erase takes a sector number. Each returns the ROM's result,
 // where 0 is success.

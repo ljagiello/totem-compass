@@ -1,4 +1,4 @@
-//go:build tinygo && esp32
+//go:build tinygo && (esp32 || esp32s3)
 
 package main
 
@@ -24,7 +24,17 @@ const storeAtBoot = true
 // the literal in each place that needs it: `store open` built its own
 // copy, and two spellings of the same sector are two sectors as soon as
 // one of them changes.
-func settingsSector() store.Sector { return flashSector{addr: storeSector} }
+func settingsSector() store.Sector {
+	// A chip whose flash driver is not proven yet hands Open nothing, so
+	// it answers ErrNoSector and the node runs on defaults without
+	// saving. The settings sector is read during boot, before there is a
+	// console to report anything, so an unproven driver must not be
+	// reached from here — see storeReady in the per-chip flash file.
+	if !storeReady {
+		return nil
+	}
+	return flashSector{addr: storeSector}
+}
 
 // flashSelfTest checks the flash driver on the scratch sector: erase, read
 // back, write a pattern, read it again. It never touches the settings

@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"go.bug.st/serial"
+	"go.bug.st/serial/enumerator"
 
 	"github.com/ljagiello/totem-compass/mesh"
 	"github.com/ljagiello/totem-compass/protocol"
@@ -52,16 +53,57 @@ const (
 	consoleChunkGap = 8 * time.Millisecond
 )
 
-// esp32BridgeVIDs are the USB vendor ids of the serial bridges on ESP32
-// boards: Silicon Labs CP210x, WCH CH34x, FTDI, and Espressif's built-in
-// USB serial.
-var esp32BridgeVIDs = []string{"10C4", "1A86", "0403", "303A"}
+// esp32BridgeVIDs are the USB vendor ids of the serial ports on ESP32
+// boards: Silicon Labs CP210x, WCH CH34x, FTDI, and espressifVID, which is
+// not a bridge at all.
+var esp32BridgeVIDs = []string{"10C4", "1A86", "0403", espressifVID}
 
-// openSerial opens the emulator's console. DTR and RTS stay asserted, the
-// go.bug.st/serial default: an ESP32 board's auto-reset circuit pulls EN low
-// when RTS is set without DTR, so changing them reboots the emulator.
-func openSerial(name string) (io.ReadWriteCloser, error) {
-	return serial.Open(name, &serial.Mode{BaudRate: emulatorBaud})
+// espressifVID is Espressif's own vendor id. A port carrying it is the
+// USB-Serial/JTAG peripheral inside the chip, not a bridge chip beside it:
+// the T-Beam S3's USB-C socket goes straight to the ESP32-S3, and the port
+// reports itself as a "USB JTAG/serial debug unit".
+//
+// That distinction decides where the modem lines are left. On a board with a
+// bridge, DTR and RTS reach the chip through the auto-reset circuit, which
+// pulls EN low only when RTS is asserted and DTR is not, so asserting both —
+// the go.bug.st/serial default — leaves the board running. Inside the S3
+// there is no such circuit: the peripheral drives EN from RTS alone, so
+// opening a port the default way holds the chip in reset for as long as it
+// stays open. Measured on the T-Beam with the emulator flashed: with DTR and
+// RTS asserted, three seconds of reading returns nothing at all; with both
+// deasserted, the same read returns the boot log and every line after it.
+const espressifVID = "303A"
+
+// openSerial opens the emulator's console with the modem lines set so the
+// board runs rather than sits in reset — see espressifVID for which is which
+// and why it matters.
+func openSerial(name string, ports func() ([]*enumerator.PortDetails, error)) (io.ReadWriteCloser, error) {
+	mode := &serial.Mode{BaudRate: emulatorBaud}
+	if nativeUSB(name, ports) {
+		mode.InitialStatusBits = &serial.ModemOutputBits{DTR: false, RTS: false}
+	}
+	return serial.Open(name, mode)
+}
+
+// nativeUSB says whether name is a chip's own USB peripheral rather than a
+// bridge. Anything it cannot establish — no lister, a list it cannot read, a
+// name not in the list — counts as a bridge, because that is the default the
+// classic ESP32 board is proven on: an unrecognized port is opened exactly as
+// it was before this distinction existed.
+func nativeUSB(name string, ports func() ([]*enumerator.PortDetails, error)) bool {
+	if ports == nil {
+		return false
+	}
+	list, err := ports()
+	if err != nil {
+		return false
+	}
+	for _, p := range list {
+		if p.Name == name {
+			return p.IsUSB && strings.EqualFold(p.VID, espressifVID)
+		}
+	}
+	return false
 }
 
 func newMeshCmd(g *globals) *cobra.Command {

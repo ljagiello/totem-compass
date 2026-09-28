@@ -467,6 +467,46 @@ func TestEmulatorPort(t *testing.T) {
 	}
 }
 
+// TestNativeUSB pins which ports get their modem lines left alone. On a
+// board whose USB goes straight to the chip, asserting RTS drives EN and
+// holds it in reset — measured on the T-Beam S3, where a port opened the
+// default way returns nothing at all — so the answer here decides whether
+// the console works.
+func TestNativeUSB(t *testing.T) {
+	s3 := &enumerator.PortDetails{Name: "/dev/cu.usbmodem2101", IsUSB: true, VID: "303A", PID: "1001"}
+	lower := &enumerator.PortDetails{Name: "/dev/cu.usbmodem1", IsUSB: true, VID: "303a"}
+	cp2102 := &enumerator.PortDetails{Name: "/dev/cu.usbserial-0001", IsUSB: true, VID: "10C4"}
+	// Espressif's id on something that is not a USB port at all: the VID
+	// alone must not be enough.
+	notUSB := &enumerator.PortDetails{Name: "/dev/cu.odd", IsUSB: false, VID: "303A"}
+	tests := []struct {
+		name  string
+		port  string
+		ports []*enumerator.PortDetails
+		err   error
+		want  bool
+	}{
+		{"native usb", "/dev/cu.usbmodem2101", []*enumerator.PortDetails{cp2102, s3}, nil, true},
+		{"lowercase vid", "/dev/cu.usbmodem1", []*enumerator.PortDetails{lower}, nil, true},
+		{"bridge chip", "/dev/cu.usbserial-0001", []*enumerator.PortDetails{cp2102, s3}, nil, false},
+		{"espressif vid but not usb", "/dev/cu.odd", []*enumerator.PortDetails{notUSB}, nil, false},
+		{"port not listed", "/dev/ttyACM9", []*enumerator.PortDetails{s3}, nil, false},
+		{"list fails", "/dev/cu.usbmodem2101", nil, errors.New("boom"), false},
+		{"no lister", "/dev/cu.usbmodem2101", nil, nil, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ports func() ([]*enumerator.PortDetails, error)
+			if tt.name != "no lister" {
+				ports = func() ([]*enumerator.PortDetails, error) { return tt.ports, tt.err }
+			}
+			if got := nativeUSB(tt.port, ports); got != tt.want {
+				t.Errorf("nativeUSB(%q) = %v, want %v", tt.port, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMeshPortFromEnvironment(t *testing.T) {
 	t.Setenv("TOTEM_PORT", "/dev/cu.usbserial-0001")
 	h := meshHarness(&fakeEmulator{})

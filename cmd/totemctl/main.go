@@ -120,10 +120,12 @@ func realMain() int {
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
 	g.scan = client.Scan
-	g.openPort = openSerial
 	// Wrapped, not assigned: GetDetailedPortsList is variadic, so its type
 	// is func(...func(string, string) bool) and does not match this field.
 	g.ports = func() ([]*enumerator.PortDetails, error) { return enumerator.GetDetailedPortsList() }
+	// openSerial reads the list too, to tell a chip's own USB port from a
+	// bridge and leave the modem lines where that board wants them.
+	g.openPort = func(name string) (io.ReadWriteCloser, error) { return openSerial(name, g.ports) }
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {
 		msg := err.Error()

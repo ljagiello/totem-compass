@@ -7,7 +7,7 @@ package main
 // gets one erase block near the end of the 4 MB flash, far past the image.
 
 /*
-#include "flash.h"
+#include "flash_esp32.h"
 */
 import "C"
 
@@ -36,6 +36,12 @@ const (
 	romCacheReadDis        = 0x40009ab8 // Cache_Read_Disable_rom
 	romCacheReadEnabl      = 0x40009a84 // Cache_Read_Enable_rom
 )
+
+// storeReady says the flash driver here has been proven on this chip: it
+// has erased, written and read back thousands of records on the board.
+// The esp32s3 file next door has the same constant set false while its
+// own driver is still being brought up.
+const storeReady = true
 
 const (
 	// flashSectorSize is the ESP32's erase unit.
