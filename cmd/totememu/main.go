@@ -50,6 +50,18 @@ var (
 	relayUnowned = ""
 )
 
+// The battery a board reports when nothing measures one: a healthy cell,
+// not a flat one. It is both what the node is configured with and what the
+// board's sensor source falls back to, so the two cannot drift apart.
+//
+// A healthy reading on purpose. Zeroes would put the node into its low
+// power mode and hold the OTA gate shut, and neither is true of a board
+// sitting on a bench with no cell in it.
+const (
+	restingVolts = 4.1
+	restingPct   = 95
+)
+
 func main() {
 	time.Sleep(2 * time.Second)
 	boot := time.Now()
@@ -115,7 +127,13 @@ func main() {
 		name = boot0.Name
 	}
 	node := emulator.New(emulator.Config{
-		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
+		MAC: mac, Owned: allow, Name: name, AutoPair: true,
+		BattVolts: restingVolts, BattPct: restingPct,
+		// The board's own parts, where it has any. Nil on a board with
+		// none, and then the reading above is what the node reports.
+		Sensors: newSensorSource(log, emulator.Sensors{
+			Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
+		}),
 		ColorID: boot0.ColorID, RelayUnowned: relayUnowned == "1",
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no
@@ -353,6 +371,8 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		log.Info("ota", "state", o.State(), "detail", o.Describe())
 	case emulator.OpFlash:
 		flashSelfTest(log)
+	case emulator.OpI2C:
+		i2cScan(log)
 	case emulator.OpStore:
 		switch c.Sub {
 		case "forget":

@@ -146,6 +146,39 @@ func TestAnUpdateStopsWhenTheReadingSwitchesTheDeviceOff(t *testing.T) {
 	}
 }
 
+// TestUpdateWithNoBattery: a power chip reporting that no cell is fitted
+// is the same absence of a reading as having no chip at all, so the gate
+// has to let it through — a development board on USB with no pack must be
+// able to update. Unlike NoPowerChip this one comes from the reading,
+// because only the driver can see whether a cell is plugged in, so the
+// node must not clear it on the way through.
+func TestUpdateWithNoBattery(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Battery: Battery{NoBattery: true}})
+	})
+	h.collect(h.n.Poll(h.now))
+	if !h.n.Sensors().Battery.NoBattery {
+		t.Fatal("the node cleared the driver's no-battery reading")
+	}
+	if h.n.Power().Off() {
+		t.Fatal("a board with no cell powered itself down")
+	}
+	if got := h.n.Power().Describe(); got == "" {
+		t.Error("no power mode for a board with no cell")
+	}
+	if err := h.n.Update(h.now); errors.Is(err, ErrBatteryLow) {
+		t.Error("a board with no cell fitted was refused for its battery")
+	}
+
+	// And the zero value still keeps the gate on: zeroes with no reason
+	// given are a flat cell.
+	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 0, 0 })
+	h.collect(h.n.Poll(h.now))
+	if err := h.n.Update(h.now); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("zeroes with no reason given were refused with %v, want %v", err, ErrBatteryLow)
+	}
+}
+
 // TestUpdateWithNoPowerChip: the OTA gate refuses a flat battery
 // ("Battery too low for OTA update"), and a 0% reading is as flat as it
 // gets. A board with no power chip is a different case: it reports 0 V

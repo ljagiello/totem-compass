@@ -639,6 +639,11 @@ func (n *Node) read(now time.Time) {
 	// no way to know, and one that claimed there was no chip would turn
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
+	//
+	// Battery.NoBattery is deliberately not treated this way. Whether a
+	// cell is plugged into the chip is the one thing only the driver can
+	// see, and it changes while the board runs, so the reading has the
+	// last word there and this must not reach over and clear it.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
 	// An orientation the frame has a meaning for. New settles this for
 	// what it is given and a source set later never passed through it,
@@ -747,7 +752,7 @@ func (n *Node) read(now time.Time) {
 	// percentage from the cell voltage, so a Totem holding 3.8 V says
 	// half full whatever a gauge beside it thinks. A source that means
 	// a flat pack says so with the voltage.
-	if !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
+	if !b.NoPowerChip && !b.NoBattery && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
 	// n.fix(), not the raw reading: a receiver whose position this node

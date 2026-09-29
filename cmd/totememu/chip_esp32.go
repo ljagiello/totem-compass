@@ -7,12 +7,31 @@ package main
 // where both reach different hardware.
 
 import (
+	"log/slog"
 	"machine"
 	"runtime/volatile"
 	"unsafe"
 
 	"device/esp"
+
+	"github.com/ljagiello/totem-compass/emulator"
 )
+
+// i2cScan answers the console's i2c command. There is nothing to scan
+// here: this build targets a bare ESP32 module, where the sensor pins are
+// whatever the person wiring it chose, so there is no bus to configure and
+// a guess at two pins would drive somebody's wiring. The S3 board file has
+// a real scan because that board has a published pin map.
+func i2cScan(log *slog.Logger) {
+	log.Warn("no I2C buses are wired on this build; the sensor pins of a bare ESP32 module are not known")
+}
+
+// newSensorSource has nothing to offer on this chip, for the same reason:
+// no known parts to read. Nil leaves the node on the reading its own
+// configuration describes, which is what this board has always done.
+func newSensorSource(_ *slog.Logger, _ emulator.Sensors) emulator.SensorSource {
+	return nil
+}
 
 // consoleByte returns the next byte typed on the console. The UART receive
 // interrupt stops firing once the WiFi blob runs, so the RX FIFO is polled

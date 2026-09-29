@@ -1,0 +1,377 @@
+//go:build tinygo && esp32s3
+
+package main
+
+// The AXP2101 power chip, which on this board is the gate to everything
+// else. It sits on the power bus with the real-time clock, on a rail that
+// is always on, and it decides whether the sensor bus and the GNSS
+// receiver have any power at all: the magnetometer read 0x00 at both of
+// its addresses until ALDO1 and ALDO2 were switched on, and LILYGO ship
+// ALDO4, which feeds the GNSS, switched off.
+//
+// Registers, bit positions and the voltage encoding are from XPowersLib,
+// the library LILYGO's own examples for this board use — REG/
+// AXP2101Constants.h for the addresses and XPowersAXP2101.tpp for what
+// each one does. Which rail feeds which part is from Meshtastic's setup
+// for this board (src/Power.cpp, the LILYGO_TBEAM_S3_CORE arm), which
+// names them in comments; its wording for ALDO2 is that it "is a necessary
+// condition for sensor communication".
+
+import (
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/ljagiello/totem-compass/emulator"
+)
+
+// The AXP2101's registers.
+const (
+	pmuAddr = 0x34
+
+	pmuRegStatus1   = 0x00 // bit 3: a cell is connected
+	pmuRegStatus2   = 0x01 // bits 7:5: 0 standby, 1 charging, 2 discharging
+	pmuRegChipID    = 0x03 // reads 0x4a
+	pmuRegADCEnable = 0x30 // bit 0: measure the battery voltage
+	pmuRegBatDetect = 0x68 // bit 0: detect whether a cell is there
+	pmuRegVBatHigh  = 0x34 // 13-bit battery voltage in mV, high 5 bits
+	pmuRegVBatLow   = 0x35 // ... and its low 8
+	pmuRegLDOEnable = 0x90 // one bit per LDO: ALDO1 is 0, ALDO4 is 3
+	pmuRegALDO1Volt = 0x92 // low 5 bits set the voltage, high 3 are not ours
+	pmuRegBatPct    = 0xa4 // the chip's own fuel gauge, in percent
+
+	pmuChipID = 0x4a
+
+	// The charging state in the top three bits of status 2.
+	pmuChargeStateCharging = 1
+)
+
+// The rails this program needs, in the order it turns them on. Each is a
+// bit in pmuRegLDOEnable and a voltage register pmuRegALDO1Volt + n, which
+// is what lets one loop do all of them.
+//
+// Only these three. ALDO3 feeds the LoRa radio and DCDC3 the M.2 socket,
+// neither of which a Totem has any use for, and BLDO1 feeds the SD card;
+// leaving them as they came keeps the board's draw down and keeps this
+// program away from parts it does not drive. DCDC1 is the ESP32's own
+// supply and must never be touched — switching it off stops the program
+// that switched it off.
+var pmuRails = []struct {
+	bit  uint8
+	mV   uint16
+	what string
+}{
+	{0, 3300, "ALDO1: magnetometer, IMU and the display header"},
+	{1, 3300, "ALDO2: the sensor bus itself, and the real-time clock"},
+	{3, 3300, "ALDO4: the GNSS receiver, which ships switched off"},
+}
+
+// pmu is the power chip.
+type pmu struct {
+	bus i2cBus
+	log *slog.Logger
+}
+
+// openPMU finds the chip, powers the rails the rest of the board needs,
+// and starts the measurements the battery reading depends on.
+func openPMU(log *slog.Logger) (*pmu, error) {
+	bus, err := boardBus(pmuBusName)
+	if err != nil {
+		return nil, fmt.Errorf("pmu: %w", err)
+	}
+	if err := bus.configure(); err != nil {
+		return nil, fmt.Errorf("pmu: configure %s: %w", bus.name, err)
+	}
+	// Identity first. A wrong chip here would be asked to switch rails by
+	// bit number, and the numbers mean something else on every other part.
+	id, err := bus.readReg(pmuAddr, pmuRegChipID)
+	if err != nil {
+		return nil, fmt.Errorf("pmu: read the chip id at %#02x: %w", pmuAddr, err)
+	}
+	if id != pmuChipID {
+		return nil, fmt.Errorf("pmu: %#02x answered with id %#02x, want an AXP2101's %#02x",
+			pmuAddr, id, pmuChipID)
+	}
+	p := &pmu{bus: bus, log: log}
+	if err := p.powerRails(); err != nil {
+		return nil, err
+	}
+	if err := p.startMeasuring(); err != nil {
+		return nil, err
+	}
+	p.report()
+	return p, nil
+}
+
+// report prints what the chip says about itself once, at startup. The
+// registers are raw on purpose: a battery reading that looks wrong is
+// worth being able to check against the datasheet without reflashing, and
+// on a board with no cell fitted the interesting part is which of these
+// says so.
+func (p *pmu) report() {
+	status1, err1 := p.read(pmuRegStatus1)
+	status2, err2 := p.read(pmuRegStatus2)
+	pct, err3 := p.read(pmuRegBatPct)
+	mV, err4 := p.millivolts()
+	if err := firstErr(err1, err2, err3, err4); err != nil {
+		p.log.Warn("power chip state could not be read", "err", err)
+		return
+	}
+	p.log.Info("power chip",
+		"status1", hexByte(status1), "status2", hexByte(status2),
+		"cell_connected", status1&(1<<3) != 0,
+		"charge_state", status2>>5, "vbat_mv", mV, "gauge_pct", pct)
+}
+
+func firstErr(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// How long the sensor rails stay off before they are switched back on, and
+// which rails get that treatment.
+//
+// The sensors have to be power cycled, not just switched on. Bringing them
+// up from whatever state the last boot left them in is not enough: the
+// magnetometer answered 0x00 at both of its addresses with both rails
+// already on and 3300 mV measured, which is a part holding the bus down
+// rather than a part that is absent. LILYGO's own setup for this board does
+// the same thing for the same reason, and says so — "in order to avoid bus
+// occupation, during initialization, the SD card and QMC sensor are powered
+// off and restarted" — with this delay between.
+//
+// ALDO1 and ALDO2 only. BLDO1 is in their list as well, but it feeds the SD
+// card, which is on the SPI bus this program does not use; a rail is not
+// cycled here just because somebody else cycles it.
+const (
+	pmuSensorRailSettle = 250 * time.Millisecond
+	pmuRailALDO1        = 0
+	pmuRailALDO2        = 1
+)
+
+// powerRails switches on what the sensors and the receiver need.
+//
+// Voltage before enable, each time: a part should never see its rail come
+// up at whatever voltage was last written to that register.
+// Every voltage is written before any rail is switched on, rather than
+// setting and enabling each one in turn. A rail coming up disturbs this bus
+// enough to lose the next transaction, and interleaving the two meant every
+// voltage write but the first landed in the wake of an enable: the write of
+// ALDO4's voltage failed some boots and not others, through ten retries
+// over 50 ms. Writing them while nothing is switching leaves only the
+// enables themselves exposed, and those are followed by a settle and have
+// nothing to say back.
+func (p *pmu) powerRails() error {
+	if err := p.cycleSensorRails(); err != nil {
+		return err
+	}
+	for _, r := range pmuRails {
+		if err := p.setVoltage(r.bit, r.mV); err != nil {
+			return fmt.Errorf("pmu: set %s to %d mV: %w", r.what, r.mV, err)
+		}
+	}
+	for _, r := range pmuRails {
+		if err := p.setBit(pmuRegLDOEnable, r.bit); err != nil {
+			return fmt.Errorf("pmu: enable %s: %w", r.what, err)
+		}
+		time.Sleep(pmuRailSettle)
+		p.log.Info("power rail on", "rail", r.what, "mv", r.mV)
+	}
+	return nil
+}
+
+// cycleSensorRails drops the sensor rails so the parts on them restart with
+// the bus released. It is skipped when they are already off, which is how
+// the board arrives from a cold start: there is nothing to reset, and the
+// quarter second is worth not spending.
+func (p *pmu) cycleSensorRails() error {
+	on, err := p.read(pmuRegLDOEnable)
+	if err != nil {
+		return fmt.Errorf("pmu: read which rails are on: %w", err)
+	}
+	const sensorRails = 1<<pmuRailALDO1 | 1<<pmuRailALDO2
+	if on&sensorRails == 0 {
+		return nil
+	}
+	if err := p.write(pmuRegLDOEnable, on&^sensorRails); err != nil {
+		return fmt.Errorf("pmu: switch the sensor rails off: %w", err)
+	}
+	p.log.Info("sensor rails off to release the bus", "settle_ms", pmuSensorRailSettle.Milliseconds())
+	time.Sleep(pmuSensorRailSettle)
+	return nil
+}
+
+// setVoltage writes one LDO's output voltage. The chip takes it in steps of
+// 100 mV above 500 mV in the low five bits, and the top three bits of the
+// register belong to something else, so they are read and put back.
+func (p *pmu) setVoltage(rail uint8, mV uint16) error {
+	const (
+		minMV  = 500
+		stepMV = 100
+		maxMV  = 3500
+	)
+	if mV < minMV || mV > maxMV || mV%stepMV != 0 {
+		return fmt.Errorf("%d mV is not a multiple of %d between %d and %d", mV, stepMV, minMV, maxMV)
+	}
+	reg := pmuRegALDO1Volt + rail
+	was, err := p.read(reg)
+	if err != nil {
+		return err
+	}
+	return p.write(reg, was&0xe0|uint8((mV-minMV)/stepMV))
+}
+
+// startMeasuring turns on the battery voltage ADC and the cell detector.
+// Without them the voltage register reads zero and nothing says whether
+// that zero is a flat pack or no pack.
+func (p *pmu) startMeasuring() error {
+	if err := p.setBit(pmuRegADCEnable, 0); err != nil {
+		return fmt.Errorf("pmu: enable the battery voltage ADC: %w", err)
+	}
+	if err := p.setBit(pmuRegBatDetect, 0); err != nil {
+		return fmt.Errorf("pmu: enable battery detection: %w", err)
+	}
+	return nil
+}
+
+// battery reads the cell, as emulator.Battery wants it.
+//
+// With no pack fitted — which is how this board arrived — it says so with
+// NoBattery rather than reporting nought volts and nought percent, because
+// those are the readings of a cell that has gone flat and the OTA gate and
+// the power mode both exist to act on that. The chip's own cell detector
+// is what tells them apart.
+func (p *pmu) battery() emulator.Battery {
+	status1, err := p.read(pmuRegStatus1)
+	if err != nil {
+		// A chip that has stopped answering is not a board without one:
+		// say nothing rather than claim there is no cell, and let the
+		// gates stay on.
+		p.log.Warn("power chip did not answer", "err", err)
+		return emulator.Battery{}
+	}
+	if status1&(1<<3) == 0 {
+		return emulator.Battery{NoBattery: true}
+	}
+	var b emulator.Battery
+	if mV, err := p.millivolts(); err != nil {
+		p.log.Warn("battery voltage could not be read", "err", err)
+	} else {
+		b.Volts = float32(mV) / 1000
+	}
+	if pct, err := p.read(pmuRegBatPct); err != nil {
+		p.log.Warn("battery percentage could not be read", "err", err)
+	} else if pct <= 100 {
+		// Above 100 is the gauge saying it does not know yet. Left at
+		// zero, the node derives a percentage from the voltage instead,
+		// which is what the firmware itself does.
+		b.Percent = int8(pct)
+	}
+	status2, err := p.read(pmuRegStatus2)
+	if err != nil {
+		p.log.Warn("charging state could not be read", "err", err)
+		return b
+	}
+	b.Charging = status2>>5 == pmuChargeStateCharging
+	return b
+}
+
+// millivolts reads the 13-bit battery voltage, which the chip reports in
+// millivolts across two registers.
+func (p *pmu) millivolts() (uint16, error) {
+	high, err := p.read(pmuRegVBatHigh)
+	if err != nil {
+		return 0, err
+	}
+	low, err := p.read(pmuRegVBatLow)
+	if err != nil {
+		return 0, err
+	}
+	return uint16(high&0x1f)<<8 | uint16(low), nil
+}
+
+// setBit sets one bit of a register, leaving the rest as they were. Read,
+// or, write: the chip has no bit-set command, and a blind write would turn
+// off whatever else the register holds.
+func (p *pmu) setBit(reg, bit uint8) error {
+	was, err := p.read(reg)
+	if err != nil {
+		return err
+	}
+	if was&(1<<bit) != 0 {
+		return nil
+	}
+	return p.write(reg, was|1<<bit)
+}
+
+// Every transaction builds the I2C peripheral again before it starts, and
+// this is the whole reason the driver reads reliably.
+//
+// TinyGo's I2C driver for this chip stops working after a transaction or
+// two and does not say so. Ten reads of the chip's identity register in a
+// row returned 0x4a once and then 0xff nine times; ten reads of a status
+// register whose real value is 0x20 alternated 0x20, 0xff, 0x20, 0xff in
+// lockstep. Nothing in the driver resets the controller's state machine —
+// there is no bus recovery in it at all — and no amount of waiting or
+// retrying brings it back, because what has gone wrong is on this side of
+// the wire. Configure rebuilds the clock, the pins and the peripheral, and
+// with one in front of every transaction the same twenty reads all came
+// back correct: 0x4a ten times and 0x20 ten times.
+//
+// It costs a few hundred microseconds. The battery is read once per poll,
+// so that is a price worth paying to not invent a voltage — and inventing
+// one is what the alternative did: 0xff bytes read as a cell at 8.19 V,
+// which drove the power mode between eco and normal on successive polls.
+//
+// The retry on top is for the chip rather than the controller: switching a
+// rail on makes the AXP2101 miss a transaction, which a second attempt a
+// few milliseconds later gets through.
+const (
+	pmuTries = 5
+	pmuRetry = 5 * time.Millisecond
+)
+
+// pmuRailSettle is how long the chip is left alone after a rail is
+// switched on before it is asked for anything else. A rail coming up costs
+// the transaction that follows it its acknowledgement.
+const pmuRailSettle = 25 * time.Millisecond
+
+// transact runs one I2C operation against the chip, rebuilding the bus
+// first and retrying a chip that did not answer.
+func (p *pmu) transact(what string, op func() error) error {
+	var err error
+	for try := range pmuTries {
+		if try > 0 {
+			time.Sleep(pmuRetry)
+		}
+		if err = p.bus.configure(); err != nil {
+			continue
+		}
+		if err = op(); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s after %d tries: %w", what, pmuTries, err)
+}
+
+// read reads one register.
+func (p *pmu) read(reg uint8) (byte, error) {
+	var val byte
+	err := p.transact("read register "+hexByte(reg), func() error {
+		var err error
+		val, err = p.bus.readReg(pmuAddr, reg)
+		return err
+	})
+	return val, err
+}
+
+// write writes one register.
+func (p *pmu) write(reg, val uint8) error {
+	return p.transact("write "+hexByte(val)+" to register "+hexByte(reg), func() error {
+		return p.bus.bus.Tx(pmuAddr, []byte{reg, val}, nil)
+	})
+}

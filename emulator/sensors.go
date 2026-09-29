@@ -57,6 +57,22 @@ type Battery struct {
 	// is a power chip", which is the answer that keeps the gate on. A
 	// driver that has never heard of this field fails closed.
 	NoPowerChip bool
+	// NoBattery says a power chip is present and reports that no cell is
+	// connected to it, as a development board running from USB with no
+	// pack fitted does. Its zeroes mean the same thing NoPowerChip's do —
+	// the absence of a reading rather than a reading of zero — so
+	// everything that must not mistake them for a flat cell checks both.
+	//
+	// It is a separate field because it is a different fact, and the
+	// difference is visible: NoPowerChip is how the board is wired and is
+	// settled before it runs, while this is what the chip says today and
+	// changes the moment a pack is plugged in. Saying "no power chip" of a
+	// board that has one would also be false in every log line that
+	// printed it.
+	//
+	// Zero value again the cautious way: a driver that says nothing is
+	// taken to have a cell, and the gate stays on.
+	NoBattery bool
 }
 
 // SensorSource reads the sensors. Both the simulator and a real board's

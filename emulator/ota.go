@@ -370,7 +370,7 @@ func (n *Node) Update(now time.Time) error {
 	// ago is what the gate exists not to reboot on.
 	n.read(now)
 	b := n.sensors.Battery
-	if !b.NoPowerChip && !b.Charging && (b.Low || b.Percent < otaMinPct) {
+	if !b.NoPowerChip && !b.NoBattery && !b.Charging && (b.Low || b.Percent < otaMinPct) {
 		// Named for the half that actually tripped. Battery.Low is the
 		// driver's own flag and is not derived from the percentage, so
 		// a charger chip asserting it while the gauge reads healthy

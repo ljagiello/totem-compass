@@ -37,6 +37,9 @@ const (
 	// firmware answers them. On the host the node leaves them unhandled.
 	OpFlash Op = "flash"
 	OpStore Op = "store"
+	// OpI2C scans the board's I2C buses and names what answers. Board
+	// only, for the same reason: there is no bus on a host.
+	OpI2C Op = "i2c"
 	// OpRX feeds the node a frame as though the radio had heard it. It is
 	// how the mesh paths that need a second Totem — a locate relay, a
 	// Smart Group invitation — get exercised on the board itself.
@@ -54,7 +57,7 @@ const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
 	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
-	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | log debug|info|warn|error | format text|json | selftest"
+	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | i2c | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -100,7 +103,7 @@ func ParseCommand(line string) (Command, error) {
 	}
 	var err error
 	switch c.Op {
-	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash:
+	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash, OpI2C:
 		err = want(0)
 	case OpStore:
 		// store prints the saved settings; store forget wipes them, as a
