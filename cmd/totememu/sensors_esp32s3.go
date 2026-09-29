@@ -147,6 +147,7 @@ type boardSensors struct {
 	posByHand     bool
 	orientByHand  bool
 	headingByHand bool
+	clockByHand   bool
 
 	// saidNoIMU is whether the IMU's failure has already been reported,
 	// cleared by the next reading that works.
@@ -381,6 +382,11 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		// main.go keeps one timer for the whole loop to avoid.
 		b.out = *b.fix
 		b.out.Time = b.fix.Time.Add(now.Sub(b.fixAt))
+		if b.clockByHand {
+			// No clock from this reading, so the node keeps the one it was
+			// given by hand. The position is untouched.
+			b.out.Time = time.Time{}
+		}
 		s.Fix = &b.out
 	}
 	return s
@@ -676,13 +682,17 @@ func (b *boardSensors) SetClock(wall, now time.Time) {
 	// The clock rides on the fix, so setting it by hand while the receiver
 	// has one did nothing at all: Read replaced the whole fix, the node
 	// recomputed its offset from the receiver's timestamp, and the command
-	// was thrown away inside the same call that reported success. Taking the
-	// position by hand is what taking the clock by hand means here, and it
-	// is the same latch.
-	if !b.posByHand {
-		b.posByHand = true
-		b.log.Warn("clock set by hand: the gnss receiver is no longer read, " +
-			"because the clock arrives with the fix")
+	// was thrown away inside the same call that reported success.
+	//
+	// What is latched is the clock alone, not the position. The fix still
+	// goes out — a receiver that knows where it is should not be silenced
+	// for having been overruled about the time — with its timestamp left
+	// empty, which is how this package says a reading carries no clock. The
+	// node then keeps the offset the command gave it.
+	if !b.clockByHand {
+		b.clockByHand = true
+		b.log.Warn("clock set by hand: the receiver's own clock is no longer used, " +
+			"though its position still is")
 	}
 }
 
