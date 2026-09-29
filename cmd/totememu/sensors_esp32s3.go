@@ -66,9 +66,13 @@ const (
 )
 
 // noiseFloorM is the least the odometer will count as a step, whatever the
-// receiver claims for its accuracy. Five metres is inside any fix's
+// receiver claims for its accuracy. Five meters is inside any fix's
 // uncertainty, so nothing below it is movement.
 const noiseFloorM = 5
+
+// odometerAccuracyMultiple scales the receiver's claimed accuracy into that
+// floor. See the floor itself for what one times it cost.
+const odometerAccuracyMultiple = 3
 
 // boardSensors reads what the board can read and falls back to a held
 // reading for the rest.
@@ -94,6 +98,11 @@ type boardSensors struct {
 	// fixAt is when that fix arrived, so its clock can be moved on to the
 	// moment it is reported rather than reported as of when it was taken.
 	fixAt time.Time
+	// smooth low-passes the receiver's position against its own wander, so
+	// a board standing still reports one place rather than a new one every
+	// second. It lives in emulator because this file is built only for the
+	// board, and nothing built only for the board is covered by a test.
+	smooth emulator.PositionSmoother
 	// out is the copy handed to the node, kept here so reporting a fix on
 	// every poll does not allocate on every poll.
 	out emulator.Fix
@@ -421,13 +430,16 @@ func (b *boardSensors) consume(p []byte, now time.Time) {
 		HeadingOfMotion: got.CourseDeg,
 		Time:            got.Time,
 	}
+	// Before anything downstream sees it, including the odometer below and
+	// the position that goes out on the mesh.
+	fix.Lat, fix.Lon = b.smooth.Steady(fix.Lat, fix.Lon, fix.AccuracyM)
 	// The odometer carries over, plus however far this fix is from the last
 	// position that counted.
 	// How far the receiver must have moved for it to count as movement.
 	//
-	// A fixed five metres is not enough, and three minutes on a bench
+	// A fixed five meters is not enough, and three minutes on a bench
 	// proved it: the odometer reached 890 m without the board leaving the
-	// desk. A receiver reporting nine metres of accuracy wanders by about
+	// desk. A receiver reporting nine meters of accuracy wanders by about
 	// that, so a five-metre leg is inside its own uncertainty — and every
 	// time the wander crossed the floor it was counted and the anchor moved
 	// with it. Movement smaller than the receiver's stated accuracy is not
@@ -446,15 +458,26 @@ func (b *boardSensors) consume(p []byte, now time.Time) {
 	// desk, and with the floor alone it still reached 286 m.
 	//
 	// Neither is a cure, and it is worth being plain about why. Indoors with
-	// four satellites and fourteen metres of claimed accuracy the receiver
+	// four satellites and fourteen meters of claimed accuracy the receiver
 	// reported 127 km/h — its own speed field, pinned at the top of the
-	// byte — and a position that wandered hundreds of metres. The odometer
+	// byte — and a position that wandered hundreds of meters. The odometer
 	// followed it, because the odometer's job is to report what the receiver
 	// says. Filtering harder would mean deciding that a receiver claiming
 	// motorway speed is wrong, and sometimes it is in a car. A bad fix
 	// produces a bad odometer on a real Totem too; what this code owes is
 	// not to invent movement on top of it.
-	floor := float64(max(noiseFloorM, int(fix.AccuracyM)))
+	// Three times the claimed accuracy, not once it. Once was measured and
+	// was not enough: standing still with six meters claimed, the receiver
+	// drifted about eleven meters in three minutes — one way, not jitter
+	// about a point — and every crossing of a six-metre floor was counted,
+	// 25 m of it in that run. A drift is not something the smoother can
+	// take out, because following the receiver is its whole job; the floor
+	// is what decides that following it is not travel.
+	floor := float64(max(noiseFloorM, odometerAccuracyMultiple*int(fix.AccuracyM)))
+	// The receiver's speed field cannot help decide this. In that same
+	// stationary run it read 0, 1, 2 and 9 km/h, so `> 0` let nearly every
+	// reading through; it is kept only to drop the readings where the
+	// receiver does say plainly that it is not moving.
 	moving := fix.SpeedKPH > 0
 	if b.counted != nil {
 		// From the last position that was counted, not the last fix. A
