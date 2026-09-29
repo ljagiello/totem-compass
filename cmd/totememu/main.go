@@ -126,14 +126,26 @@ func main() {
 	if len(boot0.Name) != 0 && name == "" {
 		name = boot0.Name
 	}
+	// The board's own parts, where it has any. Nil on a board with none,
+	// and then the reading below is what the node reports.
+	//
+	// Opened here rather than inside the Config literal, and boot taken
+	// again after it, because this is slow: a quarter second of rail
+	// cycling, three rail settles, and a second spent listening to the
+	// GNSS receiver to see whether it is there. Built into the literal,
+	// all of that happened after startRadio had already begun filling a
+	// sixteen-slot receive ring that nothing pops until the main loop
+	// starts — so a pairing broadcast arriving in that window was dropped
+	// — and emulator.New was then handed a boot instant a second and a
+	// half in the past, which is what its radio windows are aligned to.
+	sensors := newSensorSource(log, emulator.Sensors{
+		Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
+	})
+	boot = time.Now()
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true,
 		BattVolts: restingVolts, BattPct: restingPct,
-		// The board's own parts, where it has any. Nil on a board with
-		// none, and then the reading above is what the node reports.
-		Sensors: newSensorSource(log, emulator.Sensors{
-			Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
-		}),
+		Sensors: sensors,
 		ColorID: boot0.ColorID, RelayUnowned: relayUnowned == "1",
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no

@@ -20,6 +20,7 @@ package main
 // which needs a magnetometer this board does not have.
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"machine"
@@ -147,10 +148,23 @@ func (m *imu) pitchRoll() (pitch, roll float64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if x == 0 && y == 0 && z == 0 {
-		// All three axes reading nothing is the part not answering, not
-		// freefall: at rest one of them carries a whole g.
-		return 0, 0, errNoGravity
+	// Gravity has to be there, and about the right size. A part sitting
+	// still measures one g spread across its three axes however it is
+	// turned, so a vector far from that length is not a pose — it is a
+	// part that is answering without measuring.
+	//
+	// Checking the length rather than checking for three zeroes, which is
+	// what this did first and is not enough: six bytes of 0x01 read as
+	// (0.0001, 0.0001, 0.0001) g, which passes a zero test and comes out
+	// as a pitch of -35.3 degrees, past the threshold the firmware commits
+	// "upright" on. One bad burst could argue for a change of state.
+	//
+	// The band is wide because it has to survive being picked up. Half a g
+	// to two g covers a board being carried and still refuses a reading
+	// that carries no gravity at all.
+	mag := math.Sqrt(x*x + y*y + z*z)
+	if mag < minGravityG || mag > maxGravityG {
+		return 0, 0, fmt.Errorf("%w: %.4f g across (%.4f, %.4f, %.4f)", errNoGravity, mag, x, y, z)
 	}
 	const deg = 180 / math.Pi
 	roll = math.Atan2(y, z) * deg
@@ -158,7 +172,13 @@ func (m *imu) pitchRoll() (pitch, roll float64, err error) {
 	return pitch, roll, nil
 }
 
-var errNoGravity = fmt.Errorf("imu: all three axes read zero, so the part is not answering")
+// The band a resting or carried board's acceleration vector stays inside.
+const (
+	minGravityG = 0.5
+	maxGravityG = 2.0
+)
+
+var errNoGravity = errors.New("imu: the acceleration vector is not gravity, so the part is not measuring")
 
 // read reads one register.
 func (m *imu) read(reg byte) (byte, error) {

@@ -69,6 +69,11 @@ const (
 // 0xc84017, 4096-byte sectors, an erase at 13 ms and a 64-byte write at
 // 141 µs.
 //
+// So this is true, and so is the esp32 file's copy, which means the branch
+// they guard in settingsSector cannot currently be taken. The gate is kept
+// for the next chip rather than for these two; what follows is what it does
+// when it is false.
+//
 // While it is false the node runs without saving: settingsSector hands
 // store.Open nothing, Open answers ErrNoSector, and settings.Open logs
 // "no settings sector on this board, running without saving" and carries

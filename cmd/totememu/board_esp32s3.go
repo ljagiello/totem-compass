@@ -116,27 +116,32 @@ func (b i2cBus) configure() error {
 	})
 }
 
-// readReg reads one register, writing the register number and reading the
-// byte back in a single transaction.
+// readReg reads one register, in a single combined transaction: the
+// register number out, the byte back.
 //
-// The error is not enough on its own to say a device is there. TinyGo's
-// driver for this chip ignores a NACK on a transaction that ends in a read
-// — from machine_esp32xx_i2c.go:
+// A failure here cannot be trusted to mean absence, and there is no way to
+// make it. TinyGo's driver for this chip drops a NACK on any transaction
+// that ends in a read — from machine_esp32xx_i2c.go:
 //
 //	case mask&NACK_INT_ST != 0 && !readLast:
 //		return errI2CAckExpected
 //
-// readLast is set for the final byte of any read, so the arm never fires
-// and an address nobody answers reports success with whatever the bus was
-// left holding. The value has to be judged, which is why every part here
-// carries a register whose contents are known.
-// It is two transactions rather than one for that reason. The register
-// number goes out as a write of its own, which does report a NACK, and the
-// byte is read after it. Done as a single combined transaction the whole
-// thing counts as ending in a read, and then a device that is not there —
-// or a bus that has stopped working — comes back as 0xff with no error at
-// all. That is not a theoretical worry: it was read as a battery at 8.19 V,
-// which is 0x1ffe, which is what thirteen bits of 0xff look like.
+// readLast is set for the final byte of every read, so the arm never fires,
+// and an address nobody answers comes back as 0xff with a nil error.
+//
+// Both ways round that were tried are worse. Sending the register number as
+// a write of its own does report the NACK, but with a stop in between the
+// AXP2101 then returns 0xff for a status register this form reads correctly
+// — the pointer does not survive. Probing with a write and then reading the
+// combined form corrupted every second read instead: ten reads of a
+// register holding 0x20 came back 0x20, 0xff, 0x20, 0xff in lockstep.
+//
+// So absence is established from the value, never from the error. Every
+// part in the tables above carries a register whose contents are known, and
+// a reading that is not what that register holds is a part that is not
+// there. The one number that has no known value — the battery voltage — is
+// held to a band a cell can actually be in, because 0xff read as a cell
+// once already, at 8.19 V.
 func (b i2cBus) readReg(addr uint16, reg uint8) (byte, error) {
 	var got [1]byte
 	if err := b.bus.Tx(addr, []byte{reg}, got[:]); err != nil {

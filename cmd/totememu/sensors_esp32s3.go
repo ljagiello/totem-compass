@@ -108,6 +108,10 @@ type boardSensors struct {
 	battByHand   bool
 	posByHand    bool
 	orientByHand bool
+
+	// saidNoIMU is whether the IMU's failure has already been reported,
+	// cleared by the next reading that works.
+	saidNoIMU bool
 }
 
 // newSensorSource wires up the board's sensors. It returns nil when there
@@ -195,8 +199,16 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		if b.imuAt.IsZero() || now.Sub(b.imuAt) >= imuEvery {
 			b.imuAt = now
 			if pitch, roll, err := b.imu.pitchRoll(); err != nil {
-				b.log.Warn("imu could not be read", "err", err)
+				// Once, not twenty times a second. An IMU that has
+				// stopped answering would otherwise fill the only
+				// diagnostic channel the board has, which is the reason
+				// the node latches its own repeated warnings.
+				if !b.saidNoIMU {
+					b.saidNoIMU = true
+					b.log.Warn("imu could not be read", "err", err)
+				}
 			} else {
+				b.saidNoIMU = false
 				b.orientation.Update(pitch, roll, now)
 			}
 		}
@@ -269,6 +281,18 @@ func (b *boardSensors) SetFix(f *emulator.Fix) {
 		return
 	}
 	b.ctl.SetFix(f)
+	// pos off is how the receiver is given back, not another way to take
+	// it away. Latching on nil left an operator who had set a position by
+	// hand with no command that undid it — and made it worse, because the
+	// held fix was cleared too, so the board reported no position at all
+	// while a receiver with a good one sat unread until a reboot.
+	if f == nil {
+		if b.posByHand {
+			b.posByHand = false
+			b.log.Info("position cleared: the gnss receiver is read again")
+		}
+		return
+	}
 	if !b.posByHand {
 		b.posByHand = true
 		b.log.Warn("position set by hand: the gnss receiver is no longer read")

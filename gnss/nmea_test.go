@@ -294,3 +294,108 @@ func TestFuzzedLatitudeSentence(t *testing.T) {
 }
 
 func near(a, b, tol float64) bool { return a-b < tol && b-a < tol }
+
+// TestNotANumberIsNotAPlace: a field is only a number if it looks like one.
+// strconv.ParseFloat accepts "NaN", "Inf" and "0x1p112", and a NaN latitude
+// passes every range check ever written — `d < -90 || d > 90` is false for
+// it — so a sentence whose checksum happens to match could hand back a fix
+// at NaN, which is what this package promises never to do. The checksums
+// below are real, which is the point: nothing else would have stopped them.
+func TestNotANumberIsNotAPlace(t *testing.T) {
+	for _, tt := range []struct {
+		name, line string
+	}{
+		{"NaN latitude", "$GPRMC,123519,A,NaN12.0,N,01131.000,E,022.4,084.4,230326,003.1,W*01\r\n"},
+		{"hex float longitude", "$GPRMC,123519,A,4807.038,N,0x1p112.0,E,022.4,084.4,230326,,*11\r\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var r Reader
+			fix, ok := feed(t, &r, tt.line)
+			if ok {
+				t.Fatalf("produced a fix at %v, %v", fix.Lat, fix.Lon)
+			}
+		})
+	}
+
+	// The same for the fields that are not coordinates: a NaN speed or a
+	// NaN dilution must not reach the arithmetic either, where converting
+	// it to an integer is not even defined.
+	var r Reader
+	fix, ok := feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,NaN,084.4,230326,,*53\r\n")
+	if !ok {
+		t.Fatal("a sentence with one bad field lost its whole fix")
+	}
+	if fix.SpeedKPH != 0 {
+		t.Errorf("speed %d from a NaN field, want it left alone", fix.SpeedKPH)
+	}
+	var r2 Reader
+	feed(t, &r2, "$GPGGA,123519,4807.038,N,01131.000,E,1,08,NaN,545.4,M,46.9,M,,*01\r\n")
+	if got := r2.accuracy; got != -1 {
+		t.Errorf("accuracy %d from a NaN dilution, want -1", got)
+	}
+}
+
+func TestDecimal(t *testing.T) {
+	for _, tt := range []struct {
+		in   string
+		want bool
+	}{
+		{"1", true}, {"1.5", true}, {"-1.5", true}, {"+1.5", true},
+		{"0001131.000", true}, {".5", true}, {"5.", true},
+		{"", false}, {"NaN", false}, {"nan", false}, {"Inf", false},
+		{"-Inf", false}, {"0x1p112", false}, {"1e300", false},
+		{"1.2.3", false}, {"1 ", false}, {" 1", false}, {"--1", false},
+		{".", false}, {"abc", false},
+	} {
+		if _, ok := decimal(tt.in); ok != tt.want {
+			t.Errorf("decimal(%q) ok = %v, want %v", tt.in, ok, tt.want)
+		}
+	}
+}
+
+// TestStaleGGAIsNotAttached: a receiver that stops sending GGA must not
+// have every later fix stamped with the satellite count and accuracy of the
+// last one it ever sent — that goes into the status frame as a solution
+// quality it has no current evidence for.
+func TestStaleGGAIsNotAttached(t *testing.T) {
+	const (
+		gga  = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n"
+		rmc  = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n"
+		zda  = "$GPZDA,123519,23,03,2026,00,00*41\r\n" // read, ignored, but counted
+		want = 8
+	)
+	var r Reader
+	feed(t, &r, gga)
+	fix, ok := feed(t, &r, rmc)
+	if !ok || fix.SatCount != want {
+		t.Fatalf("a fix right after its GGA has %d satellites, want %d", fix.SatCount, want)
+	}
+	// Push the GGA out of range with sentences that carry none of its own.
+	for range ggaStaleAfter + 1 {
+		feed(t, &r, zda)
+	}
+	fix, ok = feed(t, &r, rmc)
+	if !ok {
+		t.Fatal("the later RMC produced no fix")
+	}
+	if fix.SatCount != 0 || fix.AccuracyM != -1 || fix.AltitudeM != -500 {
+		t.Errorf("a stale GGA was still attached: sats %d, accuracy %d, altitude %d",
+			fix.SatCount, fix.AccuracyM, fix.AltitudeM)
+	}
+}
+
+// TestCountersPartitionTheStream: every sentence is counted once, as good
+// or as bad, never as both. Bad's whole use as a diagnostic is that a
+// mis-clocked receiver shows as a rising Bad with Sentences standing still.
+func TestCountersPartitionTheStream(t *testing.T) {
+	var r Reader
+	feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n")       // good
+	feed(t, &r, "$GPGGA,123519,4807.038*45\r\n")                                            // too short to be a GGA
+	feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,003.1,W*66\r\n") // bad checksum
+	if got, want := r.Sentences(), uint64(1); got != want {
+		t.Errorf("Sentences() = %d, want %d", got, want)
+	}
+	if got, want := r.Bad(), uint64(2); got != want {
+		t.Errorf("Bad() = %d, want %d", got, want)
+	}
+}

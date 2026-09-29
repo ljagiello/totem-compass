@@ -30,6 +30,14 @@ func FuzzReader(f *testing.F) {
 	f.Add([]byte("$"))
 	f.Add([]byte("$,,,,,,,,,,,,*00\r\n"))
 	f.Add([]byte("$GPRMC" + string(make([]byte, 400))))
+	// Fields that parse as numbers but are not numbers a receiver means.
+	// The fuzzer did not synthesize these on its own — a matching checksum
+	// over the exact letters N, a, N is a lot to ask of random mutation —
+	// so they are seeded, and the invariant they break is the one about
+	// never handing back a fix that is not a place.
+	f.Add([]byte("$GPRMC,123519,A,NaN12.0,N,01131.000,E,022.4,084.4,230326,003.1,W*01\r\n"))
+	f.Add([]byte("$GPRMC,123519,A,4807.038,N,0x1p112.0,E,022.4,084.4,230326,,*11\r\n"))
+	f.Add([]byte("$GPGGA,123519,4807.038,N,01131.000,E,1,08,NaN,545.4,M,46.9,M,,*01\r\n"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		var r Reader

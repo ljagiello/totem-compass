@@ -491,6 +491,11 @@ func TestNativeUSB(t *testing.T) {
 		{"bridge chip", "/dev/cu.usbserial-0001", []*enumerator.PortDetails{cp2102, s3}, nil, false},
 		{"espressif vid but not usb", "/dev/cu.odd", []*enumerator.PortDetails{notUSB}, nil, false},
 		{"port not listed", "/dev/ttyACM9", []*enumerator.PortDetails{s3}, nil, false},
+		// The macOS twin of a listed port is the same device. Typing the
+		// tty. name is reasonable and it works, so it must not be the one
+		// name that leaves the board held in reset.
+		{"macos tty twin of a listed cu", "/dev/tty.usbmodem2101", []*enumerator.PortDetails{s3}, nil, true},
+		{"macos tty twin of a bridge", "/dev/tty.usbserial-0001", []*enumerator.PortDetails{cp2102}, nil, false},
 		{"list fails", "/dev/cu.usbmodem2101", nil, errors.New("boom"), false},
 		{"no lister", "/dev/cu.usbmodem2101", nil, nil, false},
 	}

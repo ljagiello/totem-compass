@@ -201,8 +201,12 @@ type Node struct {
 	gnssClock   bool
 	clockOffset time.Duration
 
-	source  SensorSource
-	sensors Sensors
+	source SensorSource
+	// replaced is a hardware source that StartSim set aside, kept so
+	// StopSim can give it back. Nil when nothing was set aside, which is
+	// every case where the source was a held reading rather than a driver.
+	replaced SensorSource
+	sensors  Sensors
 	// sensorsAt is when the sensors were last read: the node's idea of
 	// now for the parts that no frame or timer drives.
 	sensorsAt time.Time
@@ -2076,6 +2080,18 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 	if f := n.fix(); f != nil {
 		cfg.Lat, cfg.Lon = f.Lat, f.Lon
 	}
+	// Remember a source that reads hardware, so stopping gives it back.
+	// A held reading is not worth keeping — StopSim freezes the
+	// simulation's own last reading into a new one, which is the point of
+	// it — but a driver owns a power chip, a receiver and an IMU that were
+	// opened once at startup and cannot be rebuilt from a struct. Dropping
+	// one on the floor left a board reporting invented readings from parts
+	// sitting powered and unread until it was rebooted.
+	if _, held := n.source.(*staticSensors); !held {
+		n.replaced = n.source
+		n.log.Warn("the board's own sensors are set aside while the simulation runs; " +
+			"sim off gives them back")
+	}
 	n.SetSensors(NewSim(cfg, now), now)
 	n.log.Info("simulation started", "motion", m, "bearing", bearing)
 	if cfg.NoFix {
@@ -2086,6 +2102,12 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 // StopSim freezes the readings where the simulation left them.
 func (n *Node) StopSim(now time.Time) {
 	if n.sim() == nil {
+		return
+	}
+	if src := n.replaced; src != nil {
+		n.replaced = nil
+		n.SetSensors(src, now)
+		n.log.Info("simulation stopped; the board's own sensors are read again")
 		return
 	}
 	held := n.sensors

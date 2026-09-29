@@ -114,3 +114,76 @@ func TestOrientationReportsWithoutAReading(t *testing.T) {
 		t.Errorf("after committing flat, Orientation says %v", got)
 	}
 }
+
+// driverSensors stands in for a board's own drivers: a source that is not a
+// held reading and cannot be rebuilt from one, because the real thing owns
+// a power chip, a serial port and an IMU opened once at startup.
+type driverSensors struct{ reads int }
+
+func (d *driverSensors) Read(time.Time) Sensors {
+	d.reads++
+	return Sensors{Battery: Battery{Volts: 4.0, Percent: 80}}
+}
+
+// TestSimGivesTheHardwareBack: starting a simulation on a board sets its
+// drivers aside, and stopping one has to give them back. Installing a fresh
+// held reading instead left the board inventing a battery, a position and an
+// orientation while its own parts sat powered and unread until a reboot.
+func TestSimGivesTheHardwareBack(t *testing.T) {
+	drv := &driverSensors{}
+	h := newHarness(t, func(c *Config) { c.Sensors = drv })
+	h.collect(h.n.Poll(h.now))
+	if drv.reads == 0 {
+		t.Fatal("the driver was never read to begin with")
+	}
+
+	// No position set first: this source is a driver and takes no console
+	// settings, which is exactly the case being tested. The simulation
+	// warns that it has nowhere to walk from and starts anyway.
+	h.n.StartSim(Walk, 90, h.now)
+	if h.n.sim() == nil {
+		t.Fatal("the simulation did not start")
+	}
+	was := drv.reads
+	h.collect(h.n.Poll(h.now.Add(time.Second)))
+	if drv.reads != was {
+		t.Error("the driver was still read while the simulation ran")
+	}
+
+	h.n.StopSim(h.now.Add(2 * time.Second))
+	if h.n.sim() != nil {
+		t.Fatal("the simulation did not stop")
+	}
+	h.collect(h.n.Poll(h.now.Add(3 * time.Second)))
+	if drv.reads == was {
+		t.Error("the board's drivers were not read again after the simulation stopped")
+	}
+	if got := h.n.Sensors().Battery.Percent; got != 80 {
+		t.Errorf("battery %d%% after the simulation stopped, want the driver's 80%%", got)
+	}
+}
+
+// TestSimOnAHeldReadingStillFreezes: the other half of the same rule. With
+// no driver to give back, stopping a simulation keeps its last reading,
+// which is what it has always done.
+func TestSimOnAHeldReadingStillFreezes(t *testing.T) {
+	h := newHarness(t, nil)
+	if err := h.n.SetPosition(&Position{Lat: 1, Lon: 2}, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.n.StartSim(Drive, 90, h.now)
+	h.collect(h.n.Poll(h.now.Add(30 * time.Second)))
+	moved := h.n.Fix()
+	if moved == nil {
+		t.Fatal("the simulation produced no position")
+	}
+	h.n.StopSim(h.now.Add(31 * time.Second))
+	frozen := h.n.Fix()
+	if frozen == nil {
+		t.Fatal("stopping the simulation lost the position")
+	}
+	if frozen.Lat != moved.Lat || frozen.Lon != moved.Lon {
+		t.Errorf("stopped at %v,%v but the simulation had reached %v,%v",
+			frozen.Lat, frozen.Lon, moved.Lat, moved.Lon)
+	}
+}

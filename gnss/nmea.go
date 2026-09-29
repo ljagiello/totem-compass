@@ -61,13 +61,25 @@ type Reader struct {
 
 	// What the last GGA said. RMC is the sentence that completes a fix,
 	// and it does not carry any of this.
+	//
+	// ggaAt is the sentence count when that GGA arrived, so its age can be
+	// judged: zero means none has been seen. Counted in sentences rather
+	// than seconds because this package is handed bytes, not a clock, and
+	// a receiver emits its sentences in a fixed cycle — a GGA more than a
+	// few sentences old is one that has stopped coming.
 	sats      int8
 	accuracy  int8
 	altitude  int16
-	haveGGA   bool
+	ggaAt     uint64
 	sentences uint64
 	bad       uint64
 }
+
+// ggaStaleAfter is how many sentences a GGA's satellite count, accuracy and
+// altitude stay attached to the fixes that follow it. A receiver sends its
+// cycle once a second and a cycle is a handful of sentences, so ten covers
+// a normal one twice over and still notices a GGA that has stopped.
+const ggaStaleAfter = 10
 
 // Sentences is how many sentences have parsed, whether or not this package
 // had any use for them.
@@ -152,75 +164,103 @@ func (r *Reader) sentence(s string) (Fix, bool) {
 		r.bad++
 		return Fix{}, false
 	}
-	r.sentences++
 	// The first two letters are the talker — GP for GPS, GN for several
 	// constellations at once, GL, GA, BD for one each — and this package
 	// does not care which.
+	//
+	// Counted after the handler, not before it, so that a sentence is
+	// either good or bad and never both. Counting here and then letting
+	// gga or rmc reject a truncated one for its own reasons made both
+	// climb together, which is what a healthy receiver with occasional
+	// corruption looks like — the opposite of the reading Bad's own
+	// documentation promises.
 	switch fields[0][2:] {
 	case "GGA":
-		r.gga(fields)
+		if !r.gga(fields) {
+			return Fix{}, false
+		}
 	case "RMC":
-		return r.rmc(fields)
+		fix, ok, good := r.rmc(fields)
+		if !good {
+			return Fix{}, false
+		}
+		r.sentences++
+		return fix, ok
 	}
+	r.sentences++
 	return Fix{}, false
 }
 
-// gga remembers the satellite count, the accuracy and the altitude.
-func (r *Reader) gga(f []string) {
+// gga remembers the satellite count, the accuracy and the altitude, and
+// says whether the sentence was one. A GGA too short to hold its fields is
+// a bad sentence, not a GGA with nothing in it.
+func (r *Reader) gga(f []string) bool {
 	// $xxGGA,time,lat,ns,lon,ew,quality,sats,hdop,alt,altUnit,...
 	if len(f) < 10 {
 		r.bad++
-		return
+		return false
 	}
-	r.haveGGA = true
+	// The one-based index this sentence is about to become: the counter is
+	// bumped after the handler returns, and zero has to keep meaning "no
+	// GGA yet".
+	r.ggaAt = r.sentences + 1
 	r.sats = int8(clampInt(atoiDefault(f[7], 0), 0, 127))
 	r.accuracy = hdopAccuracyM(atofDefault(f[8], -1))
 	r.altitude = -500
-	if alt, err := strconv.ParseFloat(f[9], 64); err == nil {
+	if alt, ok := decimal(f[9]); ok {
 		r.altitude = int16(clampInt(int(alt), -500, 32767))
 	}
+	return true
 }
 
 // rmc completes a fix, if the receiver says its solution is valid.
-func (r *Reader) rmc(f []string) (Fix, bool) {
+// The second result says whether a fix came out; the third says whether the
+// sentence was a sentence, which is what the counters need to know.
+func (r *Reader) rmc(f []string) (fix Fix, gotFix, good bool) {
 	// $xxRMC,time,status,lat,ns,lon,ew,knots,course,date,...
 	if len(f) < 10 {
 		r.bad++
-		return Fix{}, false
+		return Fix{}, false, false
 	}
 	if f[2] != "A" {
 		// V, or anything else, means the receiver has no solution. Its
 		// clock may still be good, but a position it does not vouch for
-		// is not one to report.
-		return Fix{}, false
+		// is not one to report. The sentence itself was fine.
+		return Fix{}, false, true
 	}
 	lat, latOK := latitude(f[3], f[4])
 	lon, lonOK := longitude(f[5], f[6])
 	if !latOK || !lonOK {
 		r.bad++
-		return Fix{}, false
+		return Fix{}, false, false
 	}
-	fix := Fix{
+	fix = Fix{
 		Lat: float32(lat), Lon: float32(lon),
 		AccuracyM: -1, AltitudeM: -500, SatCount: 0, CourseDeg: -1,
 		Time: utc(f[9], f[1]),
 	}
-	if r.haveGGA {
+	// What the last GGA said, but only if it was recent. A module
+	// reconfigured to send RMC alone, or one whose GGA sentences start
+	// failing their checksum while RMC survives, would otherwise have
+	// every later fix stamped with a satellite count and an accuracy from
+	// the last GGA it ever sent — and those go into the status frame as a
+	// solution quality the receiver has no current evidence for.
+	if r.ggaAt != 0 && r.sentences+1-r.ggaAt <= ggaStaleAfter {
 		fix.AccuracyM, fix.AltitudeM, fix.SatCount = r.accuracy, r.altitude, r.sats
 	}
-	if knots, err := strconv.ParseFloat(f[7], 64); err == nil && knots >= 0 {
+	if knots, ok := decimal(f[7]); ok && knots >= 0 {
 		// 1 knot is 1.852 km/h. Speed is a byte in the frame, so a
 		// receiver reporting an airplane is pinned at its top value
 		// rather than wrapping into a negative one.
 		fix.SpeedKPH = int8(clampInt(int(knots*1.852+0.5), 0, 127))
 	}
-	if course, err := strconv.ParseFloat(f[8], 64); err == nil && course >= 0 && course < 360 {
+	if course, ok := decimal(f[8]); ok && course >= 0 && course < 360 {
 		fix.CourseDeg = int16(course + 0.5)
 		if fix.CourseDeg == 360 {
 			fix.CourseDeg = 0
 		}
 	}
-	return fix, true
+	return fix, true, true
 }
 
 // verify checks the trailing *hh checksum, which is every byte between the
@@ -276,12 +316,12 @@ func degrees(value, hemisphere, positive, negative string, limit float64) (float
 	if dot < 3 {
 		return 0, false
 	}
-	deg, err := strconv.ParseFloat(value[:dot-2], 64)
-	if err != nil {
+	deg, ok := decimal(value[:dot-2])
+	if !ok || deg < 0 {
 		return 0, false
 	}
-	min, err := strconv.ParseFloat(value[dot-2:], 64)
-	if err != nil || min < 0 || min >= 60 {
+	min, ok := decimal(value[dot-2:])
+	if !ok || min < 0 || min >= 60 {
 		return 0, false
 	}
 	d := deg + min/60
@@ -361,11 +401,53 @@ func atoiDefault(s string, def int) int {
 }
 
 func atofDefault(s string, def float64) float64 {
-	f, err := strconv.ParseFloat(s, 64)
-	if err != nil {
+	f, ok := decimal(s)
+	if !ok {
 		return def
 	}
 	return f
+}
+
+// decimal reads a plain decimal number, and only that.
+//
+// strconv.ParseFloat is the wrong tool for a field off a wire, because it
+// accepts more than a receiver can mean. "NaN" parses, and a NaN latitude
+// passes every range check ever written — `d < -90 || d > 90` is false for
+// it — so a checksum-valid sentence could hand back a fix at NaN, which is
+// what the package doc promises never to do. "Inf", "0x1p112" and "1e300"
+// parse too. None of them is a number a GNSS receiver produces; all of them
+// are what a corrupted field or a hostile one looks like.
+//
+// So the shape is checked first: digits, at most one point, an optional
+// leading sign, and nothing else. What survives that is safe to hand to
+// ParseFloat, which is still needed for the actual conversion.
+func decimal(s string) (float64, bool) {
+	if s == "" {
+		return 0, false
+	}
+	body := s
+	if body[0] == '+' || body[0] == '-' {
+		body = body[1:]
+	}
+	digits, points := 0, 0
+	for i := range len(body) {
+		switch c := body[i]; {
+		case c >= '0' && c <= '9':
+			digits++
+		case c == '.':
+			points++
+		default:
+			return 0, false
+		}
+	}
+	if digits == 0 || points > 1 {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, false
+	}
+	return f, true
 }
 
 func clampInt(v, lo, hi int) int {

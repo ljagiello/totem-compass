@@ -99,11 +99,43 @@ func nativeUSB(name string, ports func() ([]*enumerator.PortDetails, error)) boo
 		return false
 	}
 	for _, p := range list {
-		if p.Name == name {
+		if sameDevice(p.Name, name) {
 			return p.IsUSB && strings.EqualFold(p.VID, espressifVID)
 		}
 	}
 	return false
+}
+
+// sameDevice says whether two paths name the same serial device.
+//
+// On macOS every USB serial port appears twice, as /dev/cu.xxx and
+// /dev/tty.xxx, and the enumerator lists only one of them. Matching the
+// exact string meant that --port /dev/tty.usbmodem2101 — a name a person can
+// reasonably type, and which works — was not found in the list, so the modem
+// lines were left asserted and the board sat in reset with nothing to say
+// why. That is the whole symptom this distinction exists to avoid.
+//
+// emulatorPort already knows the two are twins; it filters the tty. name out
+// of auto-detection in favor of the cu. one.
+func sameDevice(a, b string) bool {
+	return a == b || deviceKey(a) == deviceKey(b)
+}
+
+// deviceKey is a port path with the macOS prefix taken off, so the two names
+// of one device give the same answer. A path that has neither prefix is
+// returned as it is, and then only an exact match counts.
+func deviceKey(name string) string {
+	const dir = "/dev/"
+	if !strings.HasPrefix(name, dir) {
+		return name
+	}
+	base := name[len(dir):]
+	for _, prefix := range []string{"cu.", "tty."} {
+		if rest, ok := strings.CutPrefix(base, prefix); ok {
+			return rest
+		}
+	}
+	return name
 }
 
 func newMeshCmd(g *globals) *cobra.Command {

@@ -18,6 +18,7 @@ package main
 // condition for sensor communication".
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -70,6 +71,15 @@ var pmuRails = []struct {
 type pmu struct {
 	bus i2cBus
 	log *slog.Logger
+
+	// What has already been complained about, so a part that has failed
+	// once does not fill the log. Each is cleared when its own read works
+	// again — see warnOnce.
+	saidNoAnswer bool
+	saidNoVolts  bool
+	saidOddVolts bool
+	saidNoPct    bool
+	saidNoCharge bool
 }
 
 // openPMU finds the chip, powers the rails the rest of the board needs,
@@ -79,12 +89,17 @@ func openPMU(log *slog.Logger) (*pmu, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pmu: %w", err)
 	}
-	if err := bus.configure(); err != nil {
-		return nil, fmt.Errorf("pmu: configure %s: %w", bus.name, err)
-	}
+	// Built before the first read, so that read goes through the retry and
+	// the per-transaction Configure like every other one. Reading the
+	// identity register with the bare bus was the one place in this file
+	// that did not, and it is the register the file's own header records
+	// coming back as 0xff nine times out of ten: one unlucky transaction
+	// there and the whole session ran on a fake battery with no GNSS, no
+	// IMU and ALDO4 left switched off, which is how LILYGO ship it.
+	p := &pmu{bus: bus, log: log}
 	// Identity first. A wrong chip here would be asked to switch rails by
 	// bit number, and the numbers mean something else on every other part.
-	id, err := bus.readReg(pmuAddr, pmuRegChipID)
+	id, err := p.read(pmuRegChipID)
 	if err != nil {
 		return nil, fmt.Errorf("pmu: read the chip id at %#02x: %w", pmuAddr, err)
 	}
@@ -92,7 +107,6 @@ func openPMU(log *slog.Logger) (*pmu, error) {
 		return nil, fmt.Errorf("pmu: %#02x answered with id %#02x, want an AXP2101's %#02x",
 			pmuAddr, id, pmuChipID)
 	}
-	p := &pmu{bus: bus, log: log}
 	if err := p.powerRails(); err != nil {
 		return nil, err
 	}
@@ -113,7 +127,7 @@ func (p *pmu) report() {
 	status2, err2 := p.read(pmuRegStatus2)
 	pct, err3 := p.read(pmuRegBatPct)
 	mV, err4 := p.millivolts()
-	if err := firstErr(err1, err2, err3, err4); err != nil {
+	if err := errors.Join(err1, err2, err3, err4); err != nil {
 		p.log.Warn("power chip state could not be read", "err", err)
 		return
 	}
@@ -121,15 +135,6 @@ func (p *pmu) report() {
 		"status1", hexByte(status1), "status2", hexByte(status2),
 		"cell_connected", status1&(1<<3) != 0,
 		"charge_state", status2>>5, "vbat_mv", mV, "gauge_pct", pct)
-}
-
-func firstErr(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // How long the sensor rails stay off before they are switched back on, and
@@ -251,33 +256,81 @@ func (p *pmu) battery() emulator.Battery {
 		// A chip that has stopped answering is not a board without one:
 		// say nothing rather than claim there is no cell, and let the
 		// gates stay on.
-		p.log.Warn("power chip did not answer", "err", err)
+		p.warnOnce(&p.saidNoAnswer, "power chip did not answer", err)
 		return emulator.Battery{}
 	}
+	p.saidNoAnswer = false
 	if status1&(1<<3) == 0 {
 		return emulator.Battery{NoBattery: true}
 	}
+	// One read failing means the rest will too, and each one costs the
+	// whole retry budget — five tries five milliseconds apart. Five reads
+	// of a chip that has gone quiet is a tenth of a second inside a loop
+	// that has 5 ms radio windows to hit, so the first failure ends the
+	// attempt rather than paying for all of them.
 	var b emulator.Battery
-	if mV, err := p.millivolts(); err != nil {
-		p.log.Warn("battery voltage could not be read", "err", err)
-	} else {
-		b.Volts = float32(mV) / 1000
+	mV, err := p.millivolts()
+	if err != nil {
+		p.warnOnce(&p.saidNoVolts, "battery voltage could not be read", err)
+		return b
 	}
+	p.saidNoVolts = false
+	if !plausibleMillivolts(mV) {
+		// Not a cell voltage, so not reported as one. An all-0xff read is
+		// 0x1fff, which is 8191 mV: over twice what any single lithium
+		// cell reaches, and well inside what the status frame can carry,
+		// so it would go out to every peer and drive the power mode. This
+		// happened before the bus was made reliable, and the band is what
+		// makes it a refused reading rather than a believed one.
+		p.warnOnce(&p.saidOddVolts, "battery voltage is not a cell voltage",
+			fmt.Errorf("%d mV is outside %d-%d", mV, minCellMV, maxCellMV))
+		return b
+	}
+	p.saidOddVolts = false
+	b.Volts = float32(mV) / 1000
 	if pct, err := p.read(pmuRegBatPct); err != nil {
-		p.log.Warn("battery percentage could not be read", "err", err)
+		p.warnOnce(&p.saidNoPct, "battery percentage could not be read", err)
+		return b
 	} else if pct <= 100 {
 		// Above 100 is the gauge saying it does not know yet. Left at
 		// zero, the node derives a percentage from the voltage instead,
 		// which is what the firmware itself does.
+		p.saidNoPct = false
 		b.Percent = int8(pct)
 	}
 	status2, err := p.read(pmuRegStatus2)
 	if err != nil {
-		p.log.Warn("charging state could not be read", "err", err)
+		p.warnOnce(&p.saidNoCharge, "charging state could not be read", err)
 		return b
 	}
+	p.saidNoCharge = false
 	b.Charging = status2>>5 == pmuChargeStateCharging
 	return b
+}
+
+// The band a single lithium cell can actually be in. Below the lower figure
+// a protection circuit has already disconnected it; above the upper one it
+// is not a cell.
+const (
+	minCellMV = 2500
+	maxCellMV = 4600
+)
+
+func plausibleMillivolts(mV uint16) bool { return mV >= minCellMV && mV <= maxCellMV }
+
+// warnOnce says something the first time and then stays quiet until the
+// thing it is about works again.
+//
+// battery() runs every two seconds and the IMU is read twenty times a
+// second, so an unlatched warning is a part failing once and then filling
+// the only diagnostic channel the board has. The node does the same with
+// warnedClock, saidBondLimit and saidRestoreLimit, for the same reason.
+func (p *pmu) warnOnce(said *bool, msg string, err error) {
+	if *said {
+		return
+	}
+	*said = true
+	p.log.Warn(msg, "err", err)
 }
 
 // millivolts reads the 13-bit battery voltage, which the chip reports in
