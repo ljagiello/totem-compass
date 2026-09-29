@@ -321,6 +321,15 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS,
 			"heading", sense.Azimuth, "color", cfg.ColorID, "flat", sense.Orientation == mesh.OrientationHorizontal,
 			"batt", sense.Battery.Percent, "volts", sense.Battery.Volts, "charging", sense.Battery.Charging}
+		// Why those are zero, when they are. A board on USB with no cell
+		// fitted reports nought percent at nought volts, which is exactly
+		// what a flat pack reports, and the difference decides whether the
+		// device is about to power itself down. Said only when it applies,
+		// so an ordinary status line does not carry it — the same trap
+		// has_position is spelled out for below.
+		if sense.Battery.NoBattery {
+			self = append(self, "no_battery", true)
+		}
 		// n.Fix(), not sense.Fix: the reading is whatever a receiver
 		// reported, and a driver may report a NaN. This handler writes
 		// JSON, which cannot hold one — a single such reading turns the

@@ -57,6 +57,7 @@ type Reader struct {
 	line    [maxSentence]byte
 	n       int
 	dropped bool // this line overran, so discard it rather than truncate
+	started bool // a dollar has been seen, so this is a sentence and not a tail
 
 	// What the last GGA said. RMC is the sentence that completes a fix,
 	// and it does not carry any of this.
@@ -93,13 +94,20 @@ func (r *Reader) Feed(b byte) (Fix, bool) {
 		// A new sentence starts here whatever came before. A receiver
 		// interrupted mid-line leaves a fragment, and the fragment must
 		// not swallow the sentence after it.
-		r.n, r.dropped = 0, false
+		r.n, r.dropped, r.started = 0, false, true
 		return Fix{}, false
 	case '\r', '\n':
 		line := r.line[:r.n]
-		r.n = 0
-		if r.dropped || len(line) == 0 {
-			r.dropped = false
+		started, dropped := r.started, r.dropped
+		r.n, r.dropped, r.started = 0, false, false
+		if !started || dropped || len(line) == 0 {
+			// Not started means this line began before the reader did, or
+			// after one it gave up on: bytes with no dollar in front of
+			// them are the tail of something, not a sentence. Refused
+			// rather than parsed, even though the checksum would still
+			// have to match — a tail is not a reading whatever it adds
+			// up to, and it is not counted as a bad sentence either,
+			// because arriving mid-stream is normal.
 			return Fix{}, false
 		}
 		return r.sentence(string(line))

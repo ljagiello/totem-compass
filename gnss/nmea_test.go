@@ -119,6 +119,17 @@ func TestChecksumIsEnforced(t *testing.T) {
 // mid-sentence, or a line lost to a full buffer, leaves a fragment. The
 // sentence after it has to still be read.
 func TestFragmentDoesNotSwallowTheNextSentence(t *testing.T) {
+	// The tail on its own is not a sentence, whatever it adds up to: a
+	// reader started mid-stream sees one every time it is switched on, and
+	// bytes with no dollar in front of them are not a reading.
+	var tail Reader
+	if _, ok := feed(t, &tail, "038,N,01131.000,E,1,08,0.9,545.4,M,,*11\r\n"); ok {
+		t.Error("a tail with no start was read as a sentence")
+	}
+	if tail.Bad() != 0 {
+		t.Errorf("the tail counted as %d bad sentences; arriving mid-stream is normal", tail.Bad())
+	}
+
 	var r Reader
 	const stream = "038,N,01131.000,E,1,08,0.9,545.4,M,,*11\r\n" + // a tail with no start
 		"$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n"
