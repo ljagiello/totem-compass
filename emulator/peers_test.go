@@ -343,7 +343,7 @@ func TestTheDistanceToTheOtherSideOfTheWorld(t *testing.T) {
 		{90, 0, -90, 0},
 		{37.775, -122.42, -37.775, 57.58},
 	} {
-		got := distance(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
+		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) || math.IsInf(got, 0) {
 			t.Errorf("distance(%v,%v -> %v,%v) = %v", tc.aLat, tc.aLon, tc.bLat, tc.bLon, got)
 		}
@@ -448,7 +448,7 @@ func TestADistanceThatCannotBeMeasured(t *testing.T) {
 		{0, 0, nan, 0},
 		{0, 0, 0, nan},
 	} {
-		got := distance(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
+		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) {
 			t.Errorf("distance(%v,%v -> %v,%v) is not a number",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon)
@@ -471,7 +471,7 @@ func TestADistanceWhoseIntermediateGoesNegative(t *testing.T) {
 		{117.5, 0, 62.5, 180},
 		{118.5, 0, 61.5, 180},
 	} {
-		got := distance(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
+		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) {
 			t.Errorf("distance(%v,%v -> %v,%v) is not a number",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon)

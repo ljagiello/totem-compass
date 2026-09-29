@@ -368,7 +368,7 @@ func parsePosition(args []string) (*Position, error) {
 		}
 		p.AccuracyM = int8(acc)
 	}
-	p.SolutionID = solutionFor(p.AccuracyM)
+	p.SolutionID = SolutionFor(p.AccuracyM)
 	return p, nil
 }
 

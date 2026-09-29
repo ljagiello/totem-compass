@@ -289,7 +289,7 @@ func (s *Sim) Read(now time.Time) Sensors {
 	}
 	out.Fix = &Fix{
 		Lat: float32(s.lat), Lon: float32(s.lon), AccuracyM: acc, AltitudeM: 12,
-		SpeedKPH: int8(min(speed, 127)), SatCount: 11, SolutionID: solutionFor(acc),
+		SpeedKPH: int8(min(speed, 127)), SatCount: 11, SolutionID: SolutionFor(acc),
 		HeadingOfMotion: s.heading, OdometerM: int32(s.odometerM),
 	}
 	if !s.cfg.Clock.IsZero() {
@@ -395,8 +395,11 @@ func voltsFor(percent int8) float32 {
 	return mv(last)
 }
 
-// solutionFor is gnss_data.solution_id from the position accuracy.
-func solutionFor(accuracyM int8) int8 {
+// SolutionFor is gnss_data.solution_id from the position accuracy. It is
+// exported because a board's own GNSS driver has to fill this field too,
+// and there should be one answer to what an accuracy means rather than a
+// driver's copy of it drifting from the console's.
+func SolutionFor(accuracyM int8) int8 {
 	switch {
 	case accuracyM < 0:
 		return 0

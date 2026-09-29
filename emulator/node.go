@@ -1525,7 +1525,7 @@ func (n *Node) relay(now time.Time, frame []byte, m mesh.Locate) bool {
 	// worth trusting. An unusable one is no last hop at all, and a hop
 	// whose distance cannot be known cannot be too close.
 	if m.RelayMinDistM > 0 && usablePosition(m.LastHopLat, m.LastHopLon) &&
-		distance(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
+		DistanceM(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
 		return false
 	}
 	b := slices.Clone(frame)
@@ -1754,7 +1754,7 @@ func (n *Node) peerDistance(p *peer) float64 {
 	if f == nil || !p.hasCoords {
 		return -1
 	}
-	return distance(f.Lat, f.Lon, p.lat, p.lon)
+	return DistanceM(f.Lat, f.Lon, p.lat, p.lon)
 }
 
 func (n *Node) furthestPeer() float64 {
@@ -1770,16 +1770,20 @@ func (n *Node) furthestPeer() float64 {
 	far := 0.0
 	for _, p := range n.peers {
 		if p.hasCoords {
-			far = max(far, distance(f.Lat, f.Lon, p.lat, p.lon))
+			far = max(far, DistanceM(f.Lat, f.Lon, p.lat, p.lon))
 		}
 	}
 	return far
 }
 
-// distance is the great-circle distance in meters. The firmware's
+// DistanceM is the great-circle distance in meters. The firmware's
 // get_distance lives in the native c_stats module; a haversine is
 // assumed.
-func distance(lat1, lon1, lat2, lon2 float32) float64 {
+//
+// Exported because a board's GNSS driver needs it too, to add up an
+// odometer from the fixes its receiver gives it, and because the clamp
+// below is the sort of thing nobody should write a second time.
+func DistanceM(lat1, lon1, lat2, lon2 float32) float64 {
 	const r = 6371000
 	φ1, φ2 := float64(lat1)*math.Pi/180, float64(lat2)*math.Pi/180
 	dφ, dλ := φ2-φ1, float64(lon2-lon1)*math.Pi/180
