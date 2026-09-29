@@ -273,12 +273,50 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 	return nil
 }
 
+// scanHintAfter is how long a scan runs before the wake hint appears. A
+// Totem that is already advertising is found in well under a second, so
+// the hint stays out of the way until the wait is itself the evidence
+// that nobody has pressed the button. A variable so the tests need not
+// wait it out.
+var scanHintAfter = 2 * time.Second
+
+// hintWhileScanning prints the wake hint if the scan outlasts
+// scanHintAfter, and returns the function that ends it.
+//
+// The double-press is the one step only the user can do, and it used to
+// appear solely in --help and in the error after a minute of silence,
+// which is too late to act on: the advertising window and the default
+// scan timeout are both 60 s, so a user who learns of the press from the
+// error has already missed the window they were being told about.
+//
+// stop waits for the goroutine, so nothing prints after it returns. The
+// caller is blocked in Find until then and prints nothing itself, so the
+// two never write to the printer at once.
+func (g *globals) hintWhileScanning(ctx context.Context) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTimer(scanHintAfter)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+		case <-t.C:
+			g.out.status("still looking: double-press your Totem's power button " +
+				"and watch for its crystal to breathe blue")
+		}
+	}()
+	return func() { cancel(); <-done }
+}
+
 // connectBLE finds the Totem over Bluetooth and connects to it.
 func (g *globals) connectBLE(ctx context.Context, opts client.Options) (*client.Client, error) {
 	scanCtx, cancel := context.WithTimeout(ctx, g.scanTimeout)
 	defer cancel()
 	g.out.status("scanning for %s…", describeMatch(g.device))
+	stop := g.hintWhileScanning(scanCtx)
 	dev, err := client.Find(scanCtx, g.device)
+	stop()
 	if errors.Is(err, client.ErrNotFound) {
 		hint := ""
 		if g.device != "" {

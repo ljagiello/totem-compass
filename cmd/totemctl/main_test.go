@@ -1047,3 +1047,78 @@ func TestScanJSONType(t *testing.T) {
 		t.Errorf("scan JSON line: %s", out.String())
 	}
 }
+
+// TestHintWhileScanning: every BLE command scans for up to a minute, and
+// the double-press that makes the Totem findable is the one step only the
+// user can take. The hint used to live in --help and in the error after
+// that minute had passed, which is too late to act on, so a scan that
+// runs long now asks for the press while there is still a window to
+// press into.
+func TestHintWhileScanning(t *testing.T) {
+	const press = "double-press"
+	restore := scanHintAfter
+	scanHintAfter = time.Millisecond
+	t.Cleanup(func() { scanHintAfter = restore })
+
+	// hint runs a scan that lasts long enough to trip the timer and
+	// returns what the user saw on stderr. stop synchronizes with the
+	// goroutine, so reading the buffer afterwards is safe.
+	hint := func(quiet bool) string {
+		var errb bytes.Buffer
+		g := &globals{out: &printer{quiet: quiet, out: io.Discard, err: &errb}}
+		stop := g.hintWhileScanning(context.Background())
+		time.Sleep(50 * time.Millisecond)
+		stop()
+		return errb.String()
+	}
+
+	t.Run("a slow scan asks for the press", func(t *testing.T) {
+		if got := hint(false); !strings.Contains(got, press) {
+			t.Errorf("a scan past the hint delay did not ask for the press, got %q", got)
+		}
+	})
+
+	t.Run("quiet suppresses it", func(t *testing.T) {
+		if got := hint(true); got != "" {
+			t.Errorf("-q printed %q", got)
+		}
+	})
+
+	t.Run("a scan that finds one stays quiet", func(t *testing.T) {
+		var errb bytes.Buffer
+		g := &globals{out: &printer{out: io.Discard, err: &errb}}
+		g.hintWhileScanning(context.Background())() // found before the timer
+		if got := errb.String(); got != "" {
+			t.Errorf("a scan that returned at once printed %q", got)
+		}
+	})
+
+	// stop must not outlive its goroutine: nothing may print after it
+	// returns, or the hint could land in the middle of a result line.
+	t.Run("stop waits for the goroutine", func(t *testing.T) {
+		var errb bytes.Buffer
+		g := &globals{out: &printer{out: io.Discard, err: &errb}}
+		stop := g.hintWhileScanning(context.Background())
+		time.Sleep(50 * time.Millisecond)
+		stop()
+		n := errb.Len()
+		time.Sleep(20 * time.Millisecond)
+		if errb.Len() != n {
+			t.Errorf("the hint printed after stop returned: %q", errb.String())
+		}
+	})
+
+	// A canceled scan (Ctrl-C, or the connect finishing) drops the hint.
+	t.Run("a canceled scan stays quiet", func(t *testing.T) {
+		var errb bytes.Buffer
+		g := &globals{out: &printer{out: io.Discard, err: &errb}}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		stop := g.hintWhileScanning(ctx)
+		time.Sleep(50 * time.Millisecond)
+		stop()
+		if got := errb.String(); got != "" {
+			t.Errorf("a canceled scan printed %q", got)
+		}
+	})
+}
