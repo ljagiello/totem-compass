@@ -40,6 +40,10 @@ const (
 	// OpI2C scans the board's I2C buses and names what answers. Board
 	// only, for the same reason: there is no bus on a host.
 	OpI2C Op = "i2c"
+	// OpMag reads the magnetometer, and with "calibrate" measures the hard
+	// iron around it by watching a turn. Board only, and the one command
+	// here that asks a person to do something with their hands.
+	OpMag Op = "mag"
 	// OpRX feeds the node a frame as though the radio had heard it. It is
 	// how the mesh paths that need a second Totem — a locate relay, a
 	// Smart Group invitation — get exercised on the board itself.
@@ -57,7 +61,7 @@ const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
 	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
-	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | i2c | log debug|info|warn|error | format text|json | selftest"
+	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | i2c | mag [calibrate] | log debug|info|warn|error | format text|json | selftest"
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -105,6 +109,17 @@ func ParseCommand(line string) (Command, error) {
 	switch c.Op {
 	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash, OpI2C:
 		err = want(0)
+	case OpMag:
+		// mag prints the field; mag calibrate watches a turn and works out
+		// the hard iron from it.
+		if len(args) == 1 {
+			if args[0] != "calibrate" {
+				err = fmt.Errorf("mag takes nothing or calibrate, got %q", args[0])
+			}
+			c.Sub = args[0]
+		} else {
+			err = want(0)
+		}
 	case OpStore:
 		// store prints the saved settings; store forget wipes them, as a
 		// factory reset does; store open reads the sector on a board that
@@ -445,6 +460,11 @@ func (c Command) String() string {
 			return "store " + c.Sub
 		}
 		return "store"
+	case OpMag:
+		if c.Sub != "" {
+			return "mag " + c.Sub
+		}
+		return "mag"
 	}
 	return string(c.Op)
 }

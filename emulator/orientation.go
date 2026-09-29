@@ -44,25 +44,33 @@ const (
 )
 
 // How long a pose must persist to be committed, and how long the state it
-// replaces must already have lasted. Both are indexed by state, so unknown,
+// replaces must already have lasted. Both depend on which state, so unknown,
 // vertical and horizontal each get their own, and both exist to stop a
 // device that is being put down or picked up from flapping between the two.
 //
 // The asymmetry is the firmware's: claiming upright takes 100 ms but
 // abandoning it takes 2.8 s, because a Totem held in a hand wobbles and
 // every change of state ends up in a status frame to every peer.
-var (
-	orientationDwell = map[mesh.Orientation]time.Duration{
-		mesh.OrientationUnknown:    100 * time.Millisecond,
-		mesh.OrientationVertical:   100 * time.Millisecond,
-		mesh.OrientationHorizontal: 300 * time.Millisecond,
+//
+// Switches rather than maps. A map is looked up on every reading, is a
+// package-level variable anything could write, and — the part that matters —
+// answers zero for a key it does not have. This field carries whatever a
+// frame gave it, and node.read only normalises it after this has run, so an
+// orientation outside the three would have committed instantly and abandoned
+// the old state instantly: exactly the flapping the numbers exist to stop.
+func orientationDwell(o mesh.Orientation) time.Duration {
+	if o == mesh.OrientationHorizontal {
+		return 300 * time.Millisecond
 	}
-	orientationHold = map[mesh.Orientation]time.Duration{
-		mesh.OrientationUnknown:    800 * time.Millisecond,
-		mesh.OrientationVertical:   2800 * time.Millisecond,
-		mesh.OrientationHorizontal: 800 * time.Millisecond,
+	return 100 * time.Millisecond
+}
+
+func orientationHold(o mesh.Orientation) time.Duration {
+	if o == mesh.OrientationVertical {
+		return 2800 * time.Millisecond
 	}
-)
+	return 800 * time.Millisecond
+}
 
 // Update gives the tracker a reading and returns the state to report, which
 // is the committed one whether or not this reading changed it.
@@ -77,10 +85,10 @@ func (t *OrientationTracker) Update(pitchDeg, rollDeg float64, now time.Time) me
 	// its turn. A first reading arriving before either clock has run is
 	// not enough, which is why committedAt starts at the zero time and is
 	// compared rather than assumed.
-	if now.Sub(t.candidateAt) < orientationDwell[t.candidate] {
+	if now.Sub(t.candidateAt) < orientationDwell(t.candidate) {
 		return t.committed
 	}
-	if !t.committedAt.IsZero() && now.Sub(t.committedAt) < orientationHold[t.committed] {
+	if !t.committedAt.IsZero() && now.Sub(t.committedAt) < orientationHold(t.committed) {
 		return t.committed
 	}
 	t.committed, t.committedAt = t.candidate, now

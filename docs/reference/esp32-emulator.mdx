@@ -107,10 +107,22 @@ register map is a magnetometer's, and it measures — but what it measures on th
 The reading is the same to three digits on every boot — around (1.92, -1.20, 0.00) g — which
 is what a *fixed* magnetic offset looks like: something on the board or mounted with it,
 rather than anything moving nearby. That is ordinary, it is called hard iron, and it is
-removed by turning the sensor through every orientation and taking the centre of the box the
+removed by turning the sensor through every orientation and taking the center of the box the
 readings sweep out. It is what the firmware's own 2D and 3D calibration runs do. Until it has
 been done a bearing from this part would be confidently wrong, so the board takes none and
 says so in the log, and the heading stays on the console.
+
+`mag calibrate` is that turn. It watches for twenty seconds, takes the extremes each axis
+reaches, and the center of the box they sweep out is the offset — then the heading comes from
+the magnetometer, tilt-compensated with the IMU's pitch and roll, and keeps coming until the
+board is rebooted. **It needs someone to pick the board up and turn it over**, slowly, through
+every face.
+
+A turn that was not one is refused rather than believed, which is the part worth testing: on a
+board left sitting on a bench the twenty seconds gathered 389 readings whose axes moved 0.023,
+0.026 and 0.046 gauss, against a floor of 0.15, and the calibration was declined. The center
+of a reading that never moved is just where it was pointing, and accepting it would leave the
+heading exactly as wrong as before while the board stopped saying it had no compass.
 
 Two things this cost, both worth knowing before trusting a reading from this part:
 
@@ -243,6 +255,7 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `store`, `store forget` | the saved settings and bonds, or forget them: the flash and the live bonds both, as a factory reset does |
 | `flash` | check the flash driver on its scratch sector: erase, write, read back |
 | `i2c` | read each part the board should carry and say whether it answers with the identity it should |
+| `mag`, `mag calibrate` | the magnetic field, or a 20 s turn to measure the hard iron around it |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
 | `help` | list the commands |
 

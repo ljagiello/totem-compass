@@ -14,9 +14,11 @@ package main
 // and the clock, from the GNSS receiver on UART1. The orientation, from the
 // IMU.
 //
-// Console: the heading, because this board has no magnetometer fitted —
-// none of the three addresses the vendor lists for one answers, and the one
-// that does answer at 0x3c reads back 0xff, which is the display.
+// Console: the heading. A magnetometer is fitted — a QMC6310 at 0x3c, and an
+// earlier version of this comment said there was none, which was wrong — but
+// the field around it reads several times the Earth's, so until it has been
+// calibrated by a turn through every orientation a bearing from it would be
+// confidently wrong. mag_esp32s3.go has the detail.
 //
 // An operator can take any of it back by hand. Controls says a command must
 // not quietly do nothing, so pos, heading, batt, flat and clock all still
@@ -55,6 +57,9 @@ const (
 	// Half the shortest orientation dwell, so a pose still gets two
 	// readings to make its case within the 100 ms it has to hold for.
 	imuEvery = 50 * time.Millisecond
+	// The compass, at the rate a person can turn: a heading is for pointing
+	// at a friend, and ten a second is far more than a hand can follow.
+	magEvery = 100 * time.Millisecond
 )
 
 // boardSensors reads what the board can read and falls back to a held
@@ -65,6 +70,9 @@ type boardSensors struct {
 	port *gnssPort
 	imu  *imu
 	mag  *mag
+
+	// heading is the last bearing the compass gave, in degrees.
+	heading int16
 
 	// nmea turns the receiver's bytes into fixes, and block is the buffer
 	// they are read into. Kept here rather than made per call so a
@@ -77,7 +85,12 @@ type boardSensors struct {
 	fix *emulator.Fix
 	// odometerM is how far the receiver has been seen to move, summed over
 	// the fixes it gave. The firmware keeps one, so peers expect it.
+	//
+	// counted is the position the current leg is measured from: the last
+	// one far enough from its predecessor to be movement rather than a
+	// receiver wandering where it stands.
 	odometerM int32
+	counted   *emulator.Fix
 
 	// held is the reading the console drives, and the source of every
 	// field no driver fills in yet. It is emulator's own static source
@@ -123,6 +136,20 @@ type boardSensors struct {
 	// saidNoIMU is whether the IMU's failure has already been reported,
 	// cleared by the next reading that works.
 	saidNoIMU bool
+	saidNoMag bool
+
+	// iron is the hard-iron offset a calibration turn measured, and
+	// calibrated says whether one has been done. Until it has, no heading
+	// is taken from the magnetometer: the field on this board reads several
+	// times the Earth's, so a bearing from it would be confidently wrong.
+	//
+	// It is not saved. A reboot needs another turn, which is the honest
+	// arrangement while the store's shape is fixed at a name, a colour and
+	// the bonds — and a calibration is only good for where the board is
+	// mounted anyway.
+	iron       emulator.HardIron
+	calibrated bool
+	magAt      time.Time
 }
 
 // newSensorSource wires up the board's sensors. It returns nil when there
@@ -143,12 +170,16 @@ func newSensorSource(log *slog.Logger, fallback emulator.Sensors) emulator.Senso
 	ctl, ok := held.(emulator.Controls)
 	if !ok {
 		// Not reachable with the emulator package as it stands, and
-		// checked anyway: without it pos and heading would stop working
-		// and the only clue would be the node saying the readings come
-		// from the hardware.
+		// handled anyway. It must not return a *boardSensors: that type
+		// has all five setters, so it satisfies Controls whatever ctl
+		// holds, and the node would call them, get nil back and report
+		// every pos and heading as having worked while they did nothing —
+		// which is the one outcome Controls exists to rule out. Handing
+		// back the static source alone means the node finds no Controls
+		// and says so.
 		log.Warn("the static sensor source no longer takes console settings; " +
-			"the sensors are read but pos, heading, flat and clock are not")
-		return &boardSensors{log: log, pmu: p, held: held}
+			"the battery and position are read from hardware and the console cannot set anything")
+		return held
 	}
 	b := &boardSensors{log: log, pmu: p, port: openGNSS(log), held: held, ctl: ctl}
 	if m, err := openIMU(log); err != nil {
@@ -247,7 +278,14 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 			}
 			b.battAt = now
 		}
-		s.Battery = b.battery
+		// And only a reading that says something is reported. Guarding the
+		// cache alone was half a fix: until the first read succeeds the
+		// cache is itself the zero Battery, and assigning it here threw
+		// away the configured fallback and published 0 V at 0% — which is
+		// a flat cell to the power mode and to the OTA gate both.
+		if b.battery != (emulator.Battery{}) {
+			s.Battery = b.battery
+		}
 	}
 	if b.port != nil {
 		b.drain()
@@ -269,6 +307,18 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		// tracker holds a pose for seconds at a time, so the answer
 		// between readings is the same one.
 		s.Orientation = b.orientation.Orientation()
+	}
+	if b.mag != nil && b.calibrated {
+		if b.magAt.IsZero() || now.Sub(b.magAt) >= magEvery {
+			b.magAt = now
+			if az, err := b.azimuth(); err != nil {
+				warnOnce(b.log, &b.saidNoMag, "magnetometer could not be read", err)
+			} else {
+				b.saidNoMag = false
+				b.heading = az
+			}
+		}
+		s.Azimuth = b.heading
 	}
 	if b.fix != nil && !b.posByHand {
 		// The copy made when the fix arrived, not a fresh one now. The node
@@ -315,10 +365,22 @@ func (b *boardSensors) consume(p []byte) {
 	// standing still wanders by a few meters a second, and adding that up
 	// would have the board claim kilometers from a desk.
 	const noiseFloorM = 5
-	if b.fix != nil {
-		if moved := emulator.DistanceM(b.fix.Lat, b.fix.Lon, fix.Lat, fix.Lon); moved >= noiseFloorM {
+	if b.counted != nil {
+		// From the last position that was counted, not the last fix. A
+		// receiver sends one fix a second, so walking covers about 1.4 m
+		// between them — under the floor every time, and with the anchor
+		// moving each second the distance was thrown away rather than
+		// accumulated. A person could walk a kilometre and the odometer
+		// would still read nothing; only travel above about 18 km/h ever
+		// registered at all.
+		if moved := emulator.DistanceM(b.counted.Lat, b.counted.Lon, fix.Lat, fix.Lon); moved >= noiseFloorM {
 			b.odometerM += int32(moved)
+			anchor := *fix
+			b.counted = &anchor
 		}
+	} else {
+		anchor := *fix
+		b.counted = &anchor
 	}
 	fix.OdometerM = b.odometerM
 	first := b.fix == nil
@@ -327,6 +389,71 @@ func (b *boardSensors) consume(p []byte) {
 		b.log.Info("gnss fix", "lat", fix.Lat, "lon", fix.Lon, "sats", fix.SatCount,
 			"accuracy_m", fix.AccuracyM, "solution", fix.SolutionID, "utc", fix.Time)
 	}
+}
+
+// azimuth is the tilt-compensated bearing, with the hard iron taken off.
+func (b *boardSensors) azimuth() (int16, error) {
+	x, y, z, err := b.mag.field()
+	if err != nil {
+		return 0, err
+	}
+	pitch, roll, err := b.imuTilt()
+	if err != nil {
+		return 0, err
+	}
+	deg := emulator.Heading(x-b.iron.X, y-b.iron.Y, z-b.iron.Z, pitch, roll)
+	return int16(deg + 0.5), nil
+}
+
+// imuTilt is the pose the compass is corrected for. Without an IMU the board
+// is taken to be flat, which is what an uncompensated compass assumes and is
+// worth being explicit about rather than silently true.
+func (b *boardSensors) imuTilt() (pitch, roll float64, err error) {
+	if b.imu == nil {
+		return 0, 0, nil
+	}
+	return b.imu.pitchRoll()
+}
+
+// calibrateMag runs a calibration turn and, if it worked, starts reporting a
+// heading from the compass.
+func (b *boardSensors) calibrateMag(now func() time.Time) {
+	if b.mag == nil {
+		b.log.Warn("no magnetometer to calibrate on this board")
+		return
+	}
+	iron, ok := b.mag.calibrate(b.log, now)
+	if !ok {
+		return
+	}
+	b.iron, b.calibrated = iron, true
+	b.log.Info("the compass is now read from the magnetometer")
+}
+
+// magReport prints the field, and says why no heading is taken when none is.
+func (b *boardSensors) magReport() {
+	if b.mag == nil {
+		b.log.Warn("no magnetometer on this board")
+		return
+	}
+	x, y, z, err := b.mag.field()
+	if err != nil {
+		b.log.Warn("magnetometer could not be read", "err", err)
+		return
+	}
+	field := math.Sqrt(x*x + y*y + z*z)
+	if !b.calibrated {
+		b.log.Warn("no heading is taken from the magnetometer until it is calibrated",
+			"field_g", field, "earth_g", "0.25 to 0.65", "run", "mag calibrate")
+		return
+	}
+	az, err := b.azimuth()
+	if err != nil {
+		b.log.Warn("magnetometer could not be read", "err", err)
+		return
+	}
+	b.log.Info("compass", "heading_deg", az, "field_g", field,
+		"iron_x_g", b.iron.X, "iron_y_g", b.iron.Y, "iron_z_g", b.iron.Z)
 }
 
 // The console's half. Each one goes straight through to the held reading,

@@ -101,11 +101,11 @@ func openPMU(log *slog.Logger) (*pmu, error) {
 	// bit number, and the numbers mean something else on every other part.
 	id, err := p.read(pmuRegChipID)
 	if err != nil {
-		return nil, fmt.Errorf("pmu: read the chip id at %#02x: %w", pmuAddr, err)
+		return nil, fmt.Errorf("pmu: read the chip id at %s: %w", hexByte(pmuAddr), err)
 	}
 	if id != pmuChipID {
-		return nil, fmt.Errorf("pmu: %#02x answered with id %#02x, want an AXP2101's %#02x",
-			pmuAddr, id, pmuChipID)
+		return nil, fmt.Errorf("pmu: %s answered with id %s, want an AXP2101's %s",
+			hexByte(pmuAddr), hexByte(id), hexByte(pmuChipID))
 	}
 	if err := p.powerRails(); err != nil {
 		return nil, err
@@ -159,9 +159,6 @@ const (
 )
 
 // powerRails switches on what the sensors and the receiver need.
-//
-// Voltage before enable, each time: a part should never see its rail come
-// up at whatever voltage was last written to that register.
 // Every voltage is written before any rail is switched on, rather than
 // setting and enabling each one in turn. A rail coming up disturbs this bus
 // enough to lose the next transaction, and interleaving the two meant every
@@ -194,7 +191,7 @@ func (p *pmu) powerRails() error {
 // the board arrives from a cold start: there is nothing to reset, and the
 // quarter second is worth not spending.
 func (p *pmu) cycleSensorRails() error {
-	on, err := p.read(pmuRegLDOEnable)
+	on, err := p.readControl(pmuRegLDOEnable)
 	if err != nil {
 		return fmt.Errorf("pmu: read which rails are on: %w", err)
 	}
@@ -223,7 +220,7 @@ func (p *pmu) setVoltage(rail uint8, mV uint16) error {
 		return fmt.Errorf("%d mV is not a multiple of %d between %d and %d", mV, stepMV, minMV, maxMV)
 	}
 	reg := pmuRegALDO1Volt + rail
-	was, err := p.read(reg)
+	was, err := p.readControl(reg)
 	if err != nil {
 		return err
 	}
@@ -355,7 +352,7 @@ func (p *pmu) millivolts() (uint16, error) {
 // or, write: the chip has no bit-set command, and a blind write would turn
 // off whatever else the register holds.
 func (p *pmu) setBit(reg, bit uint8) error {
-	was, err := p.read(reg)
+	was, err := p.readControl(reg)
 	if err != nil {
 		return err
 	}
@@ -415,6 +412,33 @@ func (p *pmu) transact(what string, op func() error) error {
 		}
 	}
 	return fmt.Errorf("%s after %d tries: %w", what, pmuTries, err)
+}
+
+// readControl reads a register this driver is about to write back, and
+// refuses a value that is not a reading.
+//
+// Every write here is a read-modify-write, and on this bus a read that
+// nobody answered comes back as 0xff with no error — see readReg. Feeding
+// that through a read-modify-write of the rail enables would compute
+// 0xff &^ 0x03 and switch on the LoRa radio, the SD card and every other
+// rail the table above deliberately leaves alone. The battery voltage is
+// range-checked for exactly this reason; the register that controls power
+// deserves it more.
+//
+// All ones is the only value refused. It is what a silent bus gives, and it
+// is not a plausible setting for any of these registers: it would mean
+// every rail on, or a voltage field of all ones in a register whose top
+// three bits are not ours.
+func (p *pmu) readControl(reg uint8) (byte, error) {
+	v, err := p.read(reg)
+	if err != nil {
+		return 0, err
+	}
+	if v == 0xff {
+		return 0, fmt.Errorf("register %s read as all ones, which is a silent bus rather than a setting",
+			hexByte(reg))
+	}
+	return v, nil
 }
 
 // read reads one register.

@@ -42,17 +42,13 @@ func newPanel(log *slog.Logger) *panel {
 	if panelHasLED {
 		panelLED.Configure(machine.PinConfig{Mode: machine.PinOutput})
 		panelLED.Low()
-		led = "GPIO" + itoa(int(panelLED)) + " follows the crystal"
+		led = "GPIO" + strconv.Itoa(int(panelLED)) + " follows the crystal"
 	}
 	panelButton.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
 	log.Info("front panel", "led", led,
-		"button", "GPIO"+itoa(int(panelButton))+" is the SOS button")
+		"button", "GPIO"+strconv.Itoa(int(panelButton))+" is the SOS button")
 	return &panel{log: log}
 }
-
-// itoa is strconv.Itoa under another name, so this file does not pull in
-// fmt for two log lines.
-func itoa(v int) string { return strconv.Itoa(v) }
 
 // poll reads the button and writes the LED. It runs every pass of the
 // main loop, which is often enough for a 30 ms debounce and a 25 ms LED

@@ -258,4 +258,8 @@ func (b i2cBus) dump(addr uint16, n uint8) []string {
 
 // hexByte prints a byte the way a datasheet does, so a log line can be read
 // against one.
-func hexByte(b byte) string { return fmt.Sprintf("%#02x", b) }
+//
+// %#04x, not %#02x: the width counts the 0x, so the shorter verb printed
+// hexByte(0x05) as "0x5" and hexByte(0x00) as "0x0" — ragged against a
+// register table and awkward to grep for.
+func hexByte(b byte) string { return fmt.Sprintf("%#04x", b) }

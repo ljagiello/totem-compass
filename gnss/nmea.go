@@ -364,13 +364,19 @@ func utc(date, clock string) time.Time {
 	if len(date) != 6 || len(clock) < 6 {
 		return time.Time{}
 	}
-	day, errD := strconv.Atoi(date[0:2])
-	month, errM := strconv.Atoi(date[2:4])
-	year, errY := strconv.Atoi(date[4:6])
-	hour, errH := strconv.Atoi(clock[0:2])
-	minute, errMi := strconv.Atoi(clock[2:4])
-	sec, errS := strconv.Atoi(clock[4:6])
-	if errD != nil || errM != nil || errY != nil || errH != nil || errMi != nil || errS != nil {
+	// Two digits each, and digits only. strconv.Atoi takes a sign, so a
+	// field of "-1" parsed as a year gave 1999 — outside the 2000 to 2099
+	// this promises, and past the check below, which only looks at whether
+	// the date normalised. A clock of "12-530" likewise made the minutes
+	// negative and moved the time back an hour. decimal exists to refuse
+	// exactly this and was not being used here.
+	day, okD := twoDigits(date[0:2])
+	month, okM := twoDigits(date[2:4])
+	year, okY := twoDigits(date[4:6])
+	hour, okH := twoDigits(clock[0:2])
+	minute, okMi := twoDigits(clock[2:4])
+	sec, okS := twoDigits(clock[4:6])
+	if !okD || !okM || !okY || !okH || !okMi || !okS {
 		return time.Time{}
 	}
 	if month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || sec > 60 {
@@ -383,6 +389,15 @@ func utc(date, clock string) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+// twoDigits reads exactly two decimal digits, and nothing else: no sign, no
+// space, no letter.
+func twoDigits(s string) (int, bool) {
+	if len(s) != 2 || s[0] < '0' || s[0] > '9' || s[1] < '0' || s[1] > '9' {
+		return 0, false
+	}
+	return int(s[0]-'0')*10 + int(s[1]-'0'), true
 }
 
 // hdopAccuracyM estimates the horizontal accuracy in meters from the

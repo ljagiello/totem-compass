@@ -75,15 +75,16 @@ func openGNSS(log *slog.Logger) *gnssPort {
 
 	log.Info("gnss uart up", "rx", int(pinGNSSRX), "tx", int(pinGNSSTX),
 		"wake", int(pinGNSSWake), "baud", gnssBaud)
-	return &gnssPort{log: log}
+	return &gnssPort{}
 }
 
 // gnssPort reads the receiver's serial port. Named for the port rather than
 // for what is on it because the gnss package, which turns what comes off it
 // into fixes, has the better claim to the plain name.
-type gnssPort struct {
-	log *slog.Logger
-}
+//
+// It keeps no logger: every diagnostic about the receiver belongs to
+// boardSensors, which is what decides whether a fix is worth reporting.
+type gnssPort struct{}
 
 // read empties the receive FIFO into p and says how many bytes it took.
 // Polled rather than interrupt driven, for the same reason the console is:

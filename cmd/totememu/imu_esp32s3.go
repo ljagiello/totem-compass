@@ -35,6 +35,11 @@ const (
 	pinIMUSDI = machine.GPIO37 // out of it
 	pinIMUCS  = machine.GPIO34
 	pinIMUINT = machine.GPIO33 // not used: the accelerometer is polled
+	// The SD card's chip select. Nothing here talks to the card, but it is
+	// on this bus and its select has to be held high so it does not: left
+	// as it comes out of reset it is a floating input, and a card that
+	// reads it low drives MISO through every transfer this driver makes.
+	pinSDCS = machine.GPIO47
 
 	// 1 MHz, mode 0, most significant bit first — the settings SensorLib
 	// talks to this part with.
@@ -64,7 +69,6 @@ const (
 // imu is the accelerometer.
 type imu struct {
 	bus *machine.SPI
-	log *slog.Logger
 
 	// The axes of the last reading that passed the gravity check, so a
 	// caller that wants both the pose and what it came from can have them
@@ -79,7 +83,13 @@ func (m *imu) last() (x, y, z float64) { return m.lastX, m.lastY, m.lastZ }
 // map says it is.
 func openIMU(log *slog.Logger) (*imu, error) {
 	pinIMUCS.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	pinIMUCS.High() // deselected: the SD card may be listening
+	pinIMUCS.High() // deselected while the bus is set up
+	// And the other device on the bus held off, rather than trusted to be
+	// quiet. Saying "the SD card may be listening" and then not telling it
+	// otherwise was the gap: on a warm reboot its rail is still on, because
+	// the power chip leaves BLDO1 as it finds it.
+	pinSDCS.Configure(machine.PinConfig{Mode: machine.PinOutput})
+	pinSDCS.High()
 
 	bus := machine.SPI0
 	if err := bus.Configure(machine.SPIConfig{
@@ -93,7 +103,7 @@ func openIMU(log *slog.Logger) (*imu, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("imu: configure spi: %w", err)
 	}
-	m := &imu{bus: bus, log: log}
+	m := &imu{bus: bus}
 	id, err := m.read(imuRegWhoAmI)
 	if err != nil {
 		return nil, fmt.Errorf("imu: read the identity register: %w", err)

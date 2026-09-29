@@ -480,29 +480,34 @@ func TestNativeUSB(t *testing.T) {
 	// alone must not be enough.
 	notUSB := &enumerator.PortDetails{Name: "/dev/cu.odd", IsUSB: false, VID: "303A"}
 	tests := []struct {
-		name  string
-		port  string
-		ports []*enumerator.PortDetails
-		err   error
-		want  bool
+		name string
+		port string
+		// noLister leaves the port lister nil, which is its own branch.
+		// Selecting that case by comparing the name meant renaming it
+		// turned it into a duplicate of another case with nothing to say
+		// so — the nil branch would go untested and still pass.
+		noLister bool
+		ports    []*enumerator.PortDetails
+		err      error
+		want     bool
 	}{
-		{"native usb", "/dev/cu.usbmodem2101", []*enumerator.PortDetails{cp2102, s3}, nil, true},
-		{"lowercase vid", "/dev/cu.usbmodem1", []*enumerator.PortDetails{lower}, nil, true},
-		{"bridge chip", "/dev/cu.usbserial-0001", []*enumerator.PortDetails{cp2102, s3}, nil, false},
-		{"espressif vid but not usb", "/dev/cu.odd", []*enumerator.PortDetails{notUSB}, nil, false},
-		{"port not listed", "/dev/ttyACM9", []*enumerator.PortDetails{s3}, nil, false},
+		{name: "native usb", port: "/dev/cu.usbmodem2101", ports: []*enumerator.PortDetails{cp2102, s3}, want: true},
+		{name: "lowercase vid", port: "/dev/cu.usbmodem1", ports: []*enumerator.PortDetails{lower}, want: true},
+		{name: "bridge chip", port: "/dev/cu.usbserial-0001", ports: []*enumerator.PortDetails{cp2102, s3}},
+		{name: "espressif vid but not usb", port: "/dev/cu.odd", ports: []*enumerator.PortDetails{notUSB}},
+		{name: "port not listed", port: "/dev/ttyACM9", ports: []*enumerator.PortDetails{s3}},
 		// The macOS twin of a listed port is the same device. Typing the
 		// tty. name is reasonable and it works, so it must not be the one
 		// name that leaves the board held in reset.
-		{"macos tty twin of a listed cu", "/dev/tty.usbmodem2101", []*enumerator.PortDetails{s3}, nil, true},
-		{"macos tty twin of a bridge", "/dev/tty.usbserial-0001", []*enumerator.PortDetails{cp2102}, nil, false},
-		{"list fails", "/dev/cu.usbmodem2101", nil, errors.New("boom"), false},
-		{"no lister", "/dev/cu.usbmodem2101", nil, nil, false},
+		{name: "macos tty twin of a listed cu", port: "/dev/tty.usbmodem2101", ports: []*enumerator.PortDetails{s3}, want: true},
+		{name: "macos tty twin of a bridge", port: "/dev/tty.usbserial-0001", ports: []*enumerator.PortDetails{cp2102}},
+		{name: "list fails", port: "/dev/cu.usbmodem2101", err: errors.New("boom")},
+		{name: "no lister", port: "/dev/cu.usbmodem2101", noLister: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var ports func() ([]*enumerator.PortDetails, error)
-			if tt.name != "no lister" {
+			if !tt.noLister {
 				ports = func() ([]*enumerator.PortDetails, error) { return tt.ports, tt.err }
 			}
 			if got := nativeUSB(tt.port, ports); got != tt.want {

@@ -50,6 +50,13 @@ var (
 	relayUnowned = ""
 )
 
+// magConsole is a sensor source with a compass the console can reach: read
+// it, or run the calibration turn it needs before it can be believed.
+type magConsole interface {
+	magReport()
+	calibrateMag(now func() time.Time)
+}
+
 // The battery a board reports when nothing measures one: a healthy cell,
 // not a flat one. It is both what the node is configured with and what the
 // board's sensor source falls back to, so the two cannot drift apart.
@@ -212,7 +219,7 @@ func main() {
 		timer.Reset(wait)
 		select {
 		case line := <-cmds:
-			radio.send(command(log, node, saved, line))
+			radio.send(command(log, node, saved, sensors, line))
 			// A command is the usual way a setting changes — the colour,
 			// the brightness, the name — so look for something to save
 			// right after one. save writes nothing when nothing changed.
@@ -301,7 +308,13 @@ func (r *radio) report() {
 }
 
 // command runs one console line.
-func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line string) []emulator.Packet {
+// sensors is the board's own source, passed in rather than taken from the
+// node: the node's source is whatever is being read right now, which a
+// running simulation replaces, while the compass belongs to the board
+// whatever the node is reading.
+func command(log *slog.Logger, n *emulator.Node, saved *settings.Store,
+	sensors emulator.SensorSource, line string,
+) []emulator.Packet {
 	if strings.TrimSpace(line) == "" {
 		return nil
 	}
@@ -402,6 +415,19 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		flashSelfTest(log)
 	case emulator.OpI2C:
 		i2cScan(log)
+	case emulator.OpMag:
+		// The sensor source owns the compass, so the command goes to it.
+		// A board without one — or a host build — finds nothing here and
+		// says so rather than pretending.
+		m, ok := sensors.(magConsole)
+		switch {
+		case !ok:
+			log.Warn("no magnetometer on this build")
+		case c.Sub == "calibrate":
+			m.calibrateMag(time.Now)
+		default:
+			m.magReport()
+		}
 	case emulator.OpStore:
 		switch c.Sub {
 		case "forget":

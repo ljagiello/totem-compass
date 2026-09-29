@@ -226,6 +226,12 @@ func TestBadDatesAreRefused(t *testing.T) {
 		{"short date", "2303", "123519", true},
 		{"short time", "230326", "1235", true},
 		{"not numbers", "23xx26", "123519", true},
+		// strconv.Atoi takes a sign, so a signed field used to parse: a
+		// year of "-1" gave 1999, which is outside the century this reads
+		// two digits as and past the normalisation check below it.
+		{"signed year", "1203-1", "123519", true},
+		{"signed minute", "230326", "12-530", true},
+		{"spaced", "23 326", "123519", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			got := utc(tt.date, tt.clock)
