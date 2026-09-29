@@ -434,22 +434,33 @@ func TestCountersPartitionTheStream(t *testing.T) {
 	}
 }
 
-// TestGGAWithNoFixCarriesNothing: quality 0 is the receiver saying it has no
-// solution, so its satellite count and dilution describe nothing. Attaching
-// them to the next valid RMC would advertise a solution quality to every
-// peer that the sentence itself declined to vouch for.
-func TestGGAWithNoFixCarriesNothing(t *testing.T) {
+// TestGGAWithNoFixVetoesTheRMC: quality 0 is the receiver saying it has no
+// solution. An RMC beside it claiming its position is valid is not a second
+// opinion — it is the same receiver disagreeing with itself, and on the
+// bench that "valid" position was 150 km away with no satellites behind it,
+// while a Totem on the same desk had a 2 m fix.
+//
+// This used to be the weaker rule: the GGA's figures were left off and the
+// position still went out. A position with no satellites behind it is not
+// one to put on the air at all.
+func TestGGAWithNoFixVetoesTheRMC(t *testing.T) {
 	var r Reader
 	// Quality 0, but eight satellites and a good dilution in the fields
 	// after it — which is exactly the shape that makes this worth checking.
 	feed(t, &r, "$GPGGA,123519,4807.038,N,01131.000,E,0,08,0.9,545.4,M,46.9,M,,*46\r\n")
+	if fix, ok := feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n"); ok {
+		t.Errorf("an RMC was believed over its own receiver's GGA saying it has no fix: %+v", fix)
+	}
+
+	// And once the GGA reports a solution again, the RMC is believed and
+	// carries its figures.
+	feed(t, &r, "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n")
 	fix, ok := feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n")
 	if !ok {
-		t.Fatal("the RMC produced no fix")
+		t.Fatal("a good GGA and RMC together produced no fix")
 	}
-	if fix.SatCount != 0 || fix.AccuracyM != -1 || fix.AltitudeM != -500 {
-		t.Errorf("a GGA reporting no fix was still attached: sats %d, accuracy %d, altitude %d",
-			fix.SatCount, fix.AccuracyM, fix.AltitudeM)
+	if fix.SatCount != 8 {
+		t.Errorf("satellites %d, want 8 from the good GGA", fix.SatCount)
 	}
 	// And the sentence itself was well formed, so it counts as read.
 	if r.Bad() != 0 {

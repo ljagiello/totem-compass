@@ -3,6 +3,7 @@ package emulator
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 // TestSweepRefusesABoardThatDidNotTurn: the center of a reading that never
@@ -140,4 +141,38 @@ func angleDiff(a, b float64) float64 {
 		d = 360 - d
 	}
 	return d
+}
+
+// TestPlausibleStep: a receiver indoors reports a solution it has flagged
+// valid and is a hundred kilometers wrong. Measured on the bench: the board
+// put itself 120 km from a Totem beside it, with no satellites and a speed
+// pinned at the top of its byte. Nothing downstream can tell that from a
+// real place, so it is refused here.
+func TestPlausibleStep(t *testing.T) {
+	const (
+		lat, lon = 37.5868, -122.0073
+		// 120 km away, which is what the board actually reported.
+		farLat, farLon = 36.6712, -121.1975
+	)
+	for _, tt := range []struct {
+		name       string
+		lat2, lon2 float32
+		elapsed    time.Duration
+		want       bool
+	}{
+		{"the bench jump", farLat, farLon, time.Second, false},
+		{"standing still", lat, lon, time.Second, true},
+		{"a walk", lat + 0.00002, lon, time.Second, true},
+		{"a car", lat + 0.0003, lon, time.Second, true},      // ~120 km/h
+		{"an airliner", lat + 0.002, lon, time.Second, true}, // ~800 km/h
+		// A gap long enough that anything could have happened is not judged.
+		{"after a long gap", farLat, farLon, 2 * time.Hour, true},
+		{"no elapsed time", farLat, farLon, 0, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := PlausibleStep(lat, lon, tt.lat2, tt.lon2, tt.elapsed); got != tt.want {
+				t.Errorf("PlausibleStep(... %v) = %v, want %v", tt.elapsed, got, tt.want)
+			}
+		})
+	}
 }

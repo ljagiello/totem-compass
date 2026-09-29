@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -48,11 +49,44 @@ var (
 	// not own, and that should be a decision made while flashing, not a
 	// keystroke away on a board sitting in someone else's crowd.
 	relayUnowned = ""
+	// bondingRSSI overrides the weakest bond request the board will accept,
+	// in dBm, as a negative number: -X main.bondingRSSI=-45.
+	//
+	// The firmware's own limit is -25, and it is there so a Totem cannot
+	// bond with a stranger across a room. This board has a stronger rule
+	// already: it only bonds with the MACs in owned, so no signal level lets
+	// a stranger in. What the limit costs here is a bench pairing, because
+	// the hand that has to hold the Touch Crystal to start pairing absorbs
+	// the Totem's own signal — measured on this board, locate frames from a
+	// Totem sitting still arrive at -21 to -25 dBm and its bond requests,
+	// sent while it is being held, at -33 to -36.
+	//
+	// Empty keeps the firmware's number, so a board flashed without thinking
+	// about it behaves like a Totem.
+	bondingRSSI = ""
 )
 
 // simWatcher is a sensor source that wants to know when the node has been
 // switched to a simulation, because it is then not being read.
 type simWatcher interface{ watchSim(func() bool) }
+
+// bondingLimit reads the bondingRSSI build flag. Anything unparseable, or
+// out of the range a signal strength can be, is reported and ignored rather
+// than silently turning the limit off.
+func bondingLimit(log *slog.Logger) int8 {
+	if bondingRSSI == "" {
+		return 0 // the node fills in the firmware's own -25
+	}
+	v, err := strconv.Atoi(bondingRSSI)
+	if err != nil || v >= 0 || v < -100 {
+		log.Warn("main.bondingRSSI is not a signal strength in dBm; keeping the firmware's limit",
+			"value", bondingRSSI, "want", "a negative number no lower than -100")
+		return 0
+	}
+	log.Warn("the bonding signal limit has been loosened from the firmware's -25",
+		"dbm", v, "note", "only the MACs in owned can bond at any strength")
+	return int8(v)
+}
 
 // magConsole is a sensor source with a compass the console can reach: read
 // it, or run the calibration turn it needs before it can be believed.
@@ -163,7 +197,8 @@ func main() {
 	nodeBoot := time.Now()
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true,
-		BattVolts: restingVolts, BattPct: restingPct,
+		BondingRSSI: bondingLimit(log),
+		BattVolts:   restingVolts, BattPct: restingPct,
 		Sensors: sensors,
 		ColorID: boot0.ColorID, RelayUnowned: relayUnowned == "1",
 		// The update client runs the firmware's exchange against a
@@ -182,8 +217,8 @@ func main() {
 	saved.Restore(node, nodeBoot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
-		"relay_unowned", relayUnowned == "1",
-		"channel", mesh.Channel, "phy", "LR 250K", "boots", boot0.BootCount)
+		"relay_unowned", relayUnowned == "1", "bonding_rssi", node.Config().BondingRSSI,
+		"channel", mesh.Channel, "phy", "LR 250K", "tx_dbm", TxPowerDBm(), "boots", boot0.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	front := newPanel(log)

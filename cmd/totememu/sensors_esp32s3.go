@@ -151,8 +151,9 @@ type boardSensors struct {
 
 	// saidNoIMU is whether the IMU's failure has already been reported,
 	// cleared by the next reading that works.
-	saidNoIMU bool
-	saidNoMag bool
+	saidNoIMU  bool
+	saidNoMag  bool
+	saidJumped bool
 
 	// iron is the hard-iron offset a calibration turn measured, and
 	// calibrated says whether one has been done. Until it has, no heading
@@ -474,6 +475,17 @@ func (b *boardSensors) consume(p []byte, now time.Time) {
 		b.counted = &anchor
 	}
 	fix.OdometerM = b.odometerM
+	// A fix that would need impossible travel is not a fix. The receiver
+	// flags these valid — on this bench it put the board 120 km from a
+	// Totem beside it, with no satellites and a pinned speed — and nothing
+	// downstream can tell one from a real place.
+	if b.fix != nil && !emulator.PlausibleStep(b.fix.Lat, b.fix.Lon, fix.Lat, fix.Lon, now.Sub(b.fixAt)) {
+		warnOnce(b.log, &b.saidJumped, "the receiver reported a position it could not have travelled to",
+			fmt.Errorf("%.5f,%.5f to %.5f,%.5f in %s",
+				b.fix.Lat, b.fix.Lon, fix.Lat, fix.Lon, now.Sub(b.fixAt)))
+		return
+	}
+	b.saidJumped = false
 	first := b.fix == nil
 	b.fix, b.fixAt = fix, now
 	if first {

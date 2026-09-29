@@ -50,6 +50,16 @@ On 2026-09-20, with the settings store and the `rx` command:
 
 ## Build and flash
 
+Two binaries: the firmware, built with TinyGo and flashed to the board, and `totemctl`, built
+with the ordinary Go toolchain and run on your machine. Everything below that begins `totemctl`
+needs the second one, so it is worth having first:
+
+```bash
+go build -o totemctl ./cmd/totemctl
+```
+
+Then the firmware:
+
 ```bash
 tinygo flash -target esp32-generic -port /dev/cu.usbserial-0001 \
   -ldflags "-X main.owned=8c94df7b0478" ./cmd/totememu

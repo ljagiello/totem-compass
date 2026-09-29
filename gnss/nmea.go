@@ -72,6 +72,7 @@ type Reader struct {
 	accuracy  int8
 	altitude  int16
 	ggaAt     uint64
+	ggaNoFix  bool
 	sentences uint64
 	others    uint64
 	bad       uint64
@@ -224,10 +225,16 @@ func (r *Reader) gga(f []string) bool {
 	// this very sentence declined to vouch for. The staleness window below
 	// catches a GGA that is old; this catches one that is negative.
 	if quality, ok := decimal(f[6]); !ok || quality < 1 {
-		r.ggaAt = 0
+		// Remembered, not just discarded. A receiver indoors contradicts
+		// itself: this GGA says it has no solution while the RMC beside it
+		// says its position is valid, and on this bench that "valid"
+		// position was 150 km away with no satellites behind it. The
+		// sentence that admits it has nothing is the one to believe, so it
+		// vetoes the one that does not for as long as it is current.
+		r.ggaAt, r.ggaNoFix = r.sentences+1, true
 		return true
 	}
-	r.ggaAt = r.sentences + 1
+	r.ggaAt, r.ggaNoFix = r.sentences+1, false
 	r.sats = int8(clampInt(atoiDefault(f[7], 0), 0, 127))
 	r.accuracy = hdopAccuracyM(atofDefault(f[8], -1))
 	r.altitude = -500
@@ -250,6 +257,13 @@ func (r *Reader) rmc(f []string) (fix Fix, gotFix, good bool) {
 		// V, or anything else, means the receiver has no solution. Its
 		// clock may still be good, but a position it does not vouch for
 		// is not one to report. The sentence itself was fine.
+		return Fix{}, false, true
+	}
+	if r.ggaSaysNoFix() {
+		// The receiver's own GGA says it has no solution. Its RMC saying
+		// otherwise is not a second opinion, it is the same receiver
+		// disagreeing with itself, and a position with no satellites
+		// behind it is not one to put on the air.
 		return Fix{}, false, true
 	}
 	lat, latOK := latitude(f[3], f[4])
@@ -408,6 +422,11 @@ func utc(date, clock string) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+// ggaSaysNoFix is whether a current GGA reported no solution.
+func (r *Reader) ggaSaysNoFix() bool {
+	return r.ggaNoFix && r.ggaAt != 0 && r.sentences+1-r.ggaAt <= ggaStaleAfter
 }
 
 // twoDigits reads exactly two decimal digits, and nothing else: no sign, no

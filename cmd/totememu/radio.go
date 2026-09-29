@@ -13,6 +13,7 @@ typedef int esp_err_t;
 esp_err_t esp_wifi_set_protocol(int ifx, uint8_t protocol_bitmap);
 esp_err_t esp_wifi_set_channel(uint8_t primary, int second);
 esp_err_t esp_wifi_set_max_tx_power(int8_t power);
+esp_err_t esp_wifi_get_max_tx_power(int8_t *power);
 esp_err_t esp_wifi_config_espnow_rate(int ifx, int rate);
 esp_err_t esp_wifi_get_mac(int ifx, uint8_t *mac);
 */
@@ -50,6 +51,13 @@ func check(call string, code C.esp_err_t) error {
 	return nil
 }
 
+// txPower is what the driver actually granted, in 0.25 dBm steps. Read back
+// after it is set and reported at startup.
+var txPower C.int8_t
+
+// TxPowerDBm is the transmit power the radio settled on.
+func TxPowerDBm() float32 { return float32(txPower) / 4 }
+
 // startRadio brings the radio up the way a Totem does and returns the local
 // ESP-NOW (station) MAC address.
 func startRadio() (mac mesh.MAC, err error) {
@@ -66,6 +74,13 @@ func startRadio() (mac mesh.MAC, err error) {
 		return mac, err
 	}
 	if err := check("esp_wifi_set_max_tx_power", C.esp_wifi_set_max_tx_power(maxTxPower)); err != nil {
+		return mac, err
+	}
+	// Read it back, because asking is not getting: the driver clamps to
+	// what the chip is calibrated for, and a board transmitting at half the
+	// power it thinks would show up as a peer that has to be touching
+	// before it can hear us — which is exactly the symptom this board had.
+	if err := check("esp_wifi_get_max_tx_power", C.esp_wifi_get_max_tx_power(&txPower)); err != nil {
 		return mac, err
 	}
 	if err := espradio.ESPNowInit(); err != nil {

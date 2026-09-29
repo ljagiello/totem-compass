@@ -1,6 +1,9 @@
 package emulator
 
-import "math"
+import (
+	"math"
+	"time"
+)
 
 // HardIron is the constant offset a magnetometer reads on top of the Earth's
 // field, from the iron and magnets fixed around it.
@@ -93,6 +96,35 @@ func (s *Sweep) Offset() (HardIron, bool) {
 // isNumber says whether a value is one: not a NaN, and not an infinity that
 // arithmetic would carry into everything downstream.
 func isNumber(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
+
+// MaxTravelKPH is the fastest a fix is allowed to imply it moved. Above an
+// airliner's cruise, and far below anything a broken receiver produces.
+const MaxTravelKPH = 1000
+
+// PlausibleStep says whether moving from one fix to the next in the given
+// time is travel rather than a receiver inventing a position.
+//
+// A receiver indoors can report a solution it has flagged valid and be a
+// hundred kilometers wrong: measured on this bench, the board reported a
+// position 120 km from a Totem sitting beside it, with no satellites, no
+// accuracy figure and a speed pinned at the top of its byte, while the
+// Totem had a 2 m fix. Nothing downstream can tell that from a real place —
+// it goes into the status frame, out to every peer, and into their arrows.
+//
+// The rule is only about what is physically possible, so it refuses almost
+// nothing real: a Totem in a car, a train or a plane all stay well inside
+// it. A gap with no previous fix, or one long enough that anything could
+// have happened in it, is not judged at all.
+func PlausibleStep(prevLat, prevLon, lat, lon float32, elapsed time.Duration) bool {
+	if elapsed <= 0 || elapsed > time.Minute {
+		return true
+	}
+	km := DistanceM(prevLat, prevLon, lat, lon) / 1000
+	if km < 0 {
+		return true // no distance to be had, which DistanceM says with -1
+	}
+	return km/elapsed.Hours() <= MaxTravelKPH
+}
 
 // Heading is the compass bearing in degrees, from a magnetometer reading and
 // the tilt the board is held at.

@@ -559,13 +559,32 @@ func (e *emulator) await(ctx context.Context, d time.Duration, match func(consol
 
 // close puts the console back the way a person reading it expects, and
 // closes the port.
+// closeGrace is how long close waits for the reader to notice the port has
+// gone before giving up on it.
+const closeGrace = time.Second
+
 func (e *emulator) close() {
 	if e.debug {
 		_ = e.send("log info")
 	}
 	_ = e.send("format text")
 	_ = e.port.Close()
-	<-e.done
+	// Bounded, because closing a port does not reliably end a read that is
+	// already blocked in it: on macOS the reader stayed in ReadSlice and
+	// this waited for it forever, so `mesh watch --for 90s` printed its
+	// last line on time and then never exited. The port stayed held, and
+	// the next command failed with "Serial port busy" — which looks like
+	// the board being broken rather than the previous run still owning it.
+	//
+	// Giving up leaks the goroutine, and that is the right trade: the
+	// process is on its way out and the operating system takes the handle
+	// back with it, which is what actually frees the port.
+	select {
+	case <-e.done:
+	case <-time.After(closeGrace):
+		e.g.log.Debug("the console reader did not stop; leaving it to the exit",
+			"after", closeGrace)
+	}
 }
 
 // emulatorPort is --port, or else the only USB serial port with an ESP32
