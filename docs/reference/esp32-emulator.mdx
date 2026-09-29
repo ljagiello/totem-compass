@@ -11,7 +11,8 @@ radio window like any two bonded Totems. It is written in Go and built with Tiny
 A Totem's GNSS receiver, magnetometer, motion sensor and power chip are modelled too, so the
 emulator reports a position that moves, a compass, a battery that drains and a clock
 (see [simulated hardware](#simulated-hardware)). On a board that has those parts, its own
-drivers replace the model.
+drivers replace the model — which is what the [T-Beam S3 Supreme](#the-t-beam-s3-supreme)
+does for the position, the clock, the battery and the orientation.
 
 **Hardware-tested** on 2026-09-19 with an ESP32-D0WD-V3 and a Totem on firmware 5.0.3:
 
@@ -39,10 +40,13 @@ On 2026-09-20, with the settings store and the `rx` command:
 | `mesh` | codec for the peer `(0, cmd)`, locate `(2,0)` and Smart Group `(7,x)` frames, field by field as in [message format](/protocols/message-format#peer-frame-0-cmd). Tested against frames packed by CPython's `struct` with the firmware's own formats, and fuzzed. |
 | `emulator` | the Totem itself: pairing handshake, radio windows, clock sync, locate reply and relay, Smart Group member. Pure Go that takes frames and the time, and returns frames to send, so it is tested on the host with scenario tests and a fuzz target. |
 | `emulator` (sensors) | `SensorSource`, and a `Sim` that walks or drives a track, keeps an odometer, drains a battery and points a compass. |
-| `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && esp32` build tags). |
+| `emulator` (orientation) | `OrientationTracker`, the firmware's two-state upright-or-flat machine with its thresholds, dwell times and hold times. Host tested. |
+| `gnss` | NMEA in, fixes out, for a board with a receiver. Plain Go over bytes nobody on this side chose, so it is tested and fuzzed on the host. |
+| `cmd/totememu` | the firmware: radio setup, the ESP-NOW receive ring, the serial console. Builds only with TinyGo (`tinygo && (esp32 \|\| esp32s3)` build tags). |
 | `cmd/totememu/ring` | the receive ring's C (`ring.h`) compiled for the host, so it can be tested and fuzzed. |
 | `store` | the settings a reboot keeps — the name, the crystal colour and the bonds, as a Totem keeps `config.json` — as an append-only journal in one flash sector. Pure Go, so it is tested and fuzzed on the host. |
-| `cmd/totememu` (flash) | that journal's backend: the ESP32's own SPI flash, driven from IRAM with the cache off. |
+| `cmd/totememu` (flash) | that journal's backend: the board's own SPI flash, driven from IRAM with the cache off. One driver per chip — `flash_esp32.*` and `flash_esp32s3.*` — because the two gate their caches differently. |
+| `cmd/totememu` (board) | the parts of a specific board: `board_esp32s3.go` for its buses and pin map, and `pmu_`, `gnss_`, `imu_` and `chip_` files for what is on them. |
 
 ## Build and flash
 
@@ -60,6 +64,99 @@ animation starts (about 1.2 s). The emulator notices the Totem's bond request an
 back. Bonding needs **RSSI ≥ −25 dBm** on both sides, so the two must nearly touch. The board
 keeps the bond in flash, so a reboot comes up still bonded; it also takes a bond back when a
 Totem that kept it in `config.json` sends a status frame.
+
+## The T-Beam S3 Supreme
+
+The emulator also runs on a LILYGO T-Beam S3 Supreme, an ESP32-S3 board that has the parts a
+Totem has. On it the position, the speed, the course, the clock, the battery and the
+orientation are read from hardware instead of modelled; the heading is not, because no
+magnetometer is fitted (see below).
+
+```bash
+tinygo flash -target esp32s3-generic -port /dev/cu.usbmodem2101 \
+  -ldflags "-X main.owned=8c94df7b0478" ./cmd/totememu
+```
+
+The USB-C socket goes straight to the chip, so there is no bridge chip and **no button to
+hold**: a 1200-baud open on the running firmware's port drops the board into the ROM's
+USB-Serial/JTAG, which is what `tinygo flash` then talks to.
+
+That same wiring is why `totemctl` opens the port with DTR and RTS **deasserted** on a port
+whose USB vendor id is Espressif's `303A`. On a board with a bridge chip, DTR and RTS reach
+the chip through the auto-reset circuit, which pulls EN low only when RTS is asserted and DTR
+is not, so asserting both — the library default — leaves the board running. Inside the S3
+there is no such circuit and RTS drives EN directly, so the port merely being open held the
+chip in reset: three seconds of reading returned nothing, and with both lines deasserted the
+same read returned the boot log and every line after it.
+
+### What is read, and what is not
+
+| Reading | Where it comes from |
+| --- | --- |
+| Position, speed, course, clock | GNSS receiver on UART1, NMEA parsed by the `gnss` package |
+| Battery, and whether a cell is fitted at all | AXP2101 power chip on the second I2C bus |
+| Orientation | QMI8658 IMU on the SPI bus, through `OrientationTracker` |
+| Heading | the console: **no magnetometer answers on this board** |
+
+The vendor's pin map lists a QMC6310U, QMC6310N or QMC6309 magnetometer, at 0x1c, 0x3c and
+0x7c. On this board 0x1c and 0x7c do not acknowledge, and 0x3c answers but reads back 0xff,
+which is the SH1106 display rather than a compass. The `i2c` console command reports this by
+reading each part's identity register, so it can be checked on any board rather than assumed.
+
+The power chip is the gate to everything else: it feeds the sensors (ALDO1), the sensor bus
+itself (ALDO2) and the GNSS receiver (ALDO4), and LILYGO ship ALDO4 switched off. The sensors
+also have to be power **cycled** rather than switched on, which is LILYGO's own conclusion for
+this board — "in order to avoid bus occupation, during initialization, the SD card and QMC
+sensor are powered off and restarted" — with a quarter second between.
+
+An operator can still take any reading back by hand. `pos`, `heading`, `batt`, `flat` and
+`clock` all work, and the ones that hardware also fills say in the log that they have stopped
+being read from it, because [`Controls`](#console) means a command must not quietly do nothing.
+
+### Three things in TinyGo that do not reach this board
+
+Worth writing down, because each one looked like broken hardware:
+
+- **The console reads nothing.** `machine.Serial` on the S3 is the USB Serial/JTAG controller,
+  and its driver moves bytes out of the receive FIFO in exactly one place: `Buffered`. The
+  interrupt handler only masks the interrupt, and `ReadByte` answers `(0, nil)` on an empty
+  buffer rather than an error — so the ESP32's "read it and check `err`" reported success for a
+  byte nobody typed, and fed the line reader NULs forever while the host's input sat unread.
+- **A UART at 9600 baud runs at the wrong speed.** `UART.Configure` sets `CLKDIV` to
+  `40000000/baud` and nothing else. The integer part of that register is twelve bits, and 4166
+  does not fit in 4095, so the value lands wrapped. On the board that arrived as 154 bytes of
+  `0x00` in a second — a line that reads as a break rather than as data. The driver now
+  pre-divides the crystal the way ESP-IDF does.
+- **I2C stops working after a transaction or two, silently.** Ten reads of the AXP2101's
+  identity register returned 0x4a once and then 0xff nine times; ten reads of a status register
+  holding 0x20 alternated 0x20, 0xff, 0x20, 0xff. Nothing in the driver resets the controller
+  after a failure, so no amount of retrying recovers it — and a failed *read* is not even
+  reported, because a NACK on a transaction ending in a read is dropped. Every transaction now
+  runs `Configure` first, and with that the same twenty reads all came back correct.
+
+The last of those is also why the `i2c` command identifies parts by a known register value
+rather than sweeping addresses: a sweep asked whether an address acknowledged, a question this
+driver cannot answer, and reported 112 devices on each bus — every address, including two
+magnetometer variants at once and an IMU that is wired to SPI.
+
+**Hardware-tested** on 2026-09-28 with a T-Beam S3 Supreme (ESP32-S3FN8, 8 MB flash, base MAC
+`48:ca:43:5a:cd:14`):
+
+- boots, and the console works both ways over USB-Serial/JTAG;
+- ESP-NOW starts, and the radio receives: the `selftest` command counted 209 frames on the mesh
+  channel in three seconds;
+- the flash driver's self-test passes on its scratch sector — erase 13 ms, a 64-byte write
+  141 µs, the ROM descriptor reading device 0xc84017 — and the settings survive a reboot, with
+  the boot count and journal sequence both climbing;
+- the AXP2101 identifies itself, reports no cell fitted, and brings up all three rails;
+- the PCF8563 clock is ticking;
+- the GNSS receiver sends NMEA that parses with nothing rejected, and reports no fix indoors:
+  `$GNRMC,001655.00,V,,,,,,,290926,,,N,V*18`;
+- the IMU identifies itself and reads gravity: (-0.827, 0.046, 0.541) g, a magnitude of 0.989.
+
+Not yet tested on this board: a bond with a real Totem. An unbonded Totem transmits nothing —
+it unicasts to its bonded peers and broadcasts only while pairing — so there is nothing to hear
+until a Touch Crystal is held next to the board, which is a physical step.
 
 ## Watching the mesh
 
@@ -118,6 +215,7 @@ The UART console (115200 baud) logs with `log/slog` and takes commands. `tinygo 
 | `rx <src mac> self\|all <rssi> <hex frame>` | feed the node a frame as though the radio had heard it, for the paths that need a second Totem |
 | `store`, `store forget` | the saved settings and bonds, or forget them: the flash and the live bonds both, as a factory reset does |
 | `flash` | check the flash driver on its scratch sector: erase, write, read back |
+| `i2c` | read each part the board should carry and say whether it answers with the identity it should |
 | `selftest` | count every 802.11 frame on channel 6 for 3 s, to check the receiver |
 | `help` | list the commands |
 
