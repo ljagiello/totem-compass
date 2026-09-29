@@ -11,16 +11,16 @@ package main
 // field moves from the second group to the first and nothing else changes.
 //
 // Real: the battery, from the AXP2101. The position, the speed, the course
-// and the clock, from the GNSS receiver on UART1.
+// and the clock, from the GNSS receiver on UART1. The orientation, from the
+// IMU.
 //
 // Console: the heading, because this board has no magnetometer fitted —
 // none of the three addresses the vendor lists for one answers, and the one
-// that does answer at 0x3c reads back 0xff, which is the display. And the
-// orientation, because the IMU is on the SPI bus and is not read yet.
+// that does answer at 0x3c reads back 0xff, which is the display.
 //
 // An operator can take any of it back by hand. Controls says a command must
 // not quietly do nothing, so pos, heading, batt, flat and clock all still
-// work, and the two that hardware also fills say in the log that they have
+// work, and the three that hardware also fills say in the log that they have
 // stopped being read from it.
 
 import (
@@ -43,6 +43,7 @@ type boardSensors struct {
 	log  *slog.Logger
 	pmu  *pmu
 	port *gnssPort
+	imu  *imu
 
 	// nmea turns the receiver's bytes into fixes, and block is the buffer
 	// they are read into. Kept here rather than made per call so a
@@ -69,12 +70,18 @@ type boardSensors struct {
 	// still be reported.
 	ctl emulator.Controls
 
+	// orientation applies the firmware's own two-state machine to what the
+	// IMU reads, so a board reports upright and flat on the same
+	// thresholds and hold times a Totem does.
+	orientation emulator.OrientationTracker
+
 	// What an operator has taken over by hand. The hardware stops being
 	// read for that field from then on: a command that quietly did nothing
 	// would be worse than one that overrides a sensor, and Controls says
 	// as much.
-	battByHand bool
-	posByHand  bool
+	battByHand   bool
+	posByHand    bool
+	orientByHand bool
 }
 
 // newSensorSource wires up the board's sensors. It returns nil when there
@@ -103,6 +110,13 @@ func newSensorSource(log *slog.Logger, fallback emulator.Sensors) emulator.Senso
 		return &boardSensors{log: log, pmu: p, held: held}
 	}
 	b := &boardSensors{log: log, pmu: p, port: openGNSS(log), held: held, ctl: ctl}
+	if m, err := openIMU(log); err != nil {
+		// Not fatal. A board with no IMU reports the orientation the
+		// console sets, which is what every board did until now.
+		log.Warn("no imu: the orientation stays as the console sets it", "err", err)
+	} else {
+		b.imu = m
+	}
 	b.report()
 	return b
 }
@@ -112,6 +126,19 @@ func newSensorSource(log *slog.Logger, fallback emulator.Sensors) emulator.Senso
 // fix that is never coming, and a receiver indoors says plenty without
 // having one: the sentences below are what this board sends from a desk.
 func (b *boardSensors) report() {
+	if b.imu != nil {
+		// Gravity, as the part sees it. One axis carrying about a whole g
+		// and the others near nothing is a board sitting still on a desk;
+		// three small numbers would be a part that is answering but not
+		// measuring.
+		if x, y, z, err := b.imu.accel(); err != nil {
+			b.log.Warn("imu could not be read", "err", err)
+		} else {
+			pitch, roll, _ := b.imu.pitchRoll()
+			b.log.Info("imu reading", "x_g", x, "y_g", y, "z_g", z,
+				"pitch_deg", pitch, "roll_deg", roll)
+		}
+	}
 	sample := b.port.sample()
 	if len(sample) == 0 {
 		b.log.Warn("the gnss receiver said nothing in a second; " +
@@ -134,6 +161,13 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 	}
 	if b.port != nil {
 		b.drain()
+	}
+	if b.imu != nil && !b.orientByHand {
+		if pitch, roll, err := b.imu.pitchRoll(); err != nil {
+			b.log.Warn("imu could not be read", "err", err)
+		} else {
+			s.Orientation = b.orientation.Update(pitch, roll, now)
+		}
 	}
 	if b.fix != nil && !b.posByHand {
 		// A copy: the node must not hold a pointer the next fix writes
@@ -212,8 +246,13 @@ func (b *boardSensors) SetAzimuth(deg int16) {
 }
 
 func (b *boardSensors) SetFlat(flat bool) {
-	if b.ctl != nil {
-		b.ctl.SetFlat(flat)
+	if b.ctl == nil {
+		return
+	}
+	b.ctl.SetFlat(flat)
+	if !b.orientByHand {
+		b.orientByHand = true
+		b.log.Warn("orientation set by hand: the imu is no longer read", "flat", flat)
 	}
 }
 
