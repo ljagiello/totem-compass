@@ -224,12 +224,17 @@ func i2cScan(log *slog.Logger) {
 	buses := boardBuses()
 	for i := range buses {
 		b := buses[i]
+		// Every operation below configures the bus again, so this one is
+		// not for them: it is the only check that the bus can be brought up
+		// at all, which is worth reporting separately from a part that does
+		// not answer on it.
 		if err := b.configure(); err != nil {
 			log.Warn("i2c bus could not be configured", "bus", b.name,
 				"sda", int(b.sda), "scl", int(b.scl), "err", err)
 			continue
 		}
-		for _, p := range b.parts {
+		for j := range b.parts {
+			p := &b.parts[j]
 			if !b.present(p.addr, p.reg) {
 				log.Info("i2c part absent", "bus", b.name, "addr", hexByte(byte(p.addr)),
 					"part", p.name, "detail", "nothing acknowledged the address")
@@ -260,13 +265,18 @@ func i2cScan(log *slog.Logger) {
 // reads 0x80 as readily as a magnetometer's identity does, and only the
 // shape of the map around it says which is which.
 func (b i2cBus) dump(addr uint16, n uint8) []string {
+	// One burst, not one transaction per register: these parts increment
+	// their own address across a read, and a register at a time meant a full
+	// peripheral rebuild twelve times over for one log line.
+	raw := make([]byte, n)
+	if err := b.configure(); err != nil {
+		return []string{"bus: " + err.Error()}
+	}
+	if err := b.bus.Tx(addr, []byte{0}, raw); err != nil {
+		return []string{"err: " + err.Error()}
+	}
 	out := make([]string, 0, n)
-	for reg := uint8(0); reg < n; reg++ {
-		v, err := b.readReg(addr, reg)
-		if err != nil {
-			out = append(out, "err")
-			continue
-		}
+	for _, v := range raw {
 		out = append(out, hexByte(v))
 	}
 	return out

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +64,23 @@ const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos
 	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
 	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | i2c | mag [calibrate] | log debug|info|warn|error | format text|json | selftest"
 
+// parseSub reads a command's optional single word, which must be one of
+// allowed. Shared because three commands now have this shape and the copies
+// had begun to differ: one of them assigned the word even while rejecting it.
+func parseSub(op Op, args, allowed []string) (string, error) {
+	switch len(args) {
+	case 0:
+		return "", nil
+	case 1:
+		if slices.Contains(allowed, args[0]) {
+			return args[0], nil
+		}
+		return "", fmt.Errorf("%s takes nothing or %s, got %q",
+			op, strings.Join(allowed, " or "), args[0])
+	}
+	return "", fmt.Errorf("%s takes at most one argument, got %d", op, len(args))
+}
+
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
 
@@ -112,26 +130,12 @@ func ParseCommand(line string) (Command, error) {
 	case OpMag:
 		// mag prints the field; mag calibrate watches a turn and works out
 		// the hard iron from it.
-		if len(args) == 1 {
-			if args[0] != "calibrate" {
-				err = fmt.Errorf("mag takes nothing or calibrate, got %q", args[0])
-			}
-			c.Sub = args[0]
-		} else {
-			err = want(0)
-		}
+		c.Sub, err = parseSub(OpMag, args, []string{"calibrate"})
 	case OpStore:
 		// store prints the saved settings; store forget wipes them, as a
 		// factory reset does; store open reads the sector on a board that
 		// did not read it while starting.
-		if len(args) == 1 {
-			if args[0] != "forget" && args[0] != "open" {
-				err = fmt.Errorf("store takes nothing, forget or open, got %q", args[0])
-			}
-			c.Sub = args[0]
-		} else {
-			err = want(0)
-		}
+		c.Sub, err = parseSub(OpStore, args, []string{"forget", "open"})
 	case OpUnbond:
 		if err = want(1); err == nil {
 			c.MAC, err = mesh.ParseMAC(args[0])

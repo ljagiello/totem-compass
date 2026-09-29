@@ -55,11 +55,12 @@ const (
 	magFieldMaxG = 1.2
 )
 
-var errMagNotReady = errors.New("mag: no measurement ready yet")
+var (
+	errMagNotReady = errors.New("mag: no measurement ready yet")
+	errMagSilent   = errors.New("mag: every data byte is the same, so the part is not measuring")
+	errMagNotField = errors.New("mag: the corrected field is not the Earth's")
+)
 
-// How long a calibration turn is given, and how often it samples. Twenty
-// seconds is enough to turn a board through every face without hurrying,
-// and the part converts at 50 Hz so there is no point asking faster.
 // magCalFor is how long a calibration turn is given: enough to turn a board
 // through every face without hurrying.
 const magCalFor = 20 * time.Second
@@ -152,6 +153,24 @@ func (m *mag) field() (x, y, z float64, err error) {
 	}
 	g := func(lo, hi byte) float64 {
 		return float64(int16(uint16(hi)<<8|uint16(lo))) * magGaussPerCount
+	}
+	// What a bus that has stopped answering looks like, refused before it
+	// becomes a reading. 0xff passes the data-ready bit above, and six 0xff
+	// data bytes make -1 on each axis — a vector of 0.0001 gauss, which is
+	// not a measurement and does not look like an error either. Subtract the
+	// hard iron from that and the bearing is fixed, confident and wrong, and
+	// it goes to every peer.
+	//
+	// The pattern, not a magnitude band: the raw field on this board is 2.26
+	// gauss because of the iron around it, and a band tight enough to mean
+	// anything would refuse the very readings a calibration turn needs. The
+	// band belongs after the offset comes off, which is where azimuth
+	// applies it.
+	if raw == [6]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff} {
+		return 0, 0, 0, errMagSilent
+	}
+	if raw == [6]byte{} {
+		return 0, 0, 0, errMagSilent
 	}
 	return g(raw[0], raw[1]), g(raw[2], raw[3]), g(raw[4], raw[5]), nil
 }

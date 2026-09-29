@@ -36,6 +36,17 @@ func settingsSector() store.Sector {
 	return flashSector{addr: storeSector}
 }
 
+// describeChip names the words of the ROM's flash descriptor. Anything but
+// the six it should have is handed back as it came, because a descriptor of
+// the wrong shape is worth seeing rather than mislabelling.
+func describeChip(d []uint32) string {
+	if len(d) != 6 {
+		return fmt.Sprintf("%v", d)
+	}
+	return fmt.Sprintf("device %#x, chip %d KB, block %d B, sector %d B, page %d B, status mask %#x",
+		d[0], d[1]/1024, d[2], d[3], d[4], d[5])
+}
+
 // flashSelfTest checks the flash driver on the scratch sector: erase, read
 // back, write a pattern, read it again. It never touches the settings
 // sector, so a board that fails it still boots with its bonds.
@@ -52,7 +63,11 @@ func flashSelfTest(log *slog.Logger) {
 	if !step("status", err) {
 		return
 	}
-	log.Info("flash chip", "status", fmt.Sprintf("%#06x", before), "rom_descriptor", flashChipDescriptor())
+	// Named and in hex, because the raw words are unreadable twice over: a
+	// device id of 13123607 says nothing where 0xc84017 is the part number
+	// on the chip, and the console's JSON carries a word array out as
+	// floating point, so it reached the operator as 1.3123607e+07.
+	log.Info("flash chip", "status", fmt.Sprintf("%#06x", before), "rom", describeChip(flashChipDescriptor()))
 	start := time.Now()
 	if !step("erase", sec.Erase()) {
 		return

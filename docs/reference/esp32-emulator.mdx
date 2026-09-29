@@ -69,9 +69,9 @@ Totem that kept it in `config.json` sends a status frame.
 
 The emulator also runs on a LILYGO T-Beam S3 Supreme, an ESP32-S3 board that has the parts a
 Totem has. On it the position, the speed, the course, the clock, the battery and the
-orientation are read from hardware instead of modelled. The heading is not, and the reason is
-worth reading: a magnetometer **is** fitted, and it works — it is the field around it that is
-not the Earth's (see below).
+orientation are read from hardware instead of modelled. The heading waits on one command, and
+the reason is worth reading: a magnetometer **is** fitted and it works — it is the field around
+it that is not the Earth's, until `mag calibrate` measures the difference (see below).
 
 ```bash
 tinygo flash -target esp32s3-generic -port /dev/cu.usbmodem2101 \
@@ -97,7 +97,7 @@ same read returned the boot log and every line after it.
 | Position, speed, course, clock | GNSS receiver on UART1, NMEA parsed by the `gnss` package |
 | Battery, and whether a cell is fitted at all | AXP2101 power chip on the second I2C bus |
 | Orientation | QMI8658 IMU on the SPI bus, through `OrientationTracker` |
-| Heading | the console — the magnetometer reads, but not the Earth (below) |
+| Heading | the console until `mag calibrate` is run, then the QMC6310 magnetometer (below) |
 
 The magnetometer is a **QMC6310 at 0x3c**, the N variant; the vendor's map allows for a U at
 0x1c or a QMC6309 at 0x7c, and neither of those acknowledges. It identifies itself, its

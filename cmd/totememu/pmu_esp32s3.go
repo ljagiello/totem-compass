@@ -171,12 +171,19 @@ func (p *pmu) powerRails() error {
 	if err := p.cycleSensorRails(); err != nil {
 		return err
 	}
-	for _, r := range pmuRails {
+	// Indexed, not ranged: these have string fields and this is the chip
+	// whose == on a string field of a range copy is wrong, which board_
+	// esp32s3.go's boardBus is written around. Nothing here compares one,
+	// but the strings are the only text in the rail log lines and the rule
+	// is cheaper to keep than to reason about each time.
+	for i := range pmuRails {
+		r := &pmuRails[i]
 		if err := p.setVoltage(r.bit, r.mV); err != nil {
 			return fmt.Errorf("pmu: set %s to %d mV: %w", r.what, r.mV, err)
 		}
 	}
-	for _, r := range pmuRails {
+	for i := range pmuRails {
+		r := &pmuRails[i]
 		if err := p.setBit(pmuRegLDOEnable, r.bit); err != nil {
 			return fmt.Errorf("pmu: enable %s: %w", r.what, err)
 		}
@@ -285,14 +292,20 @@ func (p *pmu) battery() emulator.Battery {
 	}
 	p.saidOddVolts = false
 	b.Volts = float32(mV) / 1000
-	if pct, err := p.read(pmuRegBatPct); err != nil {
+	pct, err := p.read(pmuRegBatPct)
+	if err != nil {
 		warnOnce(p.log, &p.saidNoPct, "battery percentage could not be read", err)
 		return b
-	} else if pct <= 100 {
+	}
+	// Cleared on the read that worked, whatever it said — not only when the
+	// value was usable. Clearing it inside the arm below meant a gauge
+	// answering "I do not know yet" left the latch set, and every real
+	// failure after that was swallowed.
+	p.saidNoPct = false
+	if pct <= 100 {
 		// Above 100 is the gauge saying it does not know yet. Left at
 		// zero, the node derives a percentage from the voltage instead,
 		// which is what the firmware itself does.
-		p.saidNoPct = false
 		b.Percent = int8(pct)
 	}
 	status2, err := p.read(pmuRegStatus2)

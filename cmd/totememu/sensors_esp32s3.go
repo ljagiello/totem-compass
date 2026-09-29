@@ -14,11 +14,13 @@ package main
 // and the clock, from the GNSS receiver on UART1. The orientation, from the
 // IMU.
 //
-// Console: the heading. A magnetometer is fitted — a QMC6310 at 0x3c, and an
-// earlier version of this comment said there was none, which was wrong — but
-// the field around it reads several times the Earth's, so until it has been
-// calibrated by a turn through every orientation a bearing from it would be
-// confidently wrong. mag_esp32s3.go has the detail.
+// The heading is either, and which one is a decision an operator makes. A
+// QMC6310 magnetometer is fitted at 0x3c — an earlier version of this comment
+// said there was none, which was wrong — but the field around it reads
+// several times the Earth's, so out of the box no bearing is taken from it
+// and the console's setting stands. `mag calibrate` measures the iron with a
+// twenty-second turn and the compass takes over from then until a reboot.
+// mag_esp32s3.go has the detail.
 //
 // An operator can take any of it back by hand. Controls says a command must
 // not quietly do nothing, so pos, heading, batt, flat and clock all still
@@ -26,6 +28,7 @@ package main
 // stopped being read from it.
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"time"
@@ -88,6 +91,12 @@ type boardSensors struct {
 	// fix is the last solution the receiver vouched for, already in the
 	// node's own shape. Nil until it has one, which indoors is forever.
 	fix *emulator.Fix
+	// fixAt is when that fix arrived, so its clock can be moved on to the
+	// moment it is reported rather than reported as of when it was taken.
+	fixAt time.Time
+	// out is the copy handed to the node, kept here so reporting a fix on
+	// every poll does not allocate on every poll.
+	out emulator.Fix
 	// odometerM is how far the receiver has been seen to move, summed over
 	// the fixes it gave. The firmware keeps one, so peers expect it.
 	//
@@ -161,6 +170,11 @@ type boardSensors struct {
 	// between calibration finishing and the first read working, which is a
 	// bearing nothing ever measured.
 	haveHeading bool
+
+	// simRunning says whether the node is reading a simulation instead of
+	// this source, which is the one state in which a calibration turn would
+	// collect nothing. Set by the firmware, which owns the node.
+	simRunning func() bool
 
 	// cal is a calibration turn in progress, collected over successive
 	// polls, and calUntil is when it ends. Nil when none is running.
@@ -272,7 +286,7 @@ func (b *boardSensors) report() {
 	// Feed the sample in rather than throwing it away: it may hold a fix,
 	// and a sentence half of which arrived in the sample would otherwise
 	// be a bad one.
-	b.consume(sample)
+	b.consume(sample, time.Now())
 	b.log.Info("gnss receiver talking", "bytes", len(sample),
 		"sentences", b.nmea.Sentences(), "rejected", b.nmea.Bad(), "fix", b.fix != nil)
 }
@@ -303,7 +317,7 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 			s.Battery = b.battery
 		}
 	}
-	b.drain()
+	b.drain(now)
 	if b.imu != nil && !b.orientByHand {
 		if b.imuAt.IsZero() || now.Sub(b.imuAt) >= imuEvery {
 			b.imuAt = now
@@ -325,10 +339,15 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 	if b.cal != nil {
 		b.collectCal(now)
 	}
-	if b.mag != nil && b.calibrated && b.cal == nil && !b.headingByHand {
-		if b.magAt.IsZero() || now.Sub(b.magAt) >= magEvery {
+	if b.mag != nil && b.calibrated && !b.headingByHand {
+		// Not while a turn is running: the part is being read for the sweep
+		// and the bearing it would give mid-turn is meaningless. The last
+		// one stands, which is why this keeps reporting rather than falling
+		// back — re-running the calibration on a calibrated board used to
+		// swing every peer's arrow to due north for twenty seconds.
+		if b.cal == nil && (b.magAt.IsZero() || now.Sub(b.magAt) >= magEvery) {
 			b.magAt = now
-			if az, err := b.azimuth(); err != nil {
+			if az, err := b.azimuth(now); err != nil {
 				warnOnce(b.log, &b.saidNoMag, "magnetometer could not be read", err)
 			} else {
 				b.saidNoMag = false
@@ -344,25 +363,37 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		}
 	}
 	if b.fix != nil && !b.posByHand {
-		// The copy made when the fix arrived, not a fresh one now. The node
-		// must not hold a pointer that the next fix writes through, which
-		// is why there is a copy at all, but consume already makes one and
-		// fixes arrive once a second where this runs two hundred times —
-		// and main.go keeps one timer for the life of the loop precisely to
-		// stay out of a heap this size.
-		s.Fix = b.fix
+		// A copy, with the clock moved on to now.
+		//
+		// Handing back the stored fix unchanged looked like a saving and was
+		// a bug: the node recomputes its wall clock from this timestamp on
+		// every poll, so a snapshot from the last sentence made the clock a
+		// staircase — constant for a second, then a second late — and when
+		// the receiver lost its fix and stopped sending new ones, the clock
+		// froze at the moment it was lost while real time went on. That
+		// clock re-slots every radio window and is handed to every peer
+		// that adopts it. emulator's own static source advances its fix for
+		// the same reason.
+		//
+		// The copy is into a field rather than a fresh allocation each time:
+		// the node takes a new Sensors every poll and does not keep the
+		// pointer past it, and two hundred allocations a second is what
+		// main.go keeps one timer for the whole loop to avoid.
+		b.out = *b.fix
+		b.out.Time = b.fix.Time.Add(now.Sub(b.fixAt))
+		s.Fix = &b.out
 	}
 	return s
 }
 
 // drain empties the receiver's FIFO into the parser.
-func (b *boardSensors) drain() {
+func (b *boardSensors) drain(now time.Time) {
 	for {
 		n := b.port.read(b.block[:])
 		if n == 0 {
 			return
 		}
-		b.consume(b.block[:n])
+		b.consume(b.block[:n], now)
 		if n < len(b.block) {
 			return
 		}
@@ -370,7 +401,7 @@ func (b *boardSensors) drain() {
 }
 
 // consume feeds bytes to the parser and keeps the fix that comes out.
-func (b *boardSensors) consume(p []byte) {
+func (b *boardSensors) consume(p []byte, now time.Time) {
 	got, ok := b.nmea.FeedAll(p)
 	if !ok {
 		return
@@ -438,24 +469,36 @@ func (b *boardSensors) consume(p []byte) {
 	}
 	fix.OdometerM = b.odometerM
 	first := b.fix == nil
-	b.fix = fix
+	b.fix, b.fixAt = fix, now
 	if first {
 		b.log.Info("gnss fix", "lat", fix.Lat, "lon", fix.Lon, "sats", fix.SatCount,
 			"accuracy_m", fix.AccuracyM, "solution", fix.SolutionID, "utc", fix.Time)
 	}
 }
 
+// watchSim is how the firmware tells this source when the node is reading a
+// simulation instead of it.
+func (b *boardSensors) watchSim(running func() bool) { b.simRunning = running }
+
 // azimuth is the tilt-compensated bearing, with the hard iron taken off.
-func (b *boardSensors) azimuth() (int16, error) {
+func (b *boardSensors) azimuth(now time.Time) (int16, error) {
 	x, y, z, err := b.mag.field()
 	if err != nil {
 		return 0, err
 	}
-	pitch, roll, err := b.imuTilt()
+	pitch, roll, err := b.imuTilt(now)
 	if err != nil {
 		return 0, err
 	}
-	return bearing(x-b.iron.X, y-b.iron.Y, z-b.iron.Z, pitch, roll), nil
+	cx, cy, cz := x-b.iron.X, y-b.iron.Y, z-b.iron.Z
+	// With the iron off, what is left has to be the Earth's field. If it is
+	// not, either the calibration no longer describes where this board is
+	// or the part is not measuring, and in both cases a bearing from it
+	// would be confident and wrong.
+	if field := math.Sqrt(cx*cx + cy*cy + cz*cz); field < magFieldMinG || field > magFieldMaxG {
+		return 0, fmt.Errorf("%w: %.4f gauss after taking the offset off", errMagNotField, field)
+	}
+	return bearing(cx, cy, cz, pitch, roll), nil
 }
 
 // bearing is emulator.Heading rounded to a whole degree that is still a
@@ -477,7 +520,7 @@ func bearing(x, y, z, pitchDeg, rollDeg float64) int16 {
 // imuTilt is the pose the compass is corrected for. Without an IMU the board
 // is taken to be flat, which is what an uncompensated compass assumes and is
 // worth being explicit about rather than silently true.
-func (b *boardSensors) imuTilt() (pitch, roll float64, err error) {
+func (b *boardSensors) imuTilt(now time.Time) (pitch, roll float64, err error) {
 	if b.imu == nil {
 		return 0, 0, nil
 	}
@@ -485,7 +528,7 @@ func (b *boardSensors) imuTilt() (pitch, roll float64, err error) {
 	// one. The part converts at 31 Hz and this is asked every 100 ms, so a
 	// fresh burst would usually return the same conversion at twice the SPI
 	// traffic, in a loop that has 5 ms radio windows to hit.
-	if pitch, roll, ok := b.imu.lastPose(); ok {
+	if pitch, roll, ok := b.imu.lastPose(); ok && !b.imuAt.IsZero() && now.Sub(b.imuAt) < imuEvery*2 {
 		return pitch, roll, nil
 	}
 	return b.imu.pitchRoll()
@@ -497,6 +540,14 @@ func (b *boardSensors) imuTilt() (pitch, roll float64, err error) {
 func (b *boardSensors) calibrateMag(now func() time.Time) {
 	if b.mag == nil {
 		b.log.Warn("no magnetometer to calibrate on this board")
+		return
+	}
+	if b.simRunning != nil && b.simRunning() {
+		// Nothing would be collected: a simulation replaces this source in
+		// the node, so Read is not called and the turn would gather zero
+		// readings and then refuse, twenty seconds later, for want of them.
+		b.log.Warn("a simulation is running, so the magnetometer is not being read; " +
+			"stop it with sim off and calibrate again")
 		return
 	}
 	b.cal, b.calUntil = &emulator.Sweep{}, now().Add(magCalFor)
@@ -554,7 +605,7 @@ func (b *boardSensors) magReport() {
 	// field() clears the part's data-ready flag, and at 50 Hz a second read
 	// microseconds later finds nothing new — so asking twice reported "no
 	// measurement ready yet" instead of the heading, every time.
-	pitch, roll, err := b.imuTilt()
+	pitch, roll, err := b.imuTilt(time.Now())
 	if err != nil {
 		b.log.Warn("the tilt could not be read, so the bearing would not be compensated", "err", err)
 		return
@@ -618,8 +669,20 @@ func (b *boardSensors) SetFlat(flat bool) {
 }
 
 func (b *boardSensors) SetClock(wall, now time.Time) {
-	if b.ctl != nil {
-		b.ctl.SetClock(wall, now)
+	if b.ctl == nil {
+		return
+	}
+	b.ctl.SetClock(wall, now)
+	// The clock rides on the fix, so setting it by hand while the receiver
+	// has one did nothing at all: Read replaced the whole fix, the node
+	// recomputed its offset from the receiver's timestamp, and the command
+	// was thrown away inside the same call that reported success. Taking the
+	// position by hand is what taking the clock by hand means here, and it
+	// is the same latch.
+	if !b.posByHand {
+		b.posByHand = true
+		b.log.Warn("clock set by hand: the gnss receiver is no longer read, " +
+			"because the clock arrives with the fix")
 	}
 }
 

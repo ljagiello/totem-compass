@@ -345,10 +345,10 @@ func TestTheDistanceToTheOtherSideOfTheWorld(t *testing.T) {
 	} {
 		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) || math.IsInf(got, 0) {
-			t.Errorf("distance(%v,%v -> %v,%v) = %v", tc.aLat, tc.aLon, tc.bLat, tc.bLon, got)
+			t.Errorf("DistanceM(%v,%v -> %v,%v) = %v", tc.aLat, tc.aLon, tc.bLat, tc.bLon, got)
 		}
 		if got < 0 || got > 21_000_000 {
-			t.Errorf("distance(%v,%v -> %v,%v) = %.0f m, which is further than round the world",
+			t.Errorf("DistanceM(%v,%v -> %v,%v) = %.0f m, which is further than round the world",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon, got)
 		}
 	}
@@ -436,7 +436,7 @@ func TestALastHopThatCannotBePlaced(t *testing.T) {
 	}
 }
 
-// TestADistanceThatCannotBeMeasured: distance() is a helper anything in
+// TestADistanceThatCannotBeMeasured: DistanceM() is a helper anything in
 // this file can reach, and Go's min returns NaN if either argument is
 // one — so the clamp on the haversine intermediate never removed one.
 // -1 is what the rest of the file means by "no distance".
@@ -450,10 +450,10 @@ func TestADistanceThatCannotBeMeasured(t *testing.T) {
 	} {
 		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) {
-			t.Errorf("distance(%v,%v -> %v,%v) is not a number",
+			t.Errorf("DistanceM(%v,%v -> %v,%v) is not a number",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		} else if got >= 0 {
-			t.Errorf("distance(%v,%v -> %v,%v) = %v, which reads as a real distance",
+			t.Errorf("DistanceM(%v,%v -> %v,%v) = %v, which reads as a real distance",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon, got)
 		}
 	}
@@ -473,7 +473,7 @@ func TestADistanceWhoseIntermediateGoesNegative(t *testing.T) {
 	} {
 		got := DistanceM(tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		if math.IsNaN(got) {
-			t.Errorf("distance(%v,%v -> %v,%v) is not a number",
+			t.Errorf("DistanceM(%v,%v -> %v,%v) is not a number",
 				tc.aLat, tc.aLon, tc.bLat, tc.bLon)
 		}
 	}
@@ -481,7 +481,7 @@ func TestADistanceWhoseIntermediateGoesNegative(t *testing.T) {
 
 // TestTheMeshScheduleIsATimeThisDeviceReaches: peerDistance feeds
 // meshDelivery and comes out as meshNext, the instant this peer is next
-// asked about. distance() no longer hands it a NaN, but the arithmetic
+// asked about. DistanceM() no longer hands it a NaN, but the arithmetic
 // after it is still unguarded, and a number that overflows or that lands
 // centuries away is a peer the mesh never asks about again.
 //

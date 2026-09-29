@@ -50,6 +50,10 @@ var (
 	relayUnowned = ""
 )
 
+// simWatcher is a sensor source that wants to know when the node has been
+// switched to a simulation, because it is then not being read.
+type simWatcher interface{ watchSim(func() bool) }
+
 // magConsole is a sensor source with a compass the console can reach: read
 // it, or run the calibration turn it needs before it can be believed.
 type magConsole interface {
@@ -169,6 +173,12 @@ func main() {
 		OTATransport: newLocalOTA(),
 		Logger:       log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
 	}, nodeBoot)
+	// The compass needs to know when the node is reading a simulation rather
+	// than this source, because a calibration turn would then collect
+	// nothing. Set after New, which is when there is a node to ask.
+	if w, ok := sensors.(simWatcher); ok {
+		w.watchSim(node.Simulating)
+	}
 	saved.Restore(node, nodeBoot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,

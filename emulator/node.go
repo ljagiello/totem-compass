@@ -2130,6 +2130,11 @@ func simPercent(b Battery) int8 {
 	return b.Percent
 }
 
+// Simulating says whether the readings currently come from a simulation
+// rather than from whatever source was given. A board's drivers ask, because
+// while it is true they are not being read at all.
+func (n *Node) Simulating() bool { return n.sim() != nil }
+
 // StopSim freezes the readings where the simulation left them.
 func (n *Node) StopSim(now time.Time) {
 	if n.sim() == nil {

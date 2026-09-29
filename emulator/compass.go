@@ -36,8 +36,13 @@ type Sweep struct {
 // that still refuses a board that was only tilted.
 const SweepMinSpanG = 0.15
 
-// Add gives the sweep one reading, in gauss.
+// Add gives the sweep one reading, in gauss. A reading that is not three
+// numbers is ignored rather than allowed into the extremes, where one of them
+// would spread to every axis through Min and Max.
 func (s *Sweep) Add(x, y, z float64) {
+	if !isNumber(x) || !isNumber(y) || !isNumber(z) {
+		return
+	}
 	if s.n == 0 {
 		s.minX, s.maxX = x, x
 		s.minY, s.maxY = y, y
@@ -67,6 +72,14 @@ func (s *Sweep) Spans() (x, y, z float64) {
 // of one for it to mean anything.
 func (s *Sweep) Offset() (HardIron, bool) {
 	dx, dy, dz := s.Spans()
+	// Spans are required to be large, which is a test NaN passes by failing
+	// every comparison: one NaN reading propagates through Min and Max into
+	// the extremes, and `dx < 0.15` is false for it, so the offset came back
+	// NaN with ok true. From there every bearing is NaN, and converting that
+	// to an int16 is not even defined. Required to be a number first.
+	if !isNumber(dx) || !isNumber(dy) || !isNumber(dz) {
+		return HardIron{}, false
+	}
 	if s.n < 2 || dx < SweepMinSpanG || dy < SweepMinSpanG || dz < SweepMinSpanG {
 		return HardIron{}, false
 	}
@@ -76,6 +89,10 @@ func (s *Sweep) Offset() (HardIron, bool) {
 		Z: (s.maxZ + s.minZ) / 2,
 	}, true
 }
+
+// isNumber says whether a value is one: not a NaN, and not an infinity that
+// arithmetic would carry into everything downstream.
+func isNumber(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 
 // Heading is the compass bearing in degrees, from a magnetometer reading and
 // the tilt the board is held at.
