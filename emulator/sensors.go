@@ -498,6 +498,15 @@ func (f *staticSensors) SetBattery(percent int8, charging bool, _ time.Time) {
 	f.s.Battery.Percent = percent
 	f.s.Battery.Charging = charging
 	f.s.Battery.Low = percent <= 10
+	// NoBattery is the exception to the rule above, and for the reason its
+	// own documentation gives: it is what the chip says today, not what
+	// kind of board this is. Carrying it through meant an operator could
+	// set a percentage, watch it appear in the status, and have nothing act
+	// on it — the power mode stayed normal and the OTA gate stayed open,
+	// because both read this field and both were still being told there was
+	// no cell. Someone who has just said what the battery is has asserted
+	// that there is one.
+	f.s.Battery.NoBattery = false
 }
 
 // SetClock hands the fixed receiver the wall time, which then runs on.

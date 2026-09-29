@@ -170,6 +170,24 @@ func TestUpdateWithNoBattery(t *testing.T) {
 		t.Error("a board with no cell fitted was refused for its battery")
 	}
 
+	// And a percentage set by hand is a statement that there is a cell, so
+	// it must reach the gate: before this, batt changed the number in the
+	// status and nothing that acted on it.
+	h = newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Battery: Battery{NoBattery: true}})
+	})
+	h.collect(h.n.Poll(h.now))
+	if err := h.n.SetBattery(5, false, h.now); err != nil {
+		t.Fatal(err)
+	}
+	h.collect(h.n.Poll(h.now.Add(time.Second)))
+	if h.n.Sensors().Battery.NoBattery {
+		t.Error("a battery set by hand left the board still reporting no cell")
+	}
+	if err := h.n.Update(h.now.Add(time.Second)); !errors.Is(err, ErrBatteryLow) {
+		t.Errorf("an update at 5%% set by hand was refused with %v, want %v", err, ErrBatteryLow)
+	}
+
 	// And the zero value still keeps the gate on: zeroes with no reason
 	// given are a flat cell.
 	h = newHarness(t, func(c *Config) { c.BattVolts, c.BattPct = 0, 0 })

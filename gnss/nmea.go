@@ -16,6 +16,7 @@ package gnss
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -203,12 +204,21 @@ func (r *Reader) gga(f []string) bool {
 	// The one-based index this sentence is about to become: the counter is
 	// bumped after the handler returns, and zero has to keep meaning "no
 	// GGA yet".
+	// Quality 0 is the receiver saying it has no solution. Its satellite
+	// count and dilution then describe nothing, and attaching them to the
+	// next valid RMC would advertise a solution quality to every peer that
+	// this very sentence declined to vouch for. The staleness window below
+	// catches a GGA that is old; this catches one that is negative.
+	if quality, ok := decimal(f[6]); !ok || quality < 1 {
+		r.ggaAt = 0
+		return true
+	}
 	r.ggaAt = r.sentences + 1
 	r.sats = int8(clampInt(atoiDefault(f[7], 0), 0, 127))
 	r.accuracy = hdopAccuracyM(atofDefault(f[8], -1))
 	r.altitude = -500
 	if alt, ok := decimal(f[9]); ok {
-		r.altitude = int16(clampInt(int(alt), -500, 32767))
+		r.altitude = int16(clampFloat(alt, -500, 32767))
 	}
 	return true
 }
@@ -252,7 +262,7 @@ func (r *Reader) rmc(f []string) (fix Fix, gotFix, good bool) {
 		// 1 knot is 1.852 km/h. Speed is a byte in the frame, so a
 		// receiver reporting an airplane is pinned at its top value
 		// rather than wrapping into a negative one.
-		fix.SpeedKPH = int8(clampInt(int(knots*1.852+0.5), 0, 127))
+		fix.SpeedKPH = int8(clampFloat(knots*1.852+0.5, 0, 127))
 	}
 	if course, ok := decimal(f[8]); ok && course >= 0 && course < 360 {
 		fix.CourseDeg = int16(course + 0.5)
@@ -272,7 +282,12 @@ func (r *Reader) rmc(f []string) (fix Fix, gotFix, good bool) {
 // position a hundred miles out.
 func verify(s string) (string, error) {
 	star := strings.LastIndexByte(s, '*')
-	if star < 0 || star+3 > len(s) {
+	// Exactly two digits, and then the end of the sentence. Accepting
+	// trailing bytes let a line whose tail had been corrupted pass as a
+	// good sentence on the strength of a checksum that covered less than
+	// the line contained — and the checksum is the only thing standing
+	// between a dropped character and a position a hundred miles out.
+	if star < 0 || star+3 != len(s) {
 		return "", ErrChecksum
 	}
 	want, err := strconv.ParseUint(s[star+1:star+3], 16, 8)
@@ -452,4 +467,21 @@ func decimal(s string) (float64, bool) {
 
 func clampInt(v, lo, hi int) int {
 	return min(max(v, lo), hi)
+}
+
+// clampFloat brings a value into range before it is converted to an integer,
+// which is the only order that is safe.
+//
+// decimal accepts any run of digits, so a receiver — or a corrupted field —
+// can present 1e20. Converting that to an int first and clamping after is
+// undefined by the language: on a 64-bit host it comes out as the most
+// negative integer, and clamping that to 0 turns the fastest speed ever
+// reported into a standstill, while on the board's 32-bit int it may land
+// anywhere at all, including inside the range. Clamping the float first
+// leaves the conversion nothing to go wrong with.
+func clampFloat(v, lo, hi float64) float64 {
+	if math.IsNaN(v) {
+		return lo
+	}
+	return math.Min(math.Max(v, lo), hi)
 }

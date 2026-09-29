@@ -65,7 +65,15 @@ const (
 type imu struct {
 	bus *machine.SPI
 	log *slog.Logger
+
+	// The axes of the last reading that passed the gravity check, so a
+	// caller that wants both the pose and what it came from can have them
+	// without asking the part twice and getting two different answers.
+	lastX, lastY, lastZ float64
 }
+
+// last is the acceleration, in g, behind the most recent pitch and roll.
+func (m *imu) last() (x, y, z float64) { return m.lastX, m.lastY, m.lastZ }
 
 // openIMU sets the accelerometer running and checks it is the part the pin
 // map says it is.
@@ -166,6 +174,7 @@ func (m *imu) pitchRoll() (pitch, roll float64, err error) {
 	if mag < minGravityG || mag > maxGravityG {
 		return 0, 0, fmt.Errorf("%w: %.4f g across (%.4f, %.4f, %.4f)", errNoGravity, mag, x, y, z)
 	}
+	m.lastX, m.lastY, m.lastZ = x, y, z
 	const deg = 180 / math.Pi
 	roll = math.Atan2(y, z) * deg
 	pitch = math.Atan2(-x, math.Sqrt(y*y+z*z)) * deg

@@ -25,6 +25,7 @@ package main
 
 import (
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/ljagiello/totem-compass/emulator"
@@ -63,6 +64,7 @@ type boardSensors struct {
 	pmu  *pmu
 	port *gnssPort
 	imu  *imu
+	mag  *mag
 
 	// nmea turns the receiver's bytes into fixes, and block is the buffer
 	// they are read into. Kept here rather than made per call so a
@@ -105,6 +107,15 @@ type boardSensors struct {
 	// read for that field from then on: a command that quietly did nothing
 	// would be worse than one that overrides a sensor, and Controls says
 	// as much.
+	//
+	// Only the position can be handed back, with `pos off`, because that is
+	// the only one of the three the console has a spelling for. `flat` takes
+	// on or off and `batt` takes a percentage, and neither has a word that
+	// means "read the part again" — so for those two the way back is a
+	// reboot. Giving them one means a three-way argument, a field on
+	// Command, and the parse-and-print round trip that is fuzzed, which is
+	// more than a diagnostic console needs to be worth; it is written down
+	// here rather than left to be discovered.
 	battByHand   bool
 	posByHand    bool
 	orientByHand bool
@@ -147,6 +158,11 @@ func newSensorSource(log *slog.Logger, fallback emulator.Sensors) emulator.Senso
 	} else {
 		b.imu = m
 	}
+	if g, err := openMag(log); err != nil {
+		log.Warn("no magnetometer: the heading stays as the console sets it", "err", err)
+	} else {
+		b.mag = g
+	}
 	b.report()
 	return b
 }
@@ -161,12 +177,43 @@ func (b *boardSensors) report() {
 		// and the others near nothing is a board sitting still on a desk;
 		// three small numbers would be a part that is answering but not
 		// measuring.
-		if x, y, z, err := b.imu.accel(); err != nil {
+		if pitch, roll, err := b.imu.pitchRoll(); err != nil {
 			b.log.Warn("imu could not be read", "err", err)
 		} else {
-			pitch, roll, _ := b.imu.pitchRoll()
+			// The pose and the axes it came from, from one reading rather
+			// than two: asking twice and discarding the second error
+			// printed pitch 0 and roll 0 beside real axes whenever the
+			// second read failed its gravity check, which reads as a board
+			// lying perfectly flat — the one claim that check refuses.
+			x, y, z := b.imu.last()
 			b.log.Info("imu reading", "x_g", x, "y_g", y, "z_g", z,
 				"pitch_deg", pitch, "roll_deg", roll)
+		}
+	}
+	if b.mag != nil {
+		// The field, as the part sees it. Anywhere on the planet its
+		// length is between about 0.25 and 0.65 gauss, so a vector near
+		// that is the Earth and one near zero is a part that is answering
+		// without measuring.
+		if x, y, z, err := b.mag.field(); err != nil {
+			b.log.Warn("magnetometer could not be read", "err", err)
+		} else {
+			field := math.Sqrt(x*x + y*y + z*z)
+			b.log.Info("mag reading", "x_g", x, "y_g", y, "z_g", z, "field_g", field)
+			// Said plainly, because a heading is what a Totem is for and
+			// this board is not giving one yet. The part is here and it
+			// measures; what it measures at this bench is several times the
+			// Earth's field, so a bearing taken from it would be confidently
+			// wrong. A magnetometer needs its hard-iron offsets calibrated
+			// by being turned through every orientation — which is what the
+			// firmware's own 2D and 3D calibration runs do — and that is a
+			// person picking the board up, not something this can do while
+			// it sits still.
+			if field < magFieldMinG || field > magFieldMaxG {
+				b.log.Warn("the magnetic field here is not the Earth's, so no heading is taken from it",
+					"field_g", field, "earth_g", "0.25 to 0.65",
+					"needs", "a calibration turn through every orientation")
+			}
 		}
 	}
 	sample := b.port.sample()
@@ -186,9 +233,19 @@ func (b *boardSensors) report() {
 // Read reports the board's sensors.
 func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 	s := b.held.Read(now)
-	if b.pmu != nil && !b.battByHand {
+	if !b.battByHand {
 		if b.battAt.IsZero() || now.Sub(b.battAt) >= battEvery {
-			b.battery, b.battAt = b.pmu.battery(), now
+			// Only a reading that says something replaces the last one. A
+			// failed or implausible read returns the zero Battery, and
+			// caching that would publish 0 V and 0% to every peer and
+			// close the OTA gate — which is what a flat cell looks like,
+			// and the opposite of what this driver means by "could not
+			// read it". The previous reading is the honest answer until
+			// there is a better one.
+			if got := b.pmu.battery(); got != (emulator.Battery{}) {
+				b.battery = got
+			}
+			b.battAt = now
 		}
 		s.Battery = b.battery
 	}
@@ -199,14 +256,10 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		if b.imuAt.IsZero() || now.Sub(b.imuAt) >= imuEvery {
 			b.imuAt = now
 			if pitch, roll, err := b.imu.pitchRoll(); err != nil {
-				// Once, not twenty times a second. An IMU that has
+				// Once, not twenty times a second: an IMU that has
 				// stopped answering would otherwise fill the only
-				// diagnostic channel the board has, which is the reason
-				// the node latches its own repeated warnings.
-				if !b.saidNoIMU {
-					b.saidNoIMU = true
-					b.log.Warn("imu could not be read", "err", err)
-				}
+				// diagnostic channel the board has.
+				warnOnce(b.log, &b.saidNoIMU, "imu could not be read", err)
 			} else {
 				b.saidNoIMU = false
 				b.orientation.Update(pitch, roll, now)
@@ -218,10 +271,13 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		s.Orientation = b.orientation.Orientation()
 	}
 	if b.fix != nil && !b.posByHand {
-		// A copy: the node must not hold a pointer the next fix writes
-		// through, which is the same reason the static source copies.
-		fix := *b.fix
-		s.Fix = &fix
+		// The copy made when the fix arrived, not a fresh one now. The node
+		// must not hold a pointer that the next fix writes through, which
+		// is why there is a copy at all, but consume already makes one and
+		// fixes arrive once a second where this runs two hundred times —
+		// and main.go keeps one timer for the life of the loop precisely to
+		// stay out of a heap this size.
+		s.Fix = b.fix
 	}
 	return s
 }

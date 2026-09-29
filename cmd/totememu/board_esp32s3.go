@@ -81,6 +81,17 @@ type i2cBus struct {
 	parts    []i2cPart
 }
 
+// The front panel, as LILYGO's pin map has it: a button on GPIO0, which
+// their header calls BUTTON_PIN and which reads low while it is pressed, and
+// no LED. Their map lists every pin this board uses and GPIO2 is not among
+// them, so nothing here drives it — a pin that is free on the silkscreen is
+// still somebody else's to wire.
+const (
+	panelHasLED = false
+	panelLED    = machine.NoPin
+	panelButton = machine.GPIO0
+)
+
 // The buses by name, so a driver can ask for the one its part is on rather
 // than carry a copy of the pins.
 const (
@@ -96,10 +107,20 @@ func boardBuses() []i2cBus {
 }
 
 // boardBus finds one bus by name.
+//
+// Indexed, not ranged. TinyGo 0.42 on xtensa gets == wrong on a string field
+// of a struct that came out of a range copy — the same miscompile that made
+// every `color <name>` fail on the board, and the reason main.go compares the
+// length of a saved name rather than the name. It would fail silently here
+// and in the worst possible way: no bus found, so no power chip, so the rails
+// LILYGO ship off stay off and the board runs on a hard-coded battery with no
+// GNSS and no IMU, with nothing in the log but one line about a missing bus.
+// No host test can see it, because this file only builds for the board.
 func boardBus(name string) (i2cBus, error) {
-	for _, b := range boardBuses() {
-		if b.name == name {
-			return b, nil
+	buses := boardBuses()
+	for i := range buses {
+		if buses[i].name == name {
+			return buses[i], nil
 		}
 	}
 	return i2cBus{}, fmt.Errorf("no %s bus in this board's wiring", name)
@@ -143,11 +164,34 @@ func (b i2cBus) configure() error {
 // held to a band a cell can actually be in, because 0xff read as a cell
 // once already, at 8.19 V.
 func (b i2cBus) readReg(addr uint16, reg uint8) (byte, error) {
+	if err := b.configure(); err != nil {
+		return 0, err
+	}
 	var got [1]byte
 	if err := b.bus.Tx(addr, []byte{reg}, got[:]); err != nil {
 		return 0, err
 	}
 	return got[0], nil
+}
+
+// present says whether anything acknowledges this address.
+//
+// A write, because a write is the only transaction whose NACK this driver
+// reports — see readReg. One byte is as short as it gets, and the byte is a
+// register number: every part on this board reads a single byte as "point at
+// this register", so the pointer moves and nothing is written. A device that
+// is not there hears nothing at all.
+//
+// This is worth having beside the identity read rather than instead of it.
+// The read says what a part is; this says whether one is there, and the two
+// disagreeing is itself informative — 0x7c answers a read with 0x80 and
+// acknowledges nothing, which is a bus returning the last thing it saw
+// rather than a magnetometer.
+func (b i2cBus) present(addr uint16, reg uint8) bool {
+	if err := b.configure(); err != nil {
+		return false
+	}
+	return b.bus.Tx(addr, []byte{reg}, nil) == nil
 }
 
 // i2cScan says, for each part the board is meant to carry, whether it
@@ -161,13 +205,20 @@ func (b i2cBus) readReg(addr uint16, reg uint8) (byte, error) {
 // scan asks what a driver actually needs to know instead: is the part
 // there, and is it the part the pin map says it is.
 func i2cScan(log *slog.Logger) {
-	for _, b := range boardBuses() {
+	buses := boardBuses()
+	for i := range buses {
+		b := buses[i]
 		if err := b.configure(); err != nil {
 			log.Warn("i2c bus could not be configured", "bus", b.name,
 				"sda", int(b.sda), "scl", int(b.scl), "err", err)
 			continue
 		}
 		for _, p := range b.parts {
+			if !b.present(p.addr, p.reg) {
+				log.Info("i2c part absent", "bus", b.name, "addr", hexByte(byte(p.addr)),
+					"part", p.name, "detail", "nothing acknowledged the address")
+				continue
+			}
 			got, err := b.readReg(p.addr, p.reg)
 			switch {
 			case err != nil:
@@ -178,7 +229,7 @@ func i2cScan(log *slog.Logger) {
 					"part", p.name, "reg", hexByte(p.reg), "value", hexByte(got))
 			case got == p.want:
 				log.Info("i2c part found", "bus", b.name, "addr", hexByte(byte(p.addr)),
-					"part", p.name, "id", hexByte(got))
+					"part", p.name, "id", hexByte(got), "registers", b.dump(p.addr, 0x0c))
 			default:
 				log.Warn("i2c part did not identify itself", "bus", b.name,
 					"addr", hexByte(byte(p.addr)), "part", p.name, "reg", hexByte(p.reg),
@@ -186,6 +237,23 @@ func i2cScan(log *slog.Logger) {
 			}
 		}
 	}
+}
+
+// dump reads the first n registers, so a part that answers can be told from
+// one that answers the same byte to everything. A display's status register
+// reads 0x80 as readily as a magnetometer's identity does, and only the
+// shape of the map around it says which is which.
+func (b i2cBus) dump(addr uint16, n uint8) []string {
+	out := make([]string, 0, n)
+	for reg := uint8(0); reg < n; reg++ {
+		v, err := b.readReg(addr, reg)
+		if err != nil {
+			out = append(out, "err")
+			continue
+		}
+		out = append(out, hexByte(v))
+	}
+	return out
 }
 
 // hexByte prints a byte the way a datasheet does, so a log line can be read

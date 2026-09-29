@@ -17,6 +17,17 @@ import (
 	"github.com/ljagiello/totem-compass/emulator"
 )
 
+// The front panel's pins. A bare ESP32 module usually has an LED on GPIO2
+// and the BOOT button on GPIO0, and BOOT reads low while it is pressed.
+// This is a guess about a module rather than a board, which is as good as it
+// gets when there is no pin map to read — and it is why the S3 file, which
+// has one, says something different.
+const (
+	panelHasLED = true
+	panelLED    = machine.GPIO2
+	panelButton = machine.GPIO0
+)
+
 // i2cScan answers the console's i2c command. There is nothing to scan
 // here: this build targets a bare ESP32 module, where the sensor pins are
 // whatever the person wiring it chose, so there is no bus to configure and

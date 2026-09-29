@@ -2,13 +2,19 @@
 
 package main
 
-// The board's own front panel: one LED and one button.
+// The board's own front panel: a button, and an LED where there is one.
 //
-// A Totem has 60 ring pixels, 7 crystal pixels and three inputs. A stock
-// ESP32 board has an LED on GPIO2 and the BOOT button on GPIO0, so this
-// maps what it does have: the LED follows the crystal, and the button
-// stands in for the SOS button, which is the one with the most to say
+// A Totem has 60 ring pixels, 7 crystal pixels and three inputs. This maps
+// what a bare board does have: the LED, if any, follows the crystal, and the
+// button stands in for the SOS button, which is the one with the most to say
 // (hold starts the alarm, a tap mutes it, three taps start an update).
+//
+// Which pins those are is per chip, in the chip files, because it is a fact
+// about a board and not about this program. The LED is optional for the same
+// reason: the T-Beam S3 Supreme publishes a pin map with a button on GPIO0
+// and no LED anywhere, and driving a pin that map does not mention — GPIO2,
+// because most bare ESP32 boards have one there — is the guess that
+// chip_esp32.go refuses to make about I2C pins, for the same reason.
 //
 // A board with a real APA106 ring would drive emulator.LEDs().Ring()
 // instead; the model is the same either way.
@@ -16,16 +22,10 @@ package main
 import (
 	"log/slog"
 	"machine"
+	"strconv"
 	"time"
 
 	"github.com/ljagiello/totem-compass/emulator"
-)
-
-const (
-	// panelLED is the LED most ESP32 dev boards have, and panelButton is
-	// the BOOT button. BOOT reads low while it is pressed.
-	panelLED    = machine.GPIO2
-	panelButton = machine.GPIO0
 )
 
 // panel drives the LED and reads the button.
@@ -38,12 +38,21 @@ type panel struct {
 }
 
 func newPanel(log *slog.Logger) *panel {
-	panelLED.Configure(machine.PinConfig{Mode: machine.PinOutput})
-	panelLED.Low()
+	led := "none on this board"
+	if panelHasLED {
+		panelLED.Configure(machine.PinConfig{Mode: machine.PinOutput})
+		panelLED.Low()
+		led = "GPIO" + itoa(int(panelLED)) + " follows the crystal"
+	}
 	panelButton.Configure(machine.PinConfig{Mode: machine.PinInputPullup})
-	log.Info("front panel", "led", "GPIO2 follows the crystal", "button", "GPIO0 is the SOS button")
+	log.Info("front panel", "led", led,
+		"button", "GPIO"+itoa(int(panelButton))+" is the SOS button")
 	return &panel{log: log}
 }
+
+// itoa is strconv.Itoa under another name, so this file does not pull in
+// fmt for two log lines.
+func itoa(v int) string { return strconv.Itoa(v) }
 
 // poll reads the button and writes the LED. It runs every pass of the
 // main loop, which is often enough for a 30 ms debounce and a 25 ms LED
@@ -63,7 +72,7 @@ func (p *panel) poll(n *emulator.Node, now time.Time) {
 	// dark of a powered-down device.
 	crystal := n.LEDs().Crystal()
 	lit := len(crystal) > 0 && crystal[0] != emulator.Off
-	if lit != p.lit {
+	if panelHasLED && lit != p.lit {
 		p.lit = lit
 		if lit {
 			panelLED.High()

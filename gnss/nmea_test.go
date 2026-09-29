@@ -1,6 +1,7 @@
 package gnss
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -397,5 +398,75 @@ func TestCountersPartitionTheStream(t *testing.T) {
 	}
 	if got, want := r.Bad(), uint64(2); got != want {
 		t.Errorf("Bad() = %d, want %d", got, want)
+	}
+}
+
+// TestGGAWithNoFixCarriesNothing: quality 0 is the receiver saying it has no
+// solution, so its satellite count and dilution describe nothing. Attaching
+// them to the next valid RMC would advertise a solution quality to every
+// peer that the sentence itself declined to vouch for.
+func TestGGAWithNoFixCarriesNothing(t *testing.T) {
+	var r Reader
+	// Quality 0, but eight satellites and a good dilution in the fields
+	// after it — which is exactly the shape that makes this worth checking.
+	feed(t, &r, "$GPGGA,123519,4807.038,N,01131.000,E,0,08,0.9,545.4,M,46.9,M,,*46\r\n")
+	fix, ok := feed(t, &r, "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n")
+	if !ok {
+		t.Fatal("the RMC produced no fix")
+	}
+	if fix.SatCount != 0 || fix.AccuracyM != -1 || fix.AltitudeM != -500 {
+		t.Errorf("a GGA reporting no fix was still attached: sats %d, accuracy %d, altitude %d",
+			fix.SatCount, fix.AccuracyM, fix.AltitudeM)
+	}
+	// And the sentence itself was well formed, so it counts as read.
+	if r.Bad() != 0 {
+		t.Errorf("%d bad sentences; a GGA with no fix is still a GGA", r.Bad())
+	}
+}
+
+// TestNothingAfterTheChecksum: a line whose tail has been corrupted must not
+// pass on the strength of a checksum covering less than the line holds.
+func TestNothingAfterTheChecksum(t *testing.T) {
+	const good = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18"
+	var r Reader
+	if _, ok := feed(t, &r, good+"\r\n"); !ok {
+		t.Fatal("the sentence itself was refused")
+	}
+	for _, tail := range []string{"junk", "0", " "} {
+		var r2 Reader
+		if _, ok := feed(t, &r2, good+tail+"\r\n"); ok {
+			t.Errorf("a sentence with %q after its checksum was accepted", tail)
+		}
+		if r2.Bad() == 0 {
+			t.Errorf("a sentence with %q after its checksum was not counted as bad", tail)
+		}
+	}
+}
+
+// TestAbsurdSpeedPinsRatherThanWraps: the clamp has to happen before the
+// conversion to an integer. Converting 1e20 to an int first is undefined —
+// on a 64-bit host it lands on the most negative integer, and clamping that
+// to zero turns the fastest reading a receiver ever gave into a standstill.
+func TestAbsurdSpeedPinsRatherThanWraps(t *testing.T) {
+	var r Reader
+	fix, ok := feed(t, &r,
+		"$GPRMC,123519,A,4807.038,N,01131.000,E,99999999999999999999,084.4,230326,,*32\r\n")
+	if !ok {
+		t.Fatal("a well-formed sentence with an absurd speed was refused")
+	}
+	if fix.SpeedKPH != 127 {
+		t.Errorf("speed %d, want it pinned at 127", fix.SpeedKPH)
+	}
+}
+
+func TestClampFloat(t *testing.T) {
+	for _, tt := range []struct {
+		in, want float64
+	}{
+		{5, 5}, {-5, 0}, {1e20, 127}, {-1e20, 0}, {math.NaN(), 0},
+	} {
+		if got := clampFloat(tt.in, 0, 127); got != tt.want {
+			t.Errorf("clampFloat(%v) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }

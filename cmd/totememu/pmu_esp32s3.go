@@ -256,7 +256,7 @@ func (p *pmu) battery() emulator.Battery {
 		// A chip that has stopped answering is not a board without one:
 		// say nothing rather than claim there is no cell, and let the
 		// gates stay on.
-		p.warnOnce(&p.saidNoAnswer, "power chip did not answer", err)
+		warnOnce(p.log, &p.saidNoAnswer, "power chip did not answer", err)
 		return emulator.Battery{}
 	}
 	p.saidNoAnswer = false
@@ -271,7 +271,7 @@ func (p *pmu) battery() emulator.Battery {
 	var b emulator.Battery
 	mV, err := p.millivolts()
 	if err != nil {
-		p.warnOnce(&p.saidNoVolts, "battery voltage could not be read", err)
+		warnOnce(p.log, &p.saidNoVolts, "battery voltage could not be read", err)
 		return b
 	}
 	p.saidNoVolts = false
@@ -282,14 +282,14 @@ func (p *pmu) battery() emulator.Battery {
 		// so it would go out to every peer and drive the power mode. This
 		// happened before the bus was made reliable, and the band is what
 		// makes it a refused reading rather than a believed one.
-		p.warnOnce(&p.saidOddVolts, "battery voltage is not a cell voltage",
+		warnOnce(p.log, &p.saidOddVolts, "battery voltage is not a cell voltage",
 			fmt.Errorf("%d mV is outside %d-%d", mV, minCellMV, maxCellMV))
 		return b
 	}
 	p.saidOddVolts = false
 	b.Volts = float32(mV) / 1000
 	if pct, err := p.read(pmuRegBatPct); err != nil {
-		p.warnOnce(&p.saidNoPct, "battery percentage could not be read", err)
+		warnOnce(p.log, &p.saidNoPct, "battery percentage could not be read", err)
 		return b
 	} else if pct <= 100 {
 		// Above 100 is the gauge saying it does not know yet. Left at
@@ -300,7 +300,7 @@ func (p *pmu) battery() emulator.Battery {
 	}
 	status2, err := p.read(pmuRegStatus2)
 	if err != nil {
-		p.warnOnce(&p.saidNoCharge, "charging state could not be read", err)
+		warnOnce(p.log, &p.saidNoCharge, "charging state could not be read", err)
 		return b
 	}
 	p.saidNoCharge = false
@@ -321,16 +321,20 @@ func plausibleMillivolts(mV uint16) bool { return mV >= minCellMV && mV <= maxCe
 // warnOnce says something the first time and then stays quiet until the
 // thing it is about works again.
 //
-// battery() runs every two seconds and the IMU is read twenty times a
-// second, so an unlatched warning is a part failing once and then filling
-// the only diagnostic channel the board has. The node does the same with
-// warnedClock, saidBondLimit and saidRestoreLimit, for the same reason.
-func (p *pmu) warnOnce(said *bool, msg string, err error) {
+// A free function because more than one driver needs it: the battery is read
+// every two seconds and the IMU twenty times a second, so an unlatched
+// warning is a part failing once and then filling the only diagnostic
+// channel the board has. The node does the same with warnedClock,
+// saidBondLimit and saidRestoreLimit, for the same reason.
+//
+// The caller clears the flag on the reading that works, which is the half
+// that makes a latch useful rather than permanent.
+func warnOnce(log *slog.Logger, said *bool, msg string, err error) {
 	if *said {
 		return
 	}
 	*said = true
-	p.log.Warn(msg, "err", err)
+	log.Warn(msg, "err", err)
 }
 
 // millivolts reads the 13-bit battery voltage, which the chip reports in
@@ -401,9 +405,11 @@ func (p *pmu) transact(what string, op func() error) error {
 		if try > 0 {
 			time.Sleep(pmuRetry)
 		}
-		if err = p.bus.configure(); err != nil {
-			continue
-		}
+		// The bus rebuilds itself inside each of its own operations now,
+		// which is where that belongs: the scan needs it as much as this
+		// driver does. What is left here is the retry, which is for the
+		// chip rather than the controller — switching a rail on makes the
+		// AXP2101 miss a transaction, and a second attempt gets through.
 		if err = op(); err == nil {
 			return nil
 		}

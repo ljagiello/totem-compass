@@ -85,6 +85,24 @@ func main() {
 		}
 		allow = append(allow, m)
 	}
+	// The board's own parts, where it has any, before the radio rather than
+	// after it. Nil on a board with none, and then the reading configured
+	// below is what the node reports.
+	//
+	// Before, because this is slow: a quarter second of rail cycling, three
+	// rail settles and a second spent listening to the GNSS receiver to see
+	// whether it is there. Done after startRadio, all of that ran with
+	// ESP-NOW already delivering into a sixteen-slot ring that nothing pops
+	// until the main loop — so a pairing broadcast arriving in that window
+	// was dropped. Nothing in the bring-up needs the radio.
+	//
+	// Moving it out of the emulator.Config literal was not enough on its
+	// own, and the first attempt at this claimed otherwise: the literal is
+	// evaluated in the same place relative to startRadio and the loop, so
+	// the window was exactly as wide as before.
+	sensors := newSensorSource(log, emulator.Sensors{
+		Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
+	})
 	mac, err := startRadio()
 	if err != nil {
 		fail(log, err)
@@ -126,22 +144,12 @@ func main() {
 	if len(boot0.Name) != 0 && name == "" {
 		name = boot0.Name
 	}
-	// The board's own parts, where it has any. Nil on a board with none,
-	// and then the reading below is what the node reports.
-	//
-	// Opened here rather than inside the Config literal, and boot taken
-	// again after it, because this is slow: a quarter second of rail
-	// cycling, three rail settles, and a second spent listening to the
-	// GNSS receiver to see whether it is there. Built into the literal,
-	// all of that happened after startRadio had already begun filling a
-	// sixteen-slot receive ring that nothing pops until the main loop
-	// starts — so a pairing broadcast arriving in that window was dropped
-	// — and emulator.New was then handed a boot instant a second and a
-	// half in the past, which is what its radio windows are aligned to.
-	sensors := newSensorSource(log, emulator.Sensors{
-		Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
-	})
-	boot = time.Now()
+	// A separate instant for the node, because boot is what the console's
+	// timestamps count from: rebasing it made every line logged during the
+	// bring-up print an `up` of up to 1.5 s and then the next line print
+	// 0.00s, so the board's only diagnostic channel ran backwards across
+	// exactly the window that had just been made slow.
+	nodeBoot := time.Now()
 	node := emulator.New(emulator.Config{
 		MAC: mac, Owned: allow, Name: name, AutoPair: true,
 		BattVolts: restingVolts, BattPct: restingPct,
@@ -153,8 +161,8 @@ func main() {
 		// having one.
 		OTATransport: newLocalOTA(),
 		Logger:       log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
-	}, boot)
-	saved.Restore(node, boot)
+	}, nodeBoot)
+	saved.Restore(node, nodeBoot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
 		"relay_unowned", relayUnowned == "1",
