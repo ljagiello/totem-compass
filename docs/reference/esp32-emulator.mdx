@@ -102,11 +102,15 @@ same read returned the boot log and every line after it.
 The magnetometer is a **QMC6310 at 0x3c**, the N variant; the vendor's map allows for a U at
 0x1c or a QMC6309 at 0x7c, and neither of those acknowledges. It identifies itself, its
 register map is a magnetometer's, and it measures — but what it measures on this bench is
-**2.27 gauss**, against an Earth field of 0.25 to 0.65 anywhere on the surface. Something
-magnetic is sitting next to it, which is ordinary: a magnetometer has hard-iron offsets and is
-calibrated by being turned through every orientation, which is what the firmware's own 2D and
-3D calibration runs are for. Until that has been done, a bearing from it would be confidently
-wrong, so the board takes none and says so in the log. The heading stays on the console.
+**2.27 gauss**, against an Earth field of 0.25 to 0.65 anywhere on the surface.
+
+The reading is the same to three digits on every boot — around (1.92, -1.20, 0.00) g — which
+is what a *fixed* magnetic offset looks like: something on the board or mounted with it,
+rather than anything moving nearby. That is ordinary, it is called hard iron, and it is
+removed by turning the sensor through every orientation and taking the centre of the box the
+readings sweep out. It is what the firmware's own 2D and 3D calibration runs do. Until it has
+been done a bearing from this part would be confidently wrong, so the board takes none and
+says so in the log, and the heading stays on the console.
 
 Two things this cost, both worth knowing before trusting a reading from this part:
 
