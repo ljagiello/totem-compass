@@ -188,6 +188,12 @@ magnetometer variants at once and an IMU that is wired to SPI.
 - the magnetometer identifies itself and measures a field, of 2.27 gauss, which is why no
   heading is taken from it yet.
 
+One thing to expect indoors: the odometer follows the receiver, and a receiver with four
+satellites and fourteen metres of claimed accuracy reported 127 km/h and a position wandering
+hundreds of metres. Movement is only counted when the receiver says it is moving and the step
+is larger than the accuracy it claims — which took the bench drift from 890 m in three minutes
+down, but cannot make a bad fix good. A real Totem's odometer has the same dependency.
+
 The front panel is a button and nothing else here. LILYGO's map gives this board a button on
 GPIO0 and lists no LED, and every pin it does use — so the LED a bare ESP32 module has on
 GPIO2 is not driven on this one. A pin that looks free on the silkscreen is still somebody

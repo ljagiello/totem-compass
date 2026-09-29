@@ -406,6 +406,16 @@ func (b *boardSensors) consume(p []byte) {
 	// Both halves earned their place on the bench: with neither, the
 	// odometer reached 890 m in three minutes without the board leaving the
 	// desk, and with the floor alone it still reached 286 m.
+	//
+	// Neither is a cure, and it is worth being plain about why. Indoors with
+	// four satellites and fourteen metres of claimed accuracy the receiver
+	// reported 127 km/h — its own speed field, pinned at the top of the
+	// byte — and a position that wandered hundreds of metres. The odometer
+	// followed it, because the odometer's job is to report what the receiver
+	// says. Filtering harder would mean deciding that a receiver claiming
+	// motorway speed is wrong, and sometimes it is in a car. A bad fix
+	// produces a bad odometer on a real Totem too; what this code owes is
+	// not to invent movement on top of it.
 	floor := float64(max(noiseFloorM, int(fix.AccuracyM)))
 	moving := fix.SpeedKPH > 0
 	if b.counted != nil {
