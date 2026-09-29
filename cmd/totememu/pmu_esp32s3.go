@@ -455,6 +455,6 @@ func (p *pmu) read(reg uint8) (byte, error) {
 // write writes one register.
 func (p *pmu) write(reg, val uint8) error {
 	return p.transact("write "+hexByte(val)+" to register "+hexByte(reg), func() error {
-		return p.bus.bus.Tx(pmuAddr, []byte{reg, val}, nil)
+		return p.bus.writeReg(pmuAddr, reg, val)
 	})
 }

@@ -174,6 +174,22 @@ func (b i2cBus) readReg(addr uint16, reg uint8) (byte, error) {
 	return got[0], nil
 }
 
+// writeReg writes one register, rebuilding the bus first like every other
+// operation here.
+//
+// It exists because the PMU's own write did not. Every read went through
+// readReg and got the rebuild; the one write went straight to Tx, on a
+// controller that the header above explains no amount of retrying recovers.
+// A wedge during the rail bring-up therefore failed all five attempts, and
+// openPMU returning an error means no battery, no GNSS with ALDO4 left off
+// as LILYGO ship it, no IMU and no compass.
+func (b i2cBus) writeReg(addr uint16, reg, val uint8) error {
+	if err := b.configure(); err != nil {
+		return err
+	}
+	return b.bus.Tx(addr, []byte{reg, val}, nil)
+}
+
 // present says whether anything acknowledges this address.
 //
 // A write, because a write is the only transaction whose NACK this driver

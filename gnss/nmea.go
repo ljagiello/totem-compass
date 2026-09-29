@@ -73,18 +73,26 @@ type Reader struct {
 	altitude  int16
 	ggaAt     uint64
 	sentences uint64
+	others    uint64
 	bad       uint64
 }
 
-// ggaStaleAfter is how many sentences a GGA's satellite count, accuracy and
-// altitude stay attached to the fixes that follow it. A receiver sends its
-// cycle once a second and a cycle is a handful of sentences, so ten covers
-// a normal one twice over and still notices a GGA that has stopped.
-const ggaStaleAfter = 10
+// ggaStaleAfter is how many sentences of interest a GGA's satellite count,
+// accuracy and altitude stay attached to the fixes that follow it.
+//
+// Of interest, not of all kinds, and that distinction is the whole value of
+// the number. A multi-constellation receiver sends GGA, then GLL, a GSA for
+// each constellation and eight or nine GSVs, and only then RMC — fifteen or
+// more sentences, none of which this package reads. Counting those made every
+// GGA stale before the RMC it belonged to arrived, so outdoors with a good
+// sky every fix reported no satellites, no accuracy and no altitude: exactly
+// when those carry information. Counting only GGA and RMC, two is a cycle and
+// four is generous.
+const ggaStaleAfter = 4
 
 // Sentences is how many sentences have parsed, whether or not this package
 // had any use for them.
-func (r *Reader) Sentences() uint64 { return r.sentences }
+func (r *Reader) Sentences() uint64 { return r.sentences + r.others }
 
 // Bad is how many were thrown away, for a checksum that did not match or a
 // field that was not a number.
@@ -187,6 +195,12 @@ func (r *Reader) sentence(s string) (Fix, bool) {
 		}
 		r.sentences++
 		return fix, ok
+	default:
+		// Read, understood to be none of our business, and not counted:
+		// the counter is what the staleness window measures in, and a
+		// receiver's GSVs are not a measure of how old its GGA is.
+		r.others++
+		return Fix{}, false
 	}
 	r.sentences++
 	return Fix{}, false
@@ -379,7 +393,12 @@ func utc(date, clock string) time.Time {
 	if !okD || !okM || !okY || !okH || !okMi || !okS {
 		return time.Time{}
 	}
-	if month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || sec > 60 {
+	// 59, not 60. A sixtieth second passed and time.Date carried it into
+	// the next minute, which the day-and-month check below cannot see — so
+	// the fix arrived with a clock a minute ahead of the sentence, and that
+	// clock is what the node re-slots its radio windows against and hands
+	// to every peer that adopts it.
+	if month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || sec > 59 {
 		return time.Time{}
 	}
 	t := time.Date(2000+year, time.Month(month), day, hour, minute, sec, 0, time.UTC)

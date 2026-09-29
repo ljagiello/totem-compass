@@ -62,6 +62,11 @@ const (
 	magEvery = 100 * time.Millisecond
 )
 
+// noiseFloorM is the least the odometer will count as a step, whatever the
+// receiver claims for its accuracy. Five metres is inside any fix's
+// uncertainty, so nothing below it is movement.
+const noiseFloorM = 5
+
 // boardSensors reads what the board can read and falls back to a held
 // reading for the rest.
 type boardSensors struct {
@@ -129,9 +134,10 @@ type boardSensors struct {
 	// Command, and the parse-and-print round trip that is fuzzed, which is
 	// more than a diagnostic console needs to be worth; it is written down
 	// here rather than left to be discovered.
-	battByHand   bool
-	posByHand    bool
-	orientByHand bool
+	battByHand    bool
+	posByHand     bool
+	orientByHand  bool
+	headingByHand bool
 
 	// saidNoIMU is whether the IMU's failure has already been reported,
 	// cleared by the next reading that works.
@@ -150,6 +156,16 @@ type boardSensors struct {
 	iron       emulator.HardIron
 	calibrated bool
 	magAt      time.Time
+	// haveHeading says a compass reading has actually succeeded. Without it
+	// the zero value of heading — due north — went into the status frame
+	// between calibration finishing and the first read working, which is a
+	// bearing nothing ever measured.
+	haveHeading bool
+
+	// cal is a calibration turn in progress, collected over successive
+	// polls, and calUntil is when it ends. Nil when none is running.
+	cal      *emulator.Sweep
+	calUntil time.Time
 }
 
 // newSensorSource wires up the board's sensors. It returns nil when there
@@ -287,9 +303,7 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 			s.Battery = b.battery
 		}
 	}
-	if b.port != nil {
-		b.drain()
-	}
+	b.drain()
 	if b.imu != nil && !b.orientByHand {
 		if b.imuAt.IsZero() || now.Sub(b.imuAt) >= imuEvery {
 			b.imuAt = now
@@ -308,17 +322,26 @@ func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 		// between readings is the same one.
 		s.Orientation = b.orientation.Orientation()
 	}
-	if b.mag != nil && b.calibrated {
+	if b.cal != nil {
+		b.collectCal(now)
+	}
+	if b.mag != nil && b.calibrated && b.cal == nil && !b.headingByHand {
 		if b.magAt.IsZero() || now.Sub(b.magAt) >= magEvery {
 			b.magAt = now
 			if az, err := b.azimuth(); err != nil {
 				warnOnce(b.log, &b.saidNoMag, "magnetometer could not be read", err)
 			} else {
 				b.saidNoMag = false
-				b.heading = az
+				b.heading, b.haveHeading = az, true
 			}
 		}
-		s.Azimuth = b.heading
+		// Only once a reading has succeeded. The zero value of heading is
+		// due north, and reporting it between a calibration finishing and
+		// the first read working would put a bearing nothing ever measured
+		// into the status frame and into every peer's arrow.
+		if b.haveHeading {
+			s.Azimuth = b.heading
+		}
 	}
 	if b.fix != nil && !b.posByHand {
 		// The copy made when the fix arrived, not a fresh one now. The node
@@ -360,11 +383,31 @@ func (b *boardSensors) consume(p []byte) {
 		HeadingOfMotion: got.CourseDeg,
 		Time:            got.Time,
 	}
-	// The odometer carries over, plus however far this fix is from the
-	// last one. Movement under five meters is not counted: a receiver
-	// standing still wanders by a few meters a second, and adding that up
-	// would have the board claim kilometers from a desk.
-	const noiseFloorM = 5
+	// The odometer carries over, plus however far this fix is from the last
+	// position that counted.
+	// How far the receiver must have moved for it to count as movement.
+	//
+	// A fixed five metres is not enough, and three minutes on a bench
+	// proved it: the odometer reached 890 m without the board leaving the
+	// desk. A receiver reporting nine metres of accuracy wanders by about
+	// that, so a five-metre leg is inside its own uncertainty — and every
+	// time the wander crossed the floor it was counted and the anchor moved
+	// with it. Movement smaller than the receiver's stated accuracy is not
+	// movement it can see, so the floor is whichever is larger.
+	// Movement is counted when the receiver says it is moving, and only
+	// then measured. Speed comes from RMC's own knots field, so it is the
+	// receiver's answer to the question rather than this program's guess
+	// from displacement — a fix wandering on a bench reports nothing, and
+	// distance alone could not tell that from a slow walk. The floor on top
+	// of it is the position noise: whichever is larger of five meters and
+	// whatever accuracy the receiver claims, because movement smaller than
+	// its own uncertainty is not movement it can see.
+	//
+	// Both halves earned their place on the bench: with neither, the
+	// odometer reached 890 m in three minutes without the board leaving the
+	// desk, and with the floor alone it still reached 286 m.
+	floor := float64(max(noiseFloorM, int(fix.AccuracyM)))
+	moving := fix.SpeedKPH > 0
 	if b.counted != nil {
 		// From the last position that was counted, not the last fix. A
 		// receiver sends one fix a second, so walking covers about 1.4 m
@@ -373,7 +416,8 @@ func (b *boardSensors) consume(p []byte) {
 		// accumulated. A person could walk a kilometre and the odometer
 		// would still read nothing; only travel above about 18 km/h ever
 		// registered at all.
-		if moved := emulator.DistanceM(b.counted.Lat, b.counted.Lon, fix.Lat, fix.Lon); moved >= noiseFloorM {
+		moved := emulator.DistanceM(b.counted.Lat, b.counted.Lon, fix.Lat, fix.Lon)
+		if moving && moved >= floor {
 			b.odometerM += int32(moved)
 			anchor := *fix
 			b.counted = &anchor
@@ -401,8 +445,23 @@ func (b *boardSensors) azimuth() (int16, error) {
 	if err != nil {
 		return 0, err
 	}
-	deg := emulator.Heading(x-b.iron.X, y-b.iron.Y, z-b.iron.Z, pitch, roll)
-	return int16(deg + 0.5), nil
+	return bearing(x-b.iron.X, y-b.iron.Y, z-b.iron.Z, pitch, roll), nil
+}
+
+// bearing is emulator.Heading rounded to a whole degree that is still a
+// bearing.
+//
+// Heading answers in [0, 360), so anything from 359.5 up rounds to 360 — and
+// the node refuses 360 as not a bearing and keeps the previous one, so
+// pointing the board just west of north dropped the reading entirely. The
+// NMEA parser guards the identical case for the course over ground; this is
+// the same guard.
+func bearing(x, y, z, pitchDeg, rollDeg float64) int16 {
+	deg := int16(emulator.Heading(x, y, z, pitchDeg, rollDeg) + 0.5)
+	if deg >= 360 {
+		deg = 0
+	}
+	return deg
 }
 
 // imuTilt is the pose the compass is corrected for. Without an IMU the board
@@ -412,21 +471,55 @@ func (b *boardSensors) imuTilt() (pitch, roll float64, err error) {
 	if b.imu == nil {
 		return 0, 0, nil
 	}
+	// The pose the orientation branch read at most 50 ms ago, if there is
+	// one. The part converts at 31 Hz and this is asked every 100 ms, so a
+	// fresh burst would usually return the same conversion at twice the SPI
+	// traffic, in a loop that has 5 ms radio windows to hit.
+	if pitch, roll, ok := b.imu.lastPose(); ok {
+		return pitch, roll, nil
+	}
 	return b.imu.pitchRoll()
 }
 
-// calibrateMag runs a calibration turn and, if it worked, starts reporting a
-// heading from the compass.
+// calibrateMag starts a calibration turn. It returns at once: the readings
+// are collected by Read over the next twenty seconds, because a loop here
+// would hold the main loop and with it the radio — see mag_esp32s3.go.
 func (b *boardSensors) calibrateMag(now func() time.Time) {
 	if b.mag == nil {
 		b.log.Warn("no magnetometer to calibrate on this board")
 		return
 	}
-	iron, ok := b.mag.calibrate(b.log, now)
-	if !ok {
+	b.cal, b.calUntil = &emulator.Sweep{}, now().Add(magCalFor)
+	b.log.Info("magnetometer calibration: turn the board through every orientation, slowly",
+		"seconds", int(magCalFor.Seconds()))
+}
+
+// collectCal adds a reading to a calibration in progress and finishes it when
+// its time is up.
+func (b *boardSensors) collectCal(now time.Time) {
+	if b.magAt.IsZero() || now.Sub(b.magAt) >= magEvery {
+		b.magAt = now
+		if x, y, z, err := b.mag.field(); err == nil {
+			b.cal.Add(x, y, z)
+		}
+	}
+	if now.Before(b.calUntil) {
 		return
 	}
-	b.iron, b.calibrated = iron, true
+	sweep := b.cal
+	b.cal = nil
+	dx, dy, dz := sweep.Spans()
+	offset, ok := sweep.Offset()
+	if !ok {
+		b.log.Warn("calibration refused: the board was not turned enough",
+			"readings", sweep.Readings(), "span_x_g", dx, "span_y_g", dy, "span_z_g", dz,
+			"need_each_g", emulator.SweepMinSpanG)
+		return
+	}
+	b.iron, b.calibrated, b.haveHeading = offset, true, false
+	b.log.Info("magnetometer calibrated", "readings", sweep.Readings(),
+		"offset_x_g", offset.X, "offset_y_g", offset.Y, "offset_z_g", offset.Z,
+		"span_x_g", dx, "span_y_g", dy, "span_z_g", dz)
 	b.log.Info("the compass is now read from the magnetometer")
 }
 
@@ -447,13 +540,17 @@ func (b *boardSensors) magReport() {
 			"field_g", field, "earth_g", "0.25 to 0.65", "run", "mag calibrate")
 		return
 	}
-	az, err := b.azimuth()
+	// The bearing from the reading already in hand, not from another one.
+	// field() clears the part's data-ready flag, and at 50 Hz a second read
+	// microseconds later finds nothing new — so asking twice reported "no
+	// measurement ready yet" instead of the heading, every time.
+	pitch, roll, err := b.imuTilt()
 	if err != nil {
-		b.log.Warn("magnetometer could not be read", "err", err)
+		b.log.Warn("the tilt could not be read, so the bearing would not be compensated", "err", err)
 		return
 	}
-	b.log.Info("compass", "heading_deg", az, "field_g", field,
-		"iron_x_g", b.iron.X, "iron_y_g", b.iron.Y, "iron_z_g", b.iron.Z)
+	b.log.Info("compass", "heading_deg", bearing(x-b.iron.X, y-b.iron.Y, z-b.iron.Z, pitch, roll),
+		"field_g", field, "iron_x_g", b.iron.X, "iron_y_g", b.iron.Y, "iron_z_g", b.iron.Z)
 }
 
 // The console's half. Each one goes straight through to the held reading,
@@ -483,8 +580,19 @@ func (b *boardSensors) SetFix(f *emulator.Fix) {
 }
 
 func (b *boardSensors) SetAzimuth(deg int16) {
-	if b.ctl != nil {
-		b.ctl.SetAzimuth(deg)
+	if b.ctl == nil {
+		return
+	}
+	b.ctl.SetAzimuth(deg)
+	// Latched like the battery and the orientation, and for the same reason:
+	// once the compass is calibrated Read overwrites the azimuth on every
+	// poll, so without this the heading command reported success and the
+	// next status frame five milliseconds later carried the magnetometer's
+	// bearing again. A command that quietly does nothing is the one thing
+	// Controls exists to rule out.
+	if !b.headingByHand {
+		b.headingByHand = true
+		b.log.Warn("heading set by hand: the magnetometer is no longer read", "deg", deg)
 	}
 }
 

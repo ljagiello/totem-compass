@@ -16,8 +16,12 @@ package main
 //
 // Only the accelerometer is set up. What a Totem does with this part is
 // decide whether it is upright or lying down, and gravity answers that on
-// its own; the gyroscope earns its keep in the firmware's heading fusion,
-// which needs a magnetometer this board does not have.
+// its own — and the tilt it gives is what the compass is corrected by. The
+// gyroscope is left alone: the firmware's heading fusion uses it to carry a
+// bearing through a turn faster than the magnetometer settles, which is a
+// refinement on top of a compass that works, and this board's compass needs
+// calibrating before it works at all. (An earlier version of this comment
+// said the board had no magnetometer. It has one; see mag_esp32s3.go.)
 
 import (
 	"errors"
@@ -70,14 +74,22 @@ const (
 type imu struct {
 	bus *machine.SPI
 
-	// The axes of the last reading that passed the gravity check, so a
-	// caller that wants both the pose and what it came from can have them
-	// without asking the part twice and getting two different answers.
+	// The last reading that passed the gravity check, and the pose worked
+	// out from it, so a caller that wants either can have it without asking
+	// the part again and getting a different answer — or, at 31 Hz against
+	// a caller that reads twice as often, the same answer at twice the cost.
 	lastX, lastY, lastZ float64
+	lastPitch, lastRoll float64
+	haveLast            bool
 }
 
 // last is the acceleration, in g, behind the most recent pitch and roll.
 func (m *imu) last() (x, y, z float64) { return m.lastX, m.lastY, m.lastZ }
+
+// lastPose is the most recent pitch and roll, and whether there is one.
+func (m *imu) lastPose() (pitch, roll float64, ok bool) {
+	return m.lastPitch, m.lastRoll, m.haveLast
+}
 
 // openIMU sets the accelerometer running and checks it is the part the pin
 // map says it is.
@@ -184,10 +196,11 @@ func (m *imu) pitchRoll() (pitch, roll float64, err error) {
 	if mag < minGravityG || mag > maxGravityG {
 		return 0, 0, fmt.Errorf("%w: %.4f g across (%.4f, %.4f, %.4f)", errNoGravity, mag, x, y, z)
 	}
-	m.lastX, m.lastY, m.lastZ = x, y, z
 	const deg = 180 / math.Pi
 	roll = math.Atan2(y, z) * deg
 	pitch = math.Atan2(-x, math.Sqrt(y*y+z*z)) * deg
+	m.lastX, m.lastY, m.lastZ = x, y, z
+	m.lastPitch, m.lastRoll, m.haveLast = pitch, roll, true
 	return pitch, roll, nil
 }
 

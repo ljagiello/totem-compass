@@ -2012,6 +2012,12 @@ func (n *Node) SetClock(wall, now time.Time) error {
 // SetSensors replaces the sensor source, such as a simulated Totem or a
 // board's own drivers.
 func (n *Node) SetSensors(src SensorSource, now time.Time) {
+	// Any source set from outside settles what StopSim would restore: the
+	// stash is only meaningful for the source StartSim itself pushed aside,
+	// and a later StopSim reinstating a driver that something else had
+	// already replaced would discard both that source and the simulation's
+	// last reading. StartSim sets the stash again after calling this.
+	n.replaced = nil
 	n.source = src
 	n.cfg.Sensors = src
 	n.read(now)
@@ -2095,12 +2101,19 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 	// opened once at startup and cannot be rebuilt from a struct. Dropping
 	// one on the floor left a board reporting invented readings from parts
 	// sitting powered and unread until it was rebooted.
+	aside, hardware := n.source, false
 	if _, held := n.source.(*staticSensors); !held {
-		n.replaced = n.source
+		hardware = true
 		n.log.Warn("the board's own sensors are set aside while the simulation runs; " +
 			"sim off gives them back")
 	}
 	n.SetSensors(NewSim(cfg, now), now)
+	if hardware {
+		// After, not before: SetSensors clears the stash, because a source
+		// arriving by any other route settles the question of what there is
+		// to go back to.
+		n.replaced = aside
+	}
 	n.log.Info("simulation started", "motion", m, "bearing", bearing)
 	if cfg.NoFix {
 		n.log.Warn("the simulation has no position to walk from: set one with pos <lat> <lon>")

@@ -162,6 +162,9 @@ func TestOverlongLineIsDropped(t *testing.T) {
 }
 
 func TestUnknownSentencesAreCounted(t *testing.T) {
+	// Counted as read, and not as bad — but kept apart from the sentences
+	// this package acts on, because those are what the GGA staleness window
+	// is measured in. See TestStaleGGAIsNotAttached.
 	var r Reader
 	// A GSV is a real sentence this package has no use for. It should be
 	// counted as read, not as bad.
@@ -223,6 +226,10 @@ func TestBadDatesAreRefused(t *testing.T) {
 		{"month 13", "011326", "123519", true},
 		{"day 0", "000326", "123519", true},
 		{"hour 25", "230326", "253519", true},
+		// A sixtieth second passed and time.Date carried it into the next
+		// minute, which the day-and-month check cannot see.
+		{"second 60", "230326", "123560", true},
+		{"second 59", "230326", "123559", false},
 		{"short date", "2303", "123519", true},
 		{"short time", "230326", "1235", true},
 		{"not numbers", "23xx26", "123519", true},
@@ -366,10 +373,11 @@ func TestDecimal(t *testing.T) {
 // quality it has no current evidence for.
 func TestStaleGGAIsNotAttached(t *testing.T) {
 	const (
-		gga  = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n"
-		rmc  = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n"
-		zda  = "$GPZDA,123519,23,03,2026,00,00*41\r\n" // read, ignored, but counted
-		want = 8
+		gga     = "$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47\r\n"
+		rmc     = "$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230326,,*18\r\n"
+		noFix   = "$GPRMC,123519,V,,,,,,,230326,,*3A\r\n" // a sentence of ours, carrying nothing
+		ignored = "$GPGSV,3,1,11,03,03,111,00,04,15,270,00,06,01,010,00,13,06,292,00*74\r\n"
+		want    = 8
 	)
 	var r Reader
 	feed(t, &r, gga)
@@ -377,9 +385,28 @@ func TestStaleGGAIsNotAttached(t *testing.T) {
 	if !ok || fix.SatCount != want {
 		t.Fatalf("a fix right after its GGA has %d satellites, want %d", fix.SatCount, want)
 	}
-	// Push the GGA out of range with sentences that carry none of its own.
+
+	// The sentences this package does not read must not age a GGA. A
+	// multi-constellation receiver sends fifteen or more of them between a
+	// GGA and the RMC it belongs to, and counting those made every fix
+	// outdoors report no satellites and no accuracy.
+	var multi Reader
+	feed(t, &multi, gga)
+	for range 20 {
+		feed(t, &multi, ignored)
+	}
+	fix, ok = feed(t, &multi, rmc)
+	if !ok {
+		t.Fatal("the RMC after a burst of GSVs produced no fix")
+	}
+	if fix.SatCount != want {
+		t.Errorf("twenty ignored sentences aged the GGA: sats %d, want %d", fix.SatCount, want)
+	}
+
+	// Sentences this package does read age it, because they are what the
+	// window is measured in.
 	for range ggaStaleAfter + 1 {
-		feed(t, &r, zda)
+		feed(t, &r, noFix)
 	}
 	fix, ok = feed(t, &r, rmc)
 	if !ok {

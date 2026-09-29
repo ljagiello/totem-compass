@@ -23,8 +23,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"github.com/ljagiello/totem-compass/emulator"
 )
 
 const (
@@ -62,10 +60,9 @@ var errMagNotReady = errors.New("mag: no measurement ready yet")
 // How long a calibration turn is given, and how often it samples. Twenty
 // seconds is enough to turn a board through every face without hurrying,
 // and the part converts at 50 Hz so there is no point asking faster.
-const (
-	magCalFor   = 20 * time.Second
-	magCalEvery = 50 * time.Millisecond
-)
+// magCalFor is how long a calibration turn is given: enough to turn a board
+// through every face without hurrying.
+const magCalFor = 20 * time.Second
 
 // mag is the magnetometer.
 type mag struct {
@@ -159,37 +156,16 @@ func (m *mag) field() (x, y, z float64, err error) {
 	return g(raw[0], raw[1]), g(raw[2], raw[3]), g(raw[4], raw[5]), nil
 }
 
-// calibrate watches a turn and works out the hard iron from it.
-//
-// It blocks, which is the honest shape for this: it is a person picking the
-// board up and turning it over for twenty seconds, and nothing else the
-// board does matters while that happens. The radio keeps its windows because
-// this runs from the console, between polls, and the caller says so.
-func (m *mag) calibrate(log *slog.Logger, now func() time.Time) (emulator.HardIron, bool) {
-	log.Info("magnetometer calibration: turn the board through every orientation, slowly",
-		"seconds", int(magCalFor.Seconds()))
-	var sweep emulator.Sweep
-	deadline := now().Add(magCalFor)
-	for now().Before(deadline) {
-		x, y, z, err := m.field()
-		if err == nil {
-			sweep.Add(x, y, z)
-		}
-		time.Sleep(magCalEvery)
-	}
-	dx, dy, dz := sweep.Spans()
-	offset, ok := sweep.Offset()
-	if !ok {
-		log.Warn("calibration refused: the board was not turned enough",
-			"readings", sweep.Readings(), "span_x_g", dx, "span_y_g", dy, "span_z_g", dz,
-			"need_each_g", emulator.SweepMinSpanG)
-		return emulator.HardIron{}, false
-	}
-	log.Info("magnetometer calibrated", "readings", sweep.Readings(),
-		"offset_x_g", offset.X, "offset_y_g", offset.Y, "offset_z_g", offset.Z,
-		"span_x_g", dx, "span_y_g", dy, "span_z_g", dz)
-	return offset, true
-}
+// Calibration is collected by boardSensors over successive polls rather than
+// in a loop here, and the reason is worth stating where someone might be
+// tempted to put it back. Twenty seconds inside the command branch is twenty
+// seconds in which popRX is never called, so the sixteen-slot receive ring
+// overflows, and node.Poll is never called, so every radio window, mesh tick
+// and LED frame is missed and bonded peers watch the device go silent. This
+// is the same mistake the bring-up made at startup, for a window twenty
+// times longer — and the first version of this function claimed the radio
+// kept its windows because it ran "between polls", which is exactly backwards:
+// nothing polls the node between console lines.
 
 // read reads one register.
 func (m *mag) read(reg uint8) (byte, error) { return m.bus.readReg(magAddr, reg) }
@@ -212,9 +188,4 @@ func (m *mag) readInto(reg uint8, p []byte) error {
 }
 
 // write writes one register.
-func (m *mag) write(reg, val uint8) error {
-	if err := m.bus.configure(); err != nil {
-		return err
-	}
-	return m.bus.bus.Tx(magAddr, []byte{reg, val}, nil)
-}
+func (m *mag) write(reg, val uint8) error { return m.bus.writeReg(magAddr, reg, val) }

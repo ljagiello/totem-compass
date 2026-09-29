@@ -163,6 +163,28 @@ func TestSimGivesTheHardwareBack(t *testing.T) {
 	}
 }
 
+// TestSetSensorsSettlesWhatStopSimRestores: the stash is only for the source
+// StartSim itself pushed aside. A source arriving by any other route while a
+// simulation runs settles the question, and a later StopSim must not
+// reinstate a driver that something else had already replaced — that would
+// discard both it and the simulation's reading.
+func TestSetSensorsSettlesWhatStopSimRestores(t *testing.T) {
+	drv := &driverSensors{}
+	h := newHarness(t, func(c *Config) { c.Sensors = drv })
+	h.collect(h.n.Poll(h.now))
+	h.n.StartSim(Walk, 90, h.now)
+
+	// Something else installs a source while the simulation runs.
+	other := NewStatic(Sensors{Battery: Battery{Volts: 3.9, Percent: 61}})
+	h.n.SetSensors(other, h.now.Add(time.Second))
+
+	h.n.StopSim(h.now.Add(2 * time.Second))
+	h.collect(h.n.Poll(h.now.Add(3 * time.Second)))
+	if got := h.n.Sensors().Battery.Percent; got != 61 {
+		t.Errorf("battery %d%% after stopping, want the 61%% the other source reports", got)
+	}
+}
+
 // TestSimOnAHeldReadingStillFreezes: the other half of the same rule. With
 // no driver to give back, stopping a simulation keeps its last reading,
 // which is what it has always done.
