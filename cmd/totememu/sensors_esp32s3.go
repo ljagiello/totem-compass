@@ -37,6 +37,25 @@ import (
 // than once per poll.
 const gnssBlock = 128
 
+// How often each part is actually asked, because the node polls every 5 ms
+// and none of them has anything new to say that often.
+//
+// Two of them are expensive: the battery costs an I2C bus rebuild — 200 of
+// those a second, for a value that moves over minutes — and the IMU an SPI
+// transaction, against a part producing samples at 31 Hz. Neither is worth
+// taking time from the radio, whose windows this same loop has to hit.
+//
+// The receiver is not rate limited, deliberately. Draining it is a read of
+// the FIFO's depth and costs nothing like the other two, while not draining
+// it does cost something: at 9600 baud a 128-byte FIFO fills in 133 ms, and
+// a sentence lost to an overrun is a second with no position.
+const (
+	battEvery = 2 * time.Second
+	// Half the shortest orientation dwell, so a pose still gets two
+	// readings to make its case within the 100 ms it has to hold for.
+	imuEvery = 50 * time.Millisecond
+)
+
 // boardSensors reads what the board can read and falls back to a held
 // reading for the rest.
 type boardSensors struct {
@@ -69,6 +88,13 @@ type boardSensors struct {
 	// so the type assertion happens once, at construction, where it can
 	// still be reported.
 	ctl emulator.Controls
+
+	// battery is the last reading from the power chip and battAt when it was
+	// taken; imuAt is the same for the IMU, whose reading the tracker keeps
+	// rather than this.
+	battery emulator.Battery
+	battAt  time.Time
+	imuAt   time.Time
 
 	// orientation applies the firmware's own two-state machine to what the
 	// IMU reads, so a board reports upright and flat on the same
@@ -157,17 +183,27 @@ func (b *boardSensors) report() {
 func (b *boardSensors) Read(now time.Time) emulator.Sensors {
 	s := b.held.Read(now)
 	if b.pmu != nil && !b.battByHand {
-		s.Battery = b.pmu.battery()
+		if b.battAt.IsZero() || now.Sub(b.battAt) >= battEvery {
+			b.battery, b.battAt = b.pmu.battery(), now
+		}
+		s.Battery = b.battery
 	}
 	if b.port != nil {
 		b.drain()
 	}
 	if b.imu != nil && !b.orientByHand {
-		if pitch, roll, err := b.imu.pitchRoll(); err != nil {
-			b.log.Warn("imu could not be read", "err", err)
-		} else {
-			s.Orientation = b.orientation.Update(pitch, roll, now)
+		if b.imuAt.IsZero() || now.Sub(b.imuAt) >= imuEvery {
+			b.imuAt = now
+			if pitch, roll, err := b.imu.pitchRoll(); err != nil {
+				b.log.Warn("imu could not be read", "err", err)
+			} else {
+				b.orientation.Update(pitch, roll, now)
+			}
 		}
+		// The committed state, whether or not it was just asked: the
+		// tracker holds a pose for seconds at a time, so the answer
+		// between readings is the same one.
+		s.Orientation = b.orientation.Orientation()
 	}
 	if b.fix != nil && !b.posByHand {
 		// A copy: the node must not hold a pointer the next fix writes
