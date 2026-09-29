@@ -95,6 +95,13 @@ type magConsole interface {
 	calibrateMag(now func() time.Time)
 }
 
+// talkerSource is a sensor source backed by a real receiver, which can say
+// which constellations it is solving from. Reported with the rest of the
+// status rather than only at the first fix: a line logged once at boot is
+// gone by the time anyone wonders, and this is the number that bounds how
+// accurate every position the board sends can be. See gnss.Reader.Talker.
+type talkerSource interface{ Talker() string }
+
 // The battery a board reports when nothing measures one: a healthy cell,
 // not a flat one. It is both what the node is configured with and what the
 // board's sensor source falls back to, so the two cannot drift apart.
@@ -422,6 +429,11 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store,
 		if p := n.Fix(); p != nil {
 			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM,
 				"speed", p.SpeedKPH, "sats", p.SatCount, "odometer_m", p.OdometerM)
+		}
+		if t, ok := sensors.(talkerSource); ok {
+			if id := t.Talker(); id != "" {
+				self = append(self, "talker", id)
+			}
 		}
 		log.Info("self", self...)
 		for _, p := range n.Peers() {

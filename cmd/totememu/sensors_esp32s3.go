@@ -416,6 +416,10 @@ func (b *boardSensors) drain(now time.Time) {
 	}
 }
 
+// Talker is which constellations the receiver is solving from, for the
+// status line. See gnss.Reader.Talker.
+func (b *boardSensors) Talker() string { return b.nmea.Talker() }
+
 // consume feeds bytes to the parser and keeps the fix that comes out.
 func (b *boardSensors) consume(p []byte, now time.Time) {
 	got, ok := b.nmea.FeedAll(p)
@@ -512,8 +516,13 @@ func (b *boardSensors) consume(p []byte, now time.Time) {
 	first := b.fix == nil
 	b.fix, b.fixAt = fix, now
 	if first {
+		// The talker says which constellations the receiver is solving
+		// from, and so what its accuracy can ever be: GP is GPS on its own,
+		// GN is several at once. Nothing configures the receiver, so this
+		// is whatever the module's own default turned out to be.
 		b.log.Info("gnss fix", "lat", fix.Lat, "lon", fix.Lon, "sats", fix.SatCount,
-			"accuracy_m", fix.AccuracyM, "solution", fix.SolutionID, "utc", fix.Time)
+			"accuracy_m", fix.AccuracyM, "solution", fix.SolutionID, "utc", fix.Time,
+			"talker", b.nmea.Talker())
 	}
 }
 

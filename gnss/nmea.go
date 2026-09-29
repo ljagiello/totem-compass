@@ -76,7 +76,20 @@ type Reader struct {
 	sentences uint64
 	others    uint64
 	bad       uint64
+
+	// talker is the two letters the last good GGA came with. See Talker.
+	talker string
 }
+
+// Talker is the talker ID of the last GGA the receiver got through, or ""
+// before one arrives: GP for GPS alone, GN for a solution over several
+// constellations, GL, GA or BD for one of those on its own.
+//
+// It is worth reporting because it says which satellites a receiver is
+// allowed to use, which is the ceiling on the accuracy of everything built
+// on its fixes. A module left in its GPS-only default solves from a handful
+// of satellites where the same hardware would have had three times as many.
+func (r *Reader) Talker() string { return r.talker }
 
 // ggaStaleAfter is how many sentences of interest a GGA's satellite count,
 // accuracy and altitude stay attached to the fixes that follow it.
@@ -175,8 +188,11 @@ func (r *Reader) sentence(s string) (Fix, bool) {
 		return Fix{}, false
 	}
 	// The first two letters are the talker — GP for GPS, GN for several
-	// constellations at once, GL, GA, BD for one each — and this package
-	// does not care which.
+	// constellations at once, GL, GA, BD for one each. Nothing here decides
+	// anything by it, but it is the only place the receiver says how many
+	// constellations it is solving from, and that bounds the accuracy
+	// everything downstream inherits: GP alone is one constellation and the
+	// handful of satellites that go with it. Kept so it can be reported.
 	//
 	// Counted after the handler, not before it, so that a sentence is
 	// either good or bad and never both. Counting here and then letting
@@ -189,6 +205,7 @@ func (r *Reader) sentence(s string) (Fix, bool) {
 		if !r.gga(fields) {
 			return Fix{}, false
 		}
+		r.talker = fields[0][:2]
 	case "RMC":
 		fix, ok, good := r.rmc(fields)
 		if !good {

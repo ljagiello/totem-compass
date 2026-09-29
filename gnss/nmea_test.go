@@ -514,3 +514,30 @@ func TestClampFloat(t *testing.T) {
 		}
 	}
 }
+
+// TestReaderTalker: the talker is the only place the receiver says how many
+// constellations it solves from, which is the ceiling on the accuracy of
+// every fix built on it. It comes from GGA, the sentence carrying the
+// satellite count it explains.
+func TestReaderTalker(t *testing.T) {
+	var r Reader
+	if got := r.Talker(); got != "" {
+		t.Errorf("a reader with no sentences reported talker %q", got)
+	}
+	feed(t, &r, "$GPGGA,123519,4807.038,N,01131.000,E,1,05,0.9,545.4,M,46.9,M,,*4A\r\n")
+	if got := r.Talker(); got != "GP" {
+		t.Errorf("after a GPS-only GGA the talker was %q, want GP", got)
+	}
+	// A receiver that starts solving over several constellations says so on
+	// its next GGA, and the reader may not go on reporting the old answer.
+	feed(t, &r, "$GNGGA,123520,4807.038,N,01131.000,E,1,14,0.7,545.4,M,46.9,M,,*50\r\n")
+	if got := r.Talker(); got != "GN" {
+		t.Errorf("after a multi-constellation GGA the talker was %q, want GN", got)
+	}
+	// A GGA too short to hold its fields is not an answer about anything,
+	// so the last real one stands.
+	feed(t, &r, "$GLGGA,123521,4807.038*52\r\n")
+	if got := r.Talker(); got != "GN" {
+		t.Errorf("a truncated GGA changed the talker to %q", got)
+	}
+}
