@@ -2074,7 +2074,15 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 		Motion: m, Bearing: bearing, NoFix: n.fix() == nil,
 		// The battery carries over as it reads, 0% included: a simulation
 		// started on a flat device must not report a full one.
-		Percent: n.sensors.Battery.Percent, Charging: n.sensors.Battery.Charging,
+		//
+		// Unless there is no cell to carry over. A board whose power chip
+		// says nothing is fitted reads 0% because that is the absence of a
+		// reading, not a flat pack, and starting a simulation from it put
+		// the board straight into power mode low — watched happen on the
+		// bench. A negative percentage is how SimConfig is asked for its
+		// own default, which is the honest answer here: a simulation on a
+		// board with no cell is simulating the cell too.
+		Percent: simPercent(n.sensors.Battery), Charging: n.sensors.Battery.Charging,
 		Flat: n.sensors.Orientation == mesh.OrientationHorizontal, Rand: n.rng,
 	}
 	if f := n.fix(); f != nil {
@@ -2097,6 +2105,16 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 	if cfg.NoFix {
 		n.log.Warn("the simulation has no position to walk from: set one with pos <lat> <lon>")
 	}
+}
+
+// simPercent is the charge a simulation starts from, given the reading it
+// replaces. It is the reading itself, or a request for SimConfig's default
+// when that reading is the absence of a cell rather than an empty one.
+func simPercent(b Battery) int8 {
+	if b.NoBattery || b.NoPowerChip {
+		return -1
+	}
+	return b.Percent
 }
 
 // StopSim freezes the readings where the simulation left them.
