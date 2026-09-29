@@ -88,9 +88,15 @@ func (g *globals) phase(name string) {
 }
 
 const wakeHelp = `The Totem keeps Bluetooth off to save power and switches it off again
-after every session. To make it connectable, double-press the power button:
-the crystal breathes blue while it advertises, for 60 seconds. The
-double-press toggles, so if it doesn't breathe blue, press again.
+after every session, so every command needs its own press: to make it
+connectable, double-press the power button. The crystal breathes blue while it
+advertises, for 60 seconds. A second double-press only re-arms those 60
+seconds, it does not turn Bluetooth off again, so press again if the crystal
+isn't breathing.
+
+Start the command first and press while it is scanning. The advertising window
+and the default scan timeout are both 60 s, so pressing first spends the window
+on your typing.
 
 A Totem connected to another device, such as the Totem phone app, stops
 advertising and can't be found. Close the app (or turn off the phone's
@@ -280,7 +286,9 @@ func (g *globals) connectBLE(ctx context.Context, opts client.Options) (*client.
 				"pick one by the address `totemctl scan` shows"
 		}
 		return nil, fmt.Errorf("%w%s. A Totem is only visible for 60 s after a double-press of the power button, "+
-			"while its crystal breathes blue (the double-press toggles, so press again if it doesn't). "+
+			"while its crystal breathes blue; it goes off again after every session, so each command needs "+
+			"its own press. Start the command first and press while it scans: a second double-press only "+
+			"re-arms the 60 s, it will not turn Bluetooth off. "+
 			"If the Totem phone app is open nearby, close it: a connected Totem stops advertising", err, hint)
 	}
 	if err != nil {
