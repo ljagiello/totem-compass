@@ -149,20 +149,56 @@ not:
 - **`RESV` is typed NO-CONNECT** on the ICM-20948 symbol, and I had tied it
   to ground. The symbol is authored from the datasheet, so it wins.
 
-### There is no drawn sheet, on purpose
+### The sheet
+
+```
+python3 gen_sch.py                                    # writes totem.kicad_sch
+kicad-cli sch erc --output totem_erc.rpt totem.kicad_sch
+kicad-cli sch export svg --output . totem.kicad_sch   # writes totem.svg
+```
+
+**Open `totem.kicad_sch` in KiCad.** It is generated from the same `totem.py`
+the ERC checks, so the drawing cannot drift away from the netlist, and it
+embeds KiCad's own symbol definitions — the drawing of a resistor is KiCad's
+drawing of a resistor.
+
+Connections are made with labels at every pin rather than routed wires. That
+is a real schematic style and the honest one for a generated sheet: automatic
+routing produces a tangle that looks like a drawing but explains nothing,
+while a label says exactly what a pin is connected to.
+
+**KiCad's own ERC: 0 errors, 2 warnings.** Both are explainable and left
+reported. `SDO/AD0` is the ICM-20948's address-select pin strapped low, which
+KiCad notes because a bidirectional pin is sitting on a power net. `PROG` is
+isolated because U3 is not on the sheet at all — the TP4056 has no KiCad
+symbol, so it is the one part that cannot be drawn, and `gen_sch.py` says so
+when it runs rather than quietly omitting it.
+
+Getting there took three rounds, each of which is a thing a hand-drawn sheet
+would have hidden:
+
+- **124 off-grid endpoints**, from a 40 mm margin that is not a multiple of
+  KiCad's 1.27 mm grid. With a label on every pin, one careless constant is
+  one violation per pin.
+- **35 unconnected pins**, now carrying explicit no-connect markers, which is
+  how a schematic says "deliberately" rather than leaving a reader to guess.
+- **A symbol that drew as nothing.** `AP2127K-3.3` *extends* `AP2204K-1.5`,
+  so its own block holds properties and no pins at all. Embedded as it comes,
+  the regulator would have landed on the sheet with no pins to attach a wire
+  to. `kicad_sexp.py` flattens inherited symbols for that reason.
+
+### The earlier drawing, and why it went
 
 SKiDL 2.3.0 cannot draw this circuit: both `generate_svg` and
 `generate_schematic` crash in its `kicad10` backend on the real multi-unit
 symbols (`gen_svg.py:310`, `AttributeError: 'NoneType' object has no
-attribute 'net'`). An earlier drawing existed, made when the parts were
-simplified inline definitions, and it has been **deleted rather than kept**:
-it no longer matched the netlist, and a picture that disagrees with the
-netlist is worse than no picture.
+attribute 'net'`). That is why `gen_sch.py` exists and writes the sheet
+directly.
 
-The trade was between a drawing with invented pin numbers and a netlist with
-real ones that an ERC can check. The netlist is the more useful artifact, and
-finding the missing `EN` connection is the proof. `totem.net` imports into
-KiCad for layout; a drawn sheet would have to be laid out there.
+An earlier SVG did exist, made when the parts were simplified inline
+definitions, and it was **deleted rather than kept**: once the parts became
+real symbols it no longer matched the netlist, and a picture that disagrees
+with the netlist is worse than no picture.
 
 ## Three findings worth keeping
 

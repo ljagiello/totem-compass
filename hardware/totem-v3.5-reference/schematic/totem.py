@@ -176,7 +176,7 @@ v3v3 += (
     u5["VDD"], u5["VDDIO"], u5["~{CS}"], r_sda[1], r_scl[1],
 )
 
-u3["2"] += r_prog[1]
+net("PROG", u3["2"], r_prog[1])
 u5["REGOUT"] += c_reg[1]
 
 # The module's own reset. EN must be held high for the ESP32 to run, and the

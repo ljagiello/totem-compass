@@ -1,4 +1,5 @@
 *.log
 *.erc
+*.rpt
 skidl_REPL.*
 __pycache__/
