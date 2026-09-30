@@ -1,0 +1,1109 @@
+(export 
+  (version "D")
+  (design
+    (source "totem.py")
+    (date "09/29/2026 06:04 PM")
+    (tool "SKiDL (2.3.0)")
+    (sheet
+      (number 1)
+      (name "/")
+      (tstamps "/")
+      (title_block
+        (title)
+        (company)
+        (rev)
+        (date)
+        (source "totem.py")
+        (comment
+          (number "1")
+          (value ""))
+        (comment
+          (number "2")
+          (value ""))
+        (comment
+          (number "3")
+          (value ""))
+        (comment
+          (number "4")
+          (value ""))
+        (comment
+          (number "5")
+          (value ""))
+        (comment
+          (number "6")
+          (value ""))
+        (comment
+          (number "7")
+          (value ""))
+        (comment
+          (number "8")
+          (value ""))
+        (comment
+          (number "9")
+          (value "")))))
+  (components
+    (comp
+      (ref "DS1")
+      (value "HALO_RING_60PX")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "6WGASw33dH")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "HALO_RING_60PX"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "6016fae8-9a58-51ed-97c6-771d7facf6a6"))
+    (comp
+      (ref "DS2")
+      (value "CRYSTAL_7PX")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "pi8gQaIBH7")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "CRYSTAL_7PX"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "1f72de0c-99ee-50ab-9f2c-3eacb3f511d0"))
+    (comp
+      (ref "DS3")
+      (value "LED_SOS")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "F8WQElA81C")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "LED_SOS"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "e85deb70-944a-5f90-a110-3ae17f567981"))
+    (comp
+      (ref "J1")
+      (value "USB-C")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "IMfmtSwS0B")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "USB-C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "0ab2aa15-ed22-5afe-920a-3ab71ca9785f"))
+    (comp
+      (ref "J2")
+      (value "JST_BATT")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "NjvqokhNEY")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "JST_BATT"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "1ba95e62-8152-5c91-a8e2-db54c90bba92"))
+    (comp
+      (ref "J3")
+      (value "UFL_GNSS_ANT")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "lBKWmBBM4a")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "UFL_GNSS_ANT"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "2b8c31f5-1554-5399-8d3e-e1cc08976890"))
+    (comp
+      (ref "MK1")
+      (value "MIC_MEMS")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "nLHbxb0_yL")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "MIC_MEMS"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "1c00e9a5-d594-5d5f-b321-d1a061513f1c"))
+    (comp
+      (ref "Q1")
+      (value "PMOS_LED_SW")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "94InA1P67C")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "PMOS_LED_SW"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "31c17853-05ff-55cd-bebd-6a27645a905d"))
+    (comp
+      (ref "R1")
+      (value "120k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "JjEnlIreCJ")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "cd7505ee-2dce-56cc-afee-62486b35d6ae"))
+    (comp
+      (ref "R10")
+      (value "100k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "tsjn6peKqP")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "e51990e7-0893-5dec-89a7-88507b4630f0"))
+    (comp
+      (ref "R11")
+      (value "10k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "2T6a0wRKOs")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "e7905b6b-4fa9-549b-9086-5699658418e1"))
+    (comp
+      (ref "R2")
+      (value "108k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "Kb6JdcO_fc")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "3cdab6e5-0026-56aa-a079-845959fe5d62"))
+    (comp
+      (ref "R3")
+      (value "100k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "g9s5fWZbgK")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "f6e4c19e-77c6-52a2-b116-05a6d7dc4617"))
+    (comp
+      (ref "R4")
+      (value "150k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "09HAq1JlQ4")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "32f42203-c2a9-53d5-adcb-62e7ed9aa656"))
+    (comp
+      (ref "R5")
+      (value "1k2")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "pYhqpnlYV7")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "6344c935-8eeb-5019-9650-931a9d91236e"))
+    (comp
+      (ref "R6")
+      (value "330R")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "zEwvBLapEA")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "2a312c56-1a3d-59b3-8706-ddba26504bc9"))
+    (comp
+      (ref "R7")
+      (value "4k7")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "UA5S6gdtq6")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "cab440d9-394d-566e-bc8e-0561d13e4c1f"))
+    (comp
+      (ref "R8")
+      (value "4k7")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "xWUQtYH_Jt")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "0e986d2f-fa8a-5b27-9962-8af91148430e"))
+    (comp
+      (ref "R9")
+      (value "100k")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "1Uv6JlUO9e")
+        (field
+          (name "SKiDL Line") "totem.py:162"))
+      (libsource
+        (lib "NO_LIB")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "0f98dc43-b7ee-5b77-a954-12956eca655d"))
+    (comp
+      (ref "SW1")
+      (value "SW_PWR")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "okeM2nW6YV")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "SW_PWR"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "715a3db5-22a2-5daf-b2fd-3a359ae950dc"))
+    (comp
+      (ref "SW2")
+      (value "SW_SOS")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "RETliOWxyL")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "SW_SOS"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "7546e16c-359e-59ba-9101-a85d9ac3534c"))
+    (comp
+      (ref "TP1")
+      (value "TOUCH_PAD")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "aGfnz5mP82")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "TOUCH_PAD"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "3953a89a-4667-586a-8ba6-900645b6dfa1"))
+    (comp
+      (ref "U1")
+      (value "ESP32-WROOM-32E")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "IOfzlIjwOE")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "ESP32-WROOM-32E"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "06a2ff26-b50f-5255-82c8-dcd5c32ed1a6"))
+    (comp
+      (ref "U2")
+      (value "MAX-M10S")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "Utb6qrrdoK")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "MAX-M10S"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "5dbfee0d-eebc-523f-a729-f10e2b6524e5"))
+    (comp
+      (ref "U3")
+      (value "TP4056")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "pAFz1lqN0o")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "TP4056"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "983da0e3-97f2-5990-816b-a5f2048ad0a3"))
+    (comp
+      (ref "U4")
+      (value "LDO_3V3")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "nSrdiCiDKH")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "LDO_3V3"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "400615af-eb1f-56b2-bd2c-f336110c049e"))
+    (comp
+      (ref "U5")
+      (value "ICM-20948")
+      (description "")
+      (footprint "")
+      (fields
+        (field
+          (name "Description"))
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "nqt64jkjMy")
+        (field
+          (name "SKiDL Line") "totem.py:25"))
+      (libsource
+        (lib "NO_LIB")
+        (part "ICM-20948"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "970f073d-b37d-5ec3-b5bc-8da1ae928749")))
+  (nets
+    (net
+      (code 1)
+      (name "+3V3")
+      (class "Default")
+      (node
+        (ref "MK1")
+        (pin "VDD")
+        (pintype "POWER-IN"))
+      (node
+        (ref "R7")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R8")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "3V3")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U2")
+        (pin "VCC")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U4")
+        (pin "5")
+        (pintype "POWER-OUT"))
+      (node
+        (ref "U5")
+        (pin "VDD")
+        (pintype "POWER-IN")))
+    (net
+      (code 2)
+      (name "BTN_SOS")
+      (class "Default")
+      (node
+        (ref "SW2")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "0")
+        (pintype "INPUT")))
+    (net
+      (code 3)
+      (name "CRYSTAL_DATA")
+      (class "Default")
+      (node
+        (ref "DS2")
+        (pin "DIN")
+        (pintype "INPUT"))
+      (node
+        (ref "U1")
+        (pin "21")
+        (pintype "OUTPUT")))
+    (net
+      (code 4)
+      (name "GND")
+      (class "Default")
+      (node
+        (ref "DS1")
+        (pin "GND")
+        (pintype "POWER-IN"))
+      (node
+        (ref "DS2")
+        (pin "GND")
+        (pintype "POWER-IN"))
+      (node
+        (ref "DS3")
+        (pin "K")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "GND")
+        (pintype "POWER-OUT"))
+      (node
+        (ref "J2")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "MK1")
+        (pin "GND")
+        (pintype "POWER-IN"))
+      (node
+        (ref "R10")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R2")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R4")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R5")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "SW2")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "GND")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U2")
+        (pin "GND")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U3")
+        (pin "1")
+        (pintype "INPUT"))
+      (node
+        (ref "U3")
+        (pin "3")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U4")
+        (pin "2")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U5")
+        (pin "GND")
+        (pintype "POWER-IN")))
+    (net
+      (code 5)
+      (name "GNSS_RF")
+      (class "Default")
+      (node
+        (ref "J3")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U2")
+        (pin "RF")
+        (pintype "PASSIVE")))
+    (net
+      (code 6)
+      (name "GNSS_RX")
+      (class "Default")
+      (node
+        (ref "U1")
+        (pin "17")
+        (pintype "OUTPUT"))
+      (node
+        (ref "U2")
+        (pin "RXD")
+        (pintype "INPUT")))
+    (net
+      (code 7)
+      (name "GNSS_TX")
+      (class "Default")
+      (node
+        (ref "U1")
+        (pin "16")
+        (pintype "INPUT"))
+      (node
+        (ref "U2")
+        (pin "TXD")
+        (pintype "OUTPUT")))
+    (net
+      (code 8)
+      (name "GPIO4")
+      (class "Default")
+      (node
+        (ref "R11")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "4")
+        (pintype "BIDIRECTIONAL")))
+    (net
+      (code 9)
+      (name "I2C0_SCL")
+      (class "Default")
+      (node
+        (ref "R8")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "26")
+        (pintype "OUTPUT"))
+      (node
+        (ref "U5")
+        (pin "SCL")
+        (pintype "INPUT")))
+    (net
+      (code 10)
+      (name "I2C0_SDA")
+      (class "Default")
+      (node
+        (ref "R7")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "25")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U5")
+        (pin "SDA")
+        (pintype "BIDIRECTIONAL")))
+    (net
+      (code 11)
+      (name "LED_EN")
+      (class "Default")
+      (node
+        (ref "Q1")
+        (pin "G")
+        (pintype "INPUT"))
+      (node
+        (ref "R9")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "19")
+        (pintype "OUTPUT")))
+    (net
+      (code 12)
+      (name "MIC")
+      (class "Default")
+      (node
+        (ref "MK1")
+        (pin "OUT")
+        (pintype "OUTPUT"))
+      (node
+        (ref "U1")
+        (pin "36")
+        (pintype "INPUT")))
+    (net
+      (code 13)
+      (name "N$1")
+      (class "Default")
+      (node
+        (ref "R5")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U3")
+        (pin "2")
+        (pintype "PASSIVE")))
+    (net
+      (code 14)
+      (name "POWER_EN")
+      (class "Default")
+      (node
+        (ref "R10")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R11")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "SW1")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U4")
+        (pin "3")
+        (pintype "INPUT")))
+    (net
+      (code 15)
+      (name "RING_DATA")
+      (class "Default")
+      (node
+        (ref "DS1")
+        (pin "DIN")
+        (pintype "INPUT"))
+      (node
+        (ref "U1")
+        (pin "18")
+        (pintype "OUTPUT")))
+    (net
+      (code 16)
+      (name "SOS_LED")
+      (class "Default")
+      (node
+        (ref "R6")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "14")
+        (pintype "OUTPUT")))
+    (net
+      (code 17)
+      (name "SOS_LED_A")
+      (class "Default")
+      (node
+        (ref "DS3")
+        (pin "A")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R6")
+        (pin "2")
+        (pintype "PASSIVE")))
+    (net
+      (code 18)
+      (name "TOUCH")
+      (class "Default")
+      (node
+        (ref "TP1")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "27")
+        (pintype "BIDIRECTIONAL")))
+    (net
+      (code 19)
+      (name "VBAT")
+      (class "Default")
+      (node
+        (ref "J2")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "Q1")
+        (pin "S")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R1")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R9")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "SW1")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U3")
+        (pin "5")
+        (pintype "POWER-OUT"))
+      (node
+        (ref "U3")
+        (pin "6")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U4")
+        (pin "1")
+        (pintype "POWER-IN")))
+    (net
+      (code 20)
+      (name "VBAT_SENSE")
+      (class "Default")
+      (node
+        (ref "R1")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R2")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "34")
+        (pintype "INPUT")))
+    (net
+      (code 21)
+      (name "VBUS")
+      (class "Default")
+      (node
+        (ref "J1")
+        (pin "VBUS")
+        (pintype "POWER-OUT"))
+      (node
+        (ref "R3")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U3")
+        (pin "4")
+        (pintype "POWER-IN")))
+    (net
+      (code 22)
+      (name "VBUS_SENSE")
+      (class "Default")
+      (node
+        (ref "R3")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R4")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "39")
+        (pintype "INPUT")))
+    (net
+      (code 23)
+      (name "VLED")
+      (class "Default")
+      (node
+        (ref "DS1")
+        (pin "VDD")
+        (pintype "POWER-IN"))
+      (node
+        (ref "DS2")
+        (pin "VDD")
+        (pintype "POWER-IN"))
+      (node
+        (ref "Q1")
+        (pin "D")
+        (pintype "PASSIVE")))))

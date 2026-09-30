@@ -86,6 +86,37 @@ The digital parts are modelled as current sinks at their datasheet peaks, and
 the regulator and charger behaviourally, because no vendor models are to hand.
 These verify the design's arithmetic, not anyone's silicon.
 
+## The schematic, and its ERC
+
+```
+cd schematic && python3 totem.py
+```
+
+Requires `skidl` (`pip3 install --user skidl`). The circuit is described as
+code rather than drawn, which makes the connectivity machine-checkable:
+SKiDL's ERC looks for pins left floating and for nets with two things driving
+them. It writes `totem.net`, a KiCad netlist, and `totem.erc`.
+
+**Current state: 0 errors, 0 warnings, across 22 nets.**
+
+Getting there took four real corrections, which is the argument for running it
+at all rather than drawing a diagram and trusting it:
+
+- Three `POWER-OUT` conflicts, where I had the TP4056's two `BAT` pins and the
+  cell all declared as independent drivers of `VBAT`. Pins 5 and 6 are one
+  node on the die, and the cell shares that node rather than fighting it.
+- A fourth on `GND`, from declaring connector grounds as drivers.
+- `TEMP` left floating. The TP4056 needs it tied off when no thermistor is
+  fitted, which is easy to forget and silent when forgotten.
+- The regulator's `EN` left floating — which is where the GPIO 4 power gate
+  has to live, so the warning was pointing at a missing part of the design.
+
+Parts are declared with explicit pins instead of pulled from KiCad's symbol
+libraries, so this runs without KiCad installed. KiCad's own installer needs
+root, which is why the drawing is a netlist rather than a sheet; `brew install
+--cask kicad` from a terminal would allow `kicad-cli sch erc` and an SVG
+export on top of this.
+
 ## Three findings worth keeping
 
 **The firmware protects the hardware, not the other way round.** The 3V3 rail
@@ -122,3 +153,9 @@ that drew that continuously would need a different package or a switcher.
   of the GPIO 4 latch and the LED supply switch, but that is a guess and they
   are left out rather than drawn in wrongly.
 - **Decoupling.** Omitted throughout; assume the usual per-rail capacitors.
+- **The power gate's topology.** This is the weakest part of the
+  reconstruction and is marked so in the source. The firmware fixes what
+  GPIO 4 *does* — read as an input while running, re-opened as an output and
+  driven low to switch off — but not how the latch around it is built. The
+  `A7` diode and the `J22B` SOT-23 on the board are plausible members of it.
+  Neither was traced, and the arrangement here is designed, not recovered.
