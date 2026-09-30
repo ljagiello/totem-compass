@@ -34,6 +34,7 @@ C0603 = "Capacitor_SMD:C_0603_1608Metric"
 SOT23 = "Package_TO_SOT_SMD:SOT-23"
 # 6x6 mm SMD tact switch, top-actuated, tall stem through the rear cover (PTS645 land pattern)
 SW6X6 = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
+LED1515 = "totem:LED_XL-1515RGBC-WS2812B"   # schematic/totem.pretty, from the datasheet
 
 
 def leave_unused(part, used, why):
@@ -247,8 +248,11 @@ net("I2C0_SDA", u1["IO25"], u5["SDA/SDI"], r_sda[2])
 net("I2C0_SCL", u1["IO26"], u5["SCL/SCLK"], r_scl[2])
 
 # ------------------------------------------------------------------ ring
-# 60 x WS2812B-2020. 2 x 2 mm: sixty of them fit a ~40 mm circle, which a
-# 5 x 5 mm WS2812B cannot. Powered through a high-side switch the firmware
+# 60 x 1.5 x 1.5 mm WS2812B (XL-1515RGBC-WS2812B). Measured on the reference
+# board: packages 1.50 mm wide at a 1.91 mm pitch, ring radius 18.24 mm, which
+# a 2 x 2 mm WS2812B-2020 could not fit (60 of them would collide). The 1515's
+# pins are numbered as the 2020's (1 DO, 2 GND, 3 DI, 4 VDD), so the
+# WS2812B-2020 symbol is kept and only the footprint differs. Powered through a high-side switch the firmware
 # drives on GPIO 19 — HIGH to light the ring, confirmed in the bytecode —
 # so a P-FET needs an N-FET in front of it to invert. Wiring the P-FET's
 # gate straight to GPIO 19 would light the ring exactly when told not to.
@@ -264,7 +268,7 @@ net("RING_GATE", q_ring["G"], r_ring_gate[2], q_ring_drv["D"])
 net("LED_EN", u1["IO19"], q_ring_drv["G"], r_ring_en_pd[1])
 net("RING_DATA", u1["IO18"], r_ring_din[1])
 
-RING = [Part("LED", "WS2812B-2020", ref=f"D{100 + i}", footprint="LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+RING = [Part("LED", "WS2812B-2020", ref=f"D{100 + i}", value="XL-1515RGBC-WS2812B", footprint=LED1515)
         for i in range(60)]
 prev = r_ring_din[2]
 for i, px in enumerate(RING):
@@ -275,8 +279,8 @@ for i, px in enumerate(RING):
 RING[-1]["DOUT"].do_erc = False          # the chain simply ends
 
 # ---------------------------------------------------------------- crystal
-# 7 more under the light pipe. No power gate in the firmware, so they sit on
-# VSYS: always powered while the board is on, and — unlike on VBAT — drawing
+# 7 more under the light pipe, the same 1515 part. No power gate in the
+# firmware, so they sit on VSYS: always powered while the board is on, and — unlike on VBAT — drawing
 # nothing while it is off. A dark WS2812B still draws about 0.7 mA; seven of
 # them straight on the cell would flatten it in about eight days switched off.
 r_cry_din = R("R12", "33")
@@ -284,7 +288,7 @@ c_vcry = C("C17", "10u", C0805)
 vsys += c_vcry[1]
 gnd += c_vcry[2]
 net("CRYSTAL_DATA", u1["IO21"], r_cry_din[1])
-CRYSTAL = [Part("LED", "WS2812B-2020", ref=f"D{200 + i}", footprint="LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+CRYSTAL = [Part("LED", "WS2812B-2020", ref=f"D{200 + i}", value="XL-1515RGBC-WS2812B", footprint=LED1515)
            for i in range(7)]
 prev = r_cry_din[2]
 for i, px in enumerate(CRYSTAL):

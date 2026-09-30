@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/30/2026 01:22 AM")
+    (date "09/30/2026 01:32 AM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -57,7 +57,7 @@
         (field
           (name "SKiDL Tag") "C1")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -81,7 +81,7 @@
         (field
           (name "SKiDL Tag") "C10")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -105,7 +105,7 @@
         (field
           (name "SKiDL Tag") "C11")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -129,7 +129,7 @@
         (field
           (name "SKiDL Tag") "C12")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -153,7 +153,7 @@
         (field
           (name "SKiDL Tag") "C13")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -177,7 +177,7 @@
         (field
           (name "SKiDL Tag") "C14")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -201,7 +201,7 @@
         (field
           (name "SKiDL Tag") "C15")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -225,7 +225,7 @@
         (field
           (name "SKiDL Tag") "C16")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -249,7 +249,7 @@
         (field
           (name "SKiDL Tag") "C17")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -273,7 +273,7 @@
         (field
           (name "SKiDL Tag") "C18")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -297,7 +297,7 @@
         (field
           (name "SKiDL Tag") "C2")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -321,7 +321,7 @@
         (field
           (name "SKiDL Tag") "C3")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -345,7 +345,7 @@
         (field
           (name "SKiDL Tag") "C4")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -369,7 +369,7 @@
         (field
           (name "SKiDL Tag") "C5")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -393,7 +393,7 @@
         (field
           (name "SKiDL Tag") "C6")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -417,7 +417,7 @@
         (field
           (name "SKiDL Tag") "C7")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -441,7 +441,7 @@
         (field
           (name "SKiDL Tag") "C8")
         (field
-          (name "SKiDL Line") "totem.py:53"))
+          (name "SKiDL Line") "totem.py:54"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -465,7 +465,7 @@
         (field
           (name "SKiDL Tag") "D1")
         (field
-          (name "SKiDL Line") "totem.py:130"))
+          (name "SKiDL Line") "totem.py:131"))
       (libsource
         (lib "Diode")
         (part "1N4148W"))
@@ -476,20 +476,20 @@
       (tstamps "730dc923-5f42-5190-a58b-2dbed3a5d5b0"))
     (comp
       (ref "D100")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D100")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -500,20 +500,20 @@
       (tstamps "27286d1b-02c2-5391-bab3-a73c6c40808d"))
     (comp
       (ref "D101")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D101")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -524,20 +524,20 @@
       (tstamps "73b19c03-225d-5375-8bb5-615ef2f565de"))
     (comp
       (ref "D102")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D102")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -548,20 +548,20 @@
       (tstamps "1f0f6951-9620-51ea-8ce2-e63360582f89"))
     (comp
       (ref "D103")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D103")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -572,20 +572,20 @@
       (tstamps "8831c656-12ca-587b-9c9f-900ef1368896"))
     (comp
       (ref "D104")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D104")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -596,20 +596,20 @@
       (tstamps "af1f1c32-84b3-5c77-96ad-c63a81536753"))
     (comp
       (ref "D105")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D105")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -620,20 +620,20 @@
       (tstamps "735cd2e0-8db6-5c03-9ef5-24d6520b82d7"))
     (comp
       (ref "D106")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D106")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -644,20 +644,20 @@
       (tstamps "0f984b80-215d-50db-b18d-19e33bf60a9b"))
     (comp
       (ref "D107")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D107")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -668,20 +668,20 @@
       (tstamps "c14a92ba-2737-5cc2-a78e-fb0669c5a875"))
     (comp
       (ref "D108")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D108")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -692,20 +692,20 @@
       (tstamps "9157edd1-eb1b-530d-bd42-6b1f4603c2c0"))
     (comp
       (ref "D109")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D109")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -716,20 +716,20 @@
       (tstamps "135f5f8e-3ff7-53c7-9a26-4c4506fc82f3"))
     (comp
       (ref "D110")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D110")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -740,20 +740,20 @@
       (tstamps "38d83508-f467-542c-aa52-7d3b4c69b95a"))
     (comp
       (ref "D111")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D111")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -764,20 +764,20 @@
       (tstamps "37bac3af-ecdf-5233-a282-2ea8c8018732"))
     (comp
       (ref "D112")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D112")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -788,20 +788,20 @@
       (tstamps "d01221d6-0ca8-5e7b-9eb5-f09e2fd40369"))
     (comp
       (ref "D113")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D113")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -812,20 +812,20 @@
       (tstamps "82cbcdcb-8783-5fe7-8278-1ce088b3e407"))
     (comp
       (ref "D114")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D114")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -836,20 +836,20 @@
       (tstamps "48ee0e82-9970-54d8-8061-4ae60409ad4d"))
     (comp
       (ref "D115")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D115")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -860,20 +860,20 @@
       (tstamps "a5a3de37-dfeb-5419-a1e2-2e4d87ef92a9"))
     (comp
       (ref "D116")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D116")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -884,20 +884,20 @@
       (tstamps "87d45186-0b63-5c25-a95c-8ae70cc3411f"))
     (comp
       (ref "D117")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D117")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -908,20 +908,20 @@
       (tstamps "0b801a4a-0b2c-5475-a8eb-768208c30a49"))
     (comp
       (ref "D118")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D118")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -932,20 +932,20 @@
       (tstamps "fd6c634f-c091-5c44-801d-36ef00d1a081"))
     (comp
       (ref "D119")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D119")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -956,20 +956,20 @@
       (tstamps "d8dd6f93-8886-5070-8675-52a47c213eb5"))
     (comp
       (ref "D120")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D120")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -980,20 +980,20 @@
       (tstamps "9a6b43f3-b7b3-5dd0-9729-97b1f7322ed6"))
     (comp
       (ref "D121")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D121")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1004,20 +1004,20 @@
       (tstamps "4bf0b715-f52b-5628-8990-072919f94e73"))
     (comp
       (ref "D122")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D122")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1028,20 +1028,20 @@
       (tstamps "92460c08-adee-5d64-b373-894327159618"))
     (comp
       (ref "D123")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D123")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1052,20 +1052,20 @@
       (tstamps "be49d97e-b93a-50d8-b53f-ed5333c56655"))
     (comp
       (ref "D124")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D124")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1076,20 +1076,20 @@
       (tstamps "4df7fcac-148a-52c8-915b-2853f7280405"))
     (comp
       (ref "D125")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D125")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1100,20 +1100,20 @@
       (tstamps "a5e58f0b-5552-50d2-aa1f-433f5f380d3f"))
     (comp
       (ref "D126")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D126")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1124,20 +1124,20 @@
       (tstamps "66e2316a-98a8-52cb-90b4-e38da0dfeb4c"))
     (comp
       (ref "D127")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D127")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1148,20 +1148,20 @@
       (tstamps "cf5cd732-10db-5c7c-8b81-1145fa10c67e"))
     (comp
       (ref "D128")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D128")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1172,20 +1172,20 @@
       (tstamps "08c04f5d-3ea9-55b7-83a5-65f521409377"))
     (comp
       (ref "D129")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D129")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1196,20 +1196,20 @@
       (tstamps "6c30becd-ef47-5cd7-a560-01c8635ca205"))
     (comp
       (ref "D130")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D130")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1220,20 +1220,20 @@
       (tstamps "96189a7d-4f08-5291-8035-69f92728dc6d"))
     (comp
       (ref "D131")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D131")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1244,20 +1244,20 @@
       (tstamps "7bd6b936-80a7-5926-93e1-2332ba72b512"))
     (comp
       (ref "D132")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D132")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1268,20 +1268,20 @@
       (tstamps "0f089d6b-cf57-50a5-a66d-a5a6afec209f"))
     (comp
       (ref "D133")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D133")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1292,20 +1292,20 @@
       (tstamps "ac9e54f6-31a6-5966-a7fd-2f42e6be74c7"))
     (comp
       (ref "D134")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D134")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1316,20 +1316,20 @@
       (tstamps "c9aea589-53be-52e6-a4a3-287ec3fcdbcf"))
     (comp
       (ref "D135")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D135")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1340,20 +1340,20 @@
       (tstamps "d573542e-45a3-53e7-9b5a-7a8bab45ed05"))
     (comp
       (ref "D136")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D136")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1364,20 +1364,20 @@
       (tstamps "2d8907ad-9142-5257-93f7-0400834eba2d"))
     (comp
       (ref "D137")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D137")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1388,20 +1388,20 @@
       (tstamps "6f056e7c-ae4a-5bb0-9fd4-89070ed5fdbd"))
     (comp
       (ref "D138")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D138")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1412,20 +1412,20 @@
       (tstamps "ac98d1ef-460b-5308-9b15-bf66e60abf57"))
     (comp
       (ref "D139")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D139")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1436,20 +1436,20 @@
       (tstamps "57df9217-01fc-5725-8066-24121c57c5f8"))
     (comp
       (ref "D140")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D140")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1460,20 +1460,20 @@
       (tstamps "aa134fbc-1d78-5baa-93c3-e57b71dea56e"))
     (comp
       (ref "D141")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D141")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1484,20 +1484,20 @@
       (tstamps "da144859-04cd-5619-8956-52e2df68db77"))
     (comp
       (ref "D142")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D142")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1508,20 +1508,20 @@
       (tstamps "8ca0e5c8-e2dc-5481-91d7-a228e52ab1c7"))
     (comp
       (ref "D143")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D143")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1532,20 +1532,20 @@
       (tstamps "c85abed5-4d4a-5a3c-a454-d92925452196"))
     (comp
       (ref "D144")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D144")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1556,20 +1556,20 @@
       (tstamps "0f9def04-43ed-5f77-8a2c-f481f36f2d19"))
     (comp
       (ref "D145")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D145")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1580,20 +1580,20 @@
       (tstamps "f85a5729-5b79-597b-a20c-38e9e9025ac3"))
     (comp
       (ref "D146")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D146")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1604,20 +1604,20 @@
       (tstamps "373d290f-36d3-5060-b889-3321d9c7bedb"))
     (comp
       (ref "D147")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D147")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1628,20 +1628,20 @@
       (tstamps "00353dc6-c2be-54ea-8fb9-a9677a720562"))
     (comp
       (ref "D148")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D148")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1652,20 +1652,20 @@
       (tstamps "0d38e0a7-4f63-5463-a238-a2c2adcc8586"))
     (comp
       (ref "D149")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D149")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1676,20 +1676,20 @@
       (tstamps "dc32f2d2-3c7a-5179-89dd-56f5efc0a3fb"))
     (comp
       (ref "D150")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D150")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1700,20 +1700,20 @@
       (tstamps "a33dceb5-6d19-5852-a4d9-810b916f5289"))
     (comp
       (ref "D151")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D151")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1724,20 +1724,20 @@
       (tstamps "297d2e79-542a-542d-861a-aee74726fe84"))
     (comp
       (ref "D152")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D152")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1748,20 +1748,20 @@
       (tstamps "1763875a-1403-5d2a-8278-df045c499184"))
     (comp
       (ref "D153")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D153")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1772,20 +1772,20 @@
       (tstamps "47113990-761e-5a18-995a-7891d023f59f"))
     (comp
       (ref "D154")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D154")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1796,20 +1796,20 @@
       (tstamps "f0bc5c8f-a80d-53b3-bfcc-218db717380f"))
     (comp
       (ref "D155")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D155")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1820,20 +1820,20 @@
       (tstamps "09fc1a00-0499-5a2e-b68b-9762f5822041"))
     (comp
       (ref "D156")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D156")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1844,20 +1844,20 @@
       (tstamps "935c77d4-20e6-509b-96d7-fb60e6910623"))
     (comp
       (ref "D157")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D157")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1868,20 +1868,20 @@
       (tstamps "b97bf75e-731a-50ff-ae7f-bba502583653"))
     (comp
       (ref "D158")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D158")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1892,20 +1892,20 @@
       (tstamps "4664613d-884b-51ae-a0d4-01a6d20596ec"))
     (comp
       (ref "D159")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D159")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:271"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1929,7 +1929,7 @@
         (field
           (name "SKiDL Tag") "D2")
         (field
-          (name "SKiDL Line") "totem.py:131"))
+          (name "SKiDL Line") "totem.py:132"))
       (libsource
         (lib "Diode")
         (part "BAT54W"))
@@ -1940,20 +1940,20 @@
       (tstamps "06934a86-3c08-5320-b71c-96bf0d33127c"))
     (comp
       (ref "D200")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D200")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1964,20 +1964,20 @@
       (tstamps "b3bf5d53-282c-50fe-9fc0-278c2861879a"))
     (comp
       (ref "D201")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D201")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1988,20 +1988,20 @@
       (tstamps "1be7e6a3-628f-57b2-b556-fc98d1667417"))
     (comp
       (ref "D202")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D202")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2012,20 +2012,20 @@
       (tstamps "3ca247e1-d0a8-5556-b708-e6f09e13ed91"))
     (comp
       (ref "D203")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D203")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2036,20 +2036,20 @@
       (tstamps "affc2dc0-6262-5ef8-85fb-b9e66951ed22"))
     (comp
       (ref "D204")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D204")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2060,20 +2060,20 @@
       (tstamps "721cebeb-9cd2-5f3f-9d0a-25b24a1ed788"))
     (comp
       (ref "D205")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D205")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2084,20 +2084,20 @@
       (tstamps "889c7794-e8e2-5032-bd1f-51d25ac7ef10"))
     (comp
       (ref "D206")
-      (value "WS2812B-2020")
+      (value "XL-1515RGBC-WS2812B")
       (description "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
-      (footprint "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+      (footprint "totem:LED_XL-1515RGBC-WS2812B")
       (fields
         (field
           (name "Description") "RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA")
         (field
-          (name "Footprint") "LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm")
+          (name "Footprint") "totem:LED_XL-1515RGBC-WS2812B")
         (field
           (name "Datasheet") "https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf")
         (field
           (name "SKiDL Tag") "D206")
         (field
-          (name "SKiDL Line") "totem.py:287"))
+          (name "SKiDL Line") "totem.py:292"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2121,7 +2121,7 @@
         (field
           (name "SKiDL Tag") "D3")
         (field
-          (name "SKiDL Line") "totem.py:300"))
+          (name "SKiDL Line") "totem.py:305"))
       (libsource
         (lib "Device")
         (part "LED"))
@@ -2145,7 +2145,7 @@
         (field
           (name "SKiDL Tag") "J1")
         (field
-          (name "SKiDL Line") "totem.py:76"))
+          (name "SKiDL Line") "totem.py:77"))
       (libsource
         (lib "Connector")
         (part "USB_C_Receptacle_USB2.0_16P"))
@@ -2169,7 +2169,7 @@
         (field
           (name "SKiDL Tag") "J2")
         (field
-          (name "SKiDL Line") "totem.py:104"))
+          (name "SKiDL Line") "totem.py:105"))
       (libsource
         (lib "Connector_Generic")
         (part "Conn_01x02"))
@@ -2193,7 +2193,7 @@
         (field
           (name "SKiDL Tag") "J3")
         (field
-          (name "SKiDL Line") "totem.py:225"))
+          (name "SKiDL Line") "totem.py:226"))
       (libsource
         (lib "Connector")
         (part "Conn_Coaxial"))
@@ -2217,7 +2217,7 @@
         (field
           (name "SKiDL Tag") "MK1")
         (field
-          (name "SKiDL Line") "totem.py:315"))
+          (name "SKiDL Line") "totem.py:320"))
       (libsource
         (lib "Device")
         (part "Microphone_Condenser"))
@@ -2241,7 +2241,7 @@
         (field
           (name "SKiDL Tag") "Q1")
         (field
-          (name "SKiDL Line") "totem.py:127"))
+          (name "SKiDL Line") "totem.py:128"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2265,7 +2265,7 @@
         (field
           (name "SKiDL Tag") "Q2")
         (field
-          (name "SKiDL Line") "totem.py:128"))
+          (name "SKiDL Line") "totem.py:129"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2289,7 +2289,7 @@
         (field
           (name "SKiDL Tag") "Q3")
         (field
-          (name "SKiDL Line") "totem.py:129"))
+          (name "SKiDL Line") "totem.py:130"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2313,7 +2313,7 @@
         (field
           (name "SKiDL Tag") "Q4")
         (field
-          (name "SKiDL Line") "totem.py:255"))
+          (name "SKiDL Line") "totem.py:259"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2337,7 +2337,7 @@
         (field
           (name "SKiDL Tag") "Q5")
         (field
-          (name "SKiDL Line") "totem.py:256"))
+          (name "SKiDL Line") "totem.py:260"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2361,7 +2361,7 @@
         (field
           (name "SKiDL Tag") "R1")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2385,7 +2385,7 @@
         (field
           (name "SKiDL Tag") "R10")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2409,7 +2409,7 @@
         (field
           (name "SKiDL Tag") "R11")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2433,7 +2433,7 @@
         (field
           (name "SKiDL Tag") "R12")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2457,7 +2457,7 @@
         (field
           (name "SKiDL Tag") "R13")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2481,7 +2481,7 @@
         (field
           (name "SKiDL Tag") "R14")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2505,7 +2505,7 @@
         (field
           (name "SKiDL Tag") "R15")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2529,7 +2529,7 @@
         (field
           (name "SKiDL Tag") "R16")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2553,7 +2553,7 @@
         (field
           (name "SKiDL Tag") "R17")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2577,7 +2577,7 @@
         (field
           (name "SKiDL Tag") "R18")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2601,7 +2601,7 @@
         (field
           (name "SKiDL Tag") "R19")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2625,7 +2625,7 @@
         (field
           (name "SKiDL Tag") "R2")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2649,7 +2649,7 @@
         (field
           (name "SKiDL Tag") "R20")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2673,7 +2673,7 @@
         (field
           (name "SKiDL Tag") "R21")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2697,7 +2697,7 @@
         (field
           (name "SKiDL Tag") "R22")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2721,7 +2721,7 @@
         (field
           (name "SKiDL Tag") "R23")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2745,7 +2745,7 @@
         (field
           (name "SKiDL Tag") "R24")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2769,7 +2769,7 @@
         (field
           (name "SKiDL Tag") "R25")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2793,7 +2793,7 @@
         (field
           (name "SKiDL Tag") "R26")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2817,7 +2817,7 @@
         (field
           (name "SKiDL Tag") "R3")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2841,7 +2841,7 @@
         (field
           (name "SKiDL Tag") "R4")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2865,7 +2865,7 @@
         (field
           (name "SKiDL Tag") "R5")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2889,7 +2889,7 @@
         (field
           (name "SKiDL Tag") "R6")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2913,7 +2913,7 @@
         (field
           (name "SKiDL Tag") "R7")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2937,7 +2937,7 @@
         (field
           (name "SKiDL Tag") "R8")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2961,7 +2961,7 @@
         (field
           (name "SKiDL Tag") "R9")
         (field
-          (name "SKiDL Line") "totem.py:49"))
+          (name "SKiDL Line") "totem.py:50"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2985,7 +2985,7 @@
         (field
           (name "SKiDL Tag") "SW1")
         (field
-          (name "SKiDL Line") "totem.py:126"))
+          (name "SKiDL Line") "totem.py:127"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3009,7 +3009,7 @@
         (field
           (name "SKiDL Tag") "SW2")
         (field
-          (name "SKiDL Line") "totem.py:209"))
+          (name "SKiDL Line") "totem.py:210"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3033,7 +3033,7 @@
         (field
           (name "SKiDL Tag") "TP1")
         (field
-          (name "SKiDL Line") "totem.py:307"))
+          (name "SKiDL Line") "totem.py:312"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3057,7 +3057,7 @@
         (field
           (name "SKiDL Tag") "TP2")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3081,7 +3081,7 @@
         (field
           (name "SKiDL Tag") "TP3")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3105,7 +3105,7 @@
         (field
           (name "SKiDL Tag") "TP4")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3129,7 +3129,7 @@
         (field
           (name "SKiDL Tag") "TP5")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3153,7 +3153,7 @@
         (field
           (name "SKiDL Tag") "TP6")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3177,7 +3177,7 @@
         (field
           (name "SKiDL Tag") "TP7")
         (field
-          (name "SKiDL Line") "totem.py:197"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3201,7 +3201,7 @@
         (field
           (name "SKiDL Tag") "U1")
         (field
-          (name "SKiDL Line") "totem.py:176"))
+          (name "SKiDL Line") "totem.py:177"))
       (libsource
         (lib "RF_Module")
         (part "ESP32-WROOM-32E"))
@@ -3225,7 +3225,7 @@
         (field
           (name "SKiDL Tag") "U2")
         (field
-          (name "SKiDL Line") "totem.py:214"))
+          (name "SKiDL Line") "totem.py:215"))
       (libsource
         (lib "RF_GPS")
         (part "MAX-M10S"))
@@ -3249,7 +3249,7 @@
         (field
           (name "SKiDL Tag") "U3")
         (field
-          (name "SKiDL Line") "totem.py:93"))
+          (name "SKiDL Line") "totem.py:94"))
       (libsource
         (lib "Battery_Management")
         (part "TP4056-42-ESOP8"))
@@ -3273,7 +3273,7 @@
         (field
           (name "SKiDL Tag") "U4")
         (field
-          (name "SKiDL Line") "totem.py:156"))
+          (name "SKiDL Line") "totem.py:157"))
       (libsource
         (lib "Regulator_Linear")
         (part "AP2112K-3.3"))
@@ -3297,7 +3297,7 @@
         (field
           (name "SKiDL Tag") "U5")
         (field
-          (name "SKiDL Line") "totem.py:231"))
+          (name "SKiDL Line") "totem.py:232"))
       (libsource
         (lib "Sensor_Motion")
         (part "ICM-20948"))

@@ -201,7 +201,7 @@ def control():
   * button, the lit ring and the radio are set there. `reset` re-reads the
   * deck and forgets every alter, so the alters come after it, each time.
   alterparam vth7002=2.1
-  alterparam ringma=9.6m
+  alterparam ringma=9.5m
   reset
   alter vpress dc = 1
   alter vring dc = 1
@@ -212,10 +212,12 @@ def control():
   dc vcell 3.45 4.25 0.05
   let railmin = minimum(v(_3v3))
   echo RESULT normal_rail_min = $&railmin
+  let vledmin = minimum(v(vled))
+  echo RESULT normal_vled_min = $&vledmin
   dc vcell 3.15 3.45 0.05
   let degmin = minimum(v(_3v3))
   echo RESULT degraded_rail_min = $&degmin
-  alterparam ringma=36m
+  alterparam ringma=15.5m
   reset
   alter vpress dc = 1
   alter vring dc = 1
@@ -223,7 +225,7 @@ def control():
   dc vcell 3.45 4.25 0.05
   let fullmin = minimum(v(_3v3))
   echo RESULT fullwhite_rail_min = $&fullmin
-  alterparam ringma=0.7m
+  alterparam ringma=0.5m
   reset
   alter vpress dc = 1
   alter vcell dc = 4.2
@@ -277,7 +279,10 @@ def checks(tags):
         ("charge_i", ">=", 0.50, "charging a 3.6 V cell at the PROG current (into the cell)"),
         ("charge_rail", "<=", 0.10, "charging does not switch the board on"),
         ("fullwhite_rail_min", ">=", 3.00,
-         "XFAIL: every pixel at full white asks more of the cell than it can give"),
+         "every pixel at full white (15.5 mA, the 1515's datasheet), radio at TX peak, cell >= 3.45 V"),
+        ("normal_vled_min", ">=", 3.50,
+         "XFAIL: the 1515's supply range starts at 3.5 V; from a cell at 3.45 V the ring sits under "
+         "it, as on the reference board, whose ring is on the cell the same way"),
     ]
     return c
 

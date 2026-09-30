@@ -153,7 +153,7 @@ totem = SchLib(tool=SKIDL).add_parts(*[
             Pin(num='22',name='~{CS}',func=pin_types.INPUT,unit=1),
             Pin(num='23',name='SCL/SCLK',func=pin_types.INPUT,unit=1),
             Pin(num='24',name='SDA/SDI',func=pin_types.BIDIR,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'WS2812B-2020', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'WS2812B-2020'}), 'ref_prefix':'D', 'fplist':['LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm'], 'footprint':'LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm', 'keywords':'RGB LED NeoPixel Nano addressable', 'description':'RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA', 'datasheet':'https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf', 'pins':[
+        Part(**{ 'name':'WS2812B-2020', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'WS2812B-2020'}), 'ref_prefix':'D', 'fplist':['LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm'], 'footprint':'totem:LED_XL-1515RGBC-WS2812B', 'keywords':'RGB LED NeoPixel Nano addressable', 'description':'RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA', 'datasheet':'https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf', 'pins':[
             Pin(num='1',name='DOUT',func=pin_types.OUTPUT,unit=1),
             Pin(num='2',name='VSS',func=pin_types.PWRIN,unit=1),
             Pin(num='3',name='DIN',func=pin_types.INPUT,unit=1),

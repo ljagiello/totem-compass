@@ -102,8 +102,9 @@ BRUN VDD GND I = v(VDD,GND) > 1.7 ? 0.003 : v(VDD,GND) / 10k
 VREG REGOUT GND 1.8
 .ends ICM20948
 
-* One WS2812B-2020. Dark it still draws about 0.7 mA; lit, what the bench
-* sets through ringma / cryma, at the firmware's brightness.
+* One XL-1515RGBC-WS2812B. Its datasheet: 0.5 mA for the IC (IDD typ), 5 mA
+* per colour channel, so 15.5 mA at full white. Lit, the bench sets the
+* current through ringma / cryma, at the firmware's brightness.
 .subckt WS2812_RING DOUT VSS DIN VDD
 BPX VDD VSS I = v(VDD,VSS) > 2.5 ? ringma : v(VDD,VSS) / 10k
 RDIN DIN VSS 1e9
@@ -114,7 +115,7 @@ BPX VDD VSS I = v(VDD,VSS) > 2.5 ? cryma : v(VDD,VSS) / 10k
 RDIN DIN VSS 1e9
 RDOUT DOUT VSS 1e9
 .ends WS2812_CRY
-.param ringma=0.7m cryma=0.7m
+.param ringma=0.5m cryma=0.5m
 
 * Buttons, under the bench's control.
 .subckt SW_PWR A B
