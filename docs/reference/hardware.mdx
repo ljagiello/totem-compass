@@ -29,10 +29,11 @@ nothing contradicts it.
 | U2 | **u-blox MAX-M10S** | `MAX-M10S`, `u-blox`, silkscreen `GNSS` | GNSS receiver: GPS, Galileo, BeiDou and GLONASS concurrently |
 | U3 | **TP4056 LiPo charger** | `4056`, lot `L30B`, SOP-8 | Single-cell linear charger, between J1 and J2, with its programming resistors alongside. The marking is a bare `4056`, so a marking-compatible clone is not excluded |
 | U4 | **Regulator (probable)** | `ACH`, SOT-23-5 | Sits in a group of capacitors on the radio side. Package, position and decoupling are those of a 3V3 LDO; a three-letter code is shared across manufacturers, so **no part is claimed** |
-| U5 | **IMU** | *not legible* | Accelerometer and gyroscope on I²C bus 0. Existence **confirmed** by the firmware, part unknown. Not on the radio side, so on the LED side |
-| U6 | **Magnetometer** | *not legible* | On I²C bus 0. Existence **confirmed** by the firmware, part unknown. Likewise on the LED side |
-| U7 | **Unidentified QFN** | *unmarked* | On the LED side among the power passives. No marking survives the halo's glare. One of U5/U6, or a second regulator |
-| R? | **Chip resistor** | `124` | 120 kΩ. The one passive value legible anywhere in the set |
+| U5 | **InvenSense ICM-20948** | *lid unmarked* | The 9-axis part: gyroscope, accelerometer **and** magnetometer in one QFN on the LED side, on I²C bus 0. The firmware names it — `c_icm20948_mag.Icm20948Mag` ([Navigation](/subsystems/navigation)) — and its on-die magnetometer is an AK09916 reached through `imu.mag()`. **There is no separate magnetometer chip on this board** |
+| U6 | **Unidentified SOIC-14** | `I2948`, `B23LA1`, `2602` | On the LED side among the passives. Fully legible and still unidentified: no claim is made from a marking alone |
+| D? | **Diode** | `A7`, SOD-123 | The standard marking for a 1N4148W small-signal diode |
+| Q? | **SOT-23-3** | `J22B` | Near the LED strips |
+| — | **Chip resistor** | `124` | 120 kΩ |
 | MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
 | DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**) |
 | DS61…DS67 | **Touch Crystal cluster** | — | 7 more of the same under the moulded light pipe (**confirmed**). Six in a hexagon around a central post |
@@ -66,8 +67,7 @@ flowchart TB
     U1 ---|"UART 115200, UBX"| U2["U2 u-blox MAX-M10S<br/>GPS+GAL+BDS+GLO"]
     U2 --- J3["J3 u.FL antenna"]
 
-    U1 ---|"I2C0 SDA 25 / SCL 26"| U5["U5 IMU"]
-    U1 ---|"I2C0 SDA 25 / SCL 26"| U6["U6 magnetometer"]
+    U1 ---|"I2C0 SDA 25 / SCL 26"| U5["U5 ICM-20948<br/>gyro + accel + magnetometer"]
 
     MK1["MK1 MEMS microphone"] -->|"GPIO 36 ADC"| U1
     SW2["SW2 SOS button"] -->|"GPIO 0, pull-up"| U1
@@ -99,8 +99,8 @@ photographs show at the other end.
 | `VBAT_SENSE` | **GPIO 34** | ADC, `ATTN_11DB` | Divider off BT1 | [Power](/subsystems/power) |
 | `CHG_PRESENT` | **GPIO 39** | in | U3's status output (`CHRG`, open drain — **inferred**) | [Power](/subsystems/power) |
 | `MIC` | **GPIO 36** | ADC, `ATTN_11DB` | MK1 | [Power](/subsystems/power) |
-| `I2C0_SDA` | **GPIO 25** | bidirectional | U5, U6 | [Navigation](/subsystems/navigation) |
-| `I2C0_SCL` | **GPIO 26** | out | U5, U6 | [Navigation](/subsystems/navigation) |
+| `I2C0_SDA` | **GPIO 25** | bidirectional | U5 | [Navigation](/subsystems/navigation) |
+| `I2C0_SCL` | **GPIO 26** | out | U5 | [Navigation](/subsystems/navigation) |
 | `GNSS_TX` / `GNSS_RX` | **not recovered** | UART | U2 | [Navigation](/subsystems/navigation) |
 
 The pull-ups named above are the ESP32's **internal** ones, since that is what the firmware
@@ -160,14 +160,16 @@ These are gaps, not omissions, and each one names the photograph that would clos
 
 | Unknown | What would resolve it |
 | --- | --- |
-| U5, U6, U7 part numbers | Macro shots of the LED side **with the halo off**. Its glare washes the laser marking off every package there at every exposure in the current set, while the radio side, lit only by the ring's spill, gave up all of its markings |
-| U4's actual part | A clearer shot of the SOT-23-5. `ACH` alone does not identify it |
-| GNSS UART pin numbers | The traces leaving U2 are visible but not followable past the module's own pads; a deeper decode of the UART init is the better route |
+| U6 (`I2948`) | Nothing photographic — the marking is already fully legible. It needs a vendor's marking table, or continuity onto a known net |
+| U4 (`ACH`) and Q? (`J22B`) | Same: legible, unidentified. Three- and four-letter codes are reused across manufacturers |
+| **U5's identity from the board alone** | **Nothing.** Its lid is sandblasted with no marking at all, so no photograph can ever name it. That it is an ICM-20948 comes from the firmware, not the package, and this is the general lesson: for an unmarked part, what the code says to it identifies it and a photograph cannot |
+| GNSS UART pin numbers | The traces leaving U2 are visible but not followable past the module's pads; a deeper decode of the UART init is the better route |
 | Passive values, divider ratios, series resistors | A bare board, or the manufacturer's files. Not recoverable from an assembled one — the single `124` above is the exception that shows the rule |
 | External pull-ups on I²C | Same |
 
-All three photographs are 4032×3024. The radio side yielded every marking it carries; the
-LED side is sharp and unmarked, because the thing being photographed is also a lamp.
+Flash with the halo switched off is what produced most of the markings above; the earlier set
+had the board lit by its own LEDs, which erased them. What that technique could not do is
+give U5 a marking it was never given.
 
 ## How this differs from the emulator board
 
@@ -180,8 +182,7 @@ board with different parts:
 | GNSS | u-blox MAX-M10S, 4 constellations | Quectel L76K, 3 at most |
 | GNSS protocol | UBX binary, NMEA off, firmware-configured | NMEA text, **no configuration sent at all** |
 | Power | integrated path, GPIO 4 latch | AXP2101 PMU on I²C |
-| IMU | I²C bus 0, part unknown | QMI8658 on SPI |
-| Magnetometer | I²C bus 0, part unknown | QMC6310 at 0x3c |
+| IMU and magnetometer | one ICM-20948 on I²C bus 0, 9-axis | two parts: QMI8658 on SPI, QMC6310 at 0x3c on I²C |
 | Microphone | yes, GPIO 36 | none |
 | LEDs | 60 + 7 addressable | none |
 
