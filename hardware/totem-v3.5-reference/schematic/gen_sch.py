@@ -139,8 +139,16 @@ class Sheet:
         )
 
     def label(self, name, x, y, angle):
+        """A local label.
+
+        The manual is explicit that local labels connect within a sheet and
+        global labels connect across sheets regardless of hierarchy. This
+        design is one flat sheet, so globals would be claiming a scope it
+        does not have — and their boxed outlines are much of what made the
+        first drawing unreadable.
+        """
         self.items.append(
-            ["global_label", ("str", name), ["shape", "bidirectional"],
+            ["label", ("str", name),
              ["at", f"{x:.2f}", f"{y:.2f}", str(angle)],
              ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", "left"]],
              ["uuid", ("str", uid())]]
