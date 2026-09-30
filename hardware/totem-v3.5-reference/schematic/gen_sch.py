@@ -169,7 +169,7 @@ class Sheet:
         return f"{prefix}{self.power_n[prefix]:02d}"
 
     def place(self, lib_id, x, y, ref, value, hide=False, on_board=True,
-              hide_ref=False, value_below=False, footprint=None):
+              hide_ref=False, value_below=False, footprint=None, in_bom=None):
         """Place a symbol.
 
         `hide_ref` hides the reference but leaves the value showing, which
@@ -195,7 +195,7 @@ class Sheet:
              ["at", f"{x:.2f}", f"{y:.2f}", "0"],
              ["unit", "1"],
              ["exclude_from_sim", "no"],
-             ["in_bom", "yes" if on_board else "no"],
+             ["in_bom", "yes" if (on_board if in_bom is None else in_bom) else "no"],
              ["on_board", "yes" if on_board else "no"],
              ["dnp", "no"],
              ["uuid", ("str", uid(f"sym:{ref}"))],
@@ -303,7 +303,8 @@ def main():
         if part.ref not in where:
             continue
         lib_id, x, y = where[part.ref]
-        sheet.place(lib_id, x, y, part.ref, str(part.value or part.name), footprint=getattr(part, "footprint", None) or None)
+        sheet.place(lib_id, x, y, part.ref, str(part.value or part.name), footprint=getattr(part, "footprint", None) or None,
+                    in_bom=getattr(part, "in_bom", True))
         geom = pin_positions(sheet.libs[lib_id])
         for pin in part.pins:
             nums = pin.num if isinstance(pin.num, list) else [pin.num]

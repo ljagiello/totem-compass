@@ -389,11 +389,15 @@ zone("VLED", pcbnew.B_Cu, annulus(RC[0], RC[1], placement.RR + 0.35, 30), 2, nam
 zone("GND", pcbnew.B_Cu, circle(RC[0], RC[1], placement.RR - 0.35), 1, name="GND inside ring")
 zone("GND", pcbnew.F_Cu, BIG, 0, name="GND radio side")
 
-# 67 LEDs packed 0.4 mm apart have no room for legible references; the fab
-# layer keeps them, and the assembly drawing is generated from it
+# References: 0603s packed 0.3 mm apart and 67 LEDs 0.4 mm apart leave no room
+# for legible silkscreen text that clears the pads. The fab layers keep every
+# reference (the assembly drawing and the placement file come from them); the
+# silkscreen keeps the part outlines and pin-1 marks.
 for ref, fp in FP.items():
-    if re.fullmatch(r"D(1\d\d|2\d\d)", ref):
-        fp.Reference().SetVisible(False)
+    fp.Reference().SetVisible(False)
+# the touch post's pad carries a spring that has to be bought and placed;
+# KiCad's test-point footprints default to leaving the bill of materials
+FP["TP1"].SetExcludedFromBOM(False)
 
 out = os.path.join(PROJ, "totem.kicad_pcb")
 pcbnew.SaveBoard(out, B)

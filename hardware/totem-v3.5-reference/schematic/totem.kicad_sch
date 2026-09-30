@@ -12271,7 +12271,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "601388c9-cb1c-4db5-ba13-9a889199f23a")
+			(uuid "71718dfc-8989-4a12-9d70-a9e94b47f009")
 		)
 		(instances
 			(project "totem"
@@ -12346,7 +12346,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3f7154f8-6f91-4383-9ab9-0cbf803ff82f")
+			(uuid "f89c2ef1-8023-4377-bda1-a0b008a56110")
 		)
 		(instances
 			(project "totem"
@@ -12359,7 +12359,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 934.72 182.88 0)
+		(at 500.38 307.34 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -12369,7 +12369,7 @@
 		(dnp no)
 		(uuid "01be0736-2cad-5a59-91a8-408d72b66c89")
 		(property "Reference" "#PWR150"
-			(at 934.72 170.88 0)
+			(at 500.38 295.34 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12380,7 +12380,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 934.72 187.88 0)
+			(at 500.38 312.34 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12390,7 +12390,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 934.72 178.88 0)
+			(at 500.38 303.34 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12401,7 +12401,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 934.72 182.88 0)
+			(at 500.38 307.34 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12411,7 +12411,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 934.72 182.88 0)
+			(at 500.38 307.34 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12421,7 +12421,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5766e163-3b90-4e85-987d-f82c03131882")
+			(uuid "8fd9318c-b472-4ba1-83da-dc491b802268")
 		)
 		(instances
 			(project "totem"
@@ -12494,11 +12494,11 @@
 				)
 			)
 		)
-		(pin "2"
-			(uuid "ea81ab66-e0b0-43c2-886a-8a27c77c860a")
-		)
 		(pin "1"
-			(uuid "d328d455-3b69-418f-8830-b6ed1d7bd116")
+			(uuid "7e2f1c20-f425-4645-9678-f202ac7331ea")
+		)
+		(pin "2"
+			(uuid "2d445aa6-b9d7-4ddb-a3af-3ec5c633d1cf")
 		)
 		(instances
 			(project "totem"
@@ -12572,10 +12572,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "c63badf0-9150-4778-ae93-0af306d75993")
+			(uuid "1cab6352-15a5-479e-8152-67842d7261ba")
 		)
 		(pin "2"
-			(uuid "f94e44e3-a944-4fb7-afe2-7a5c9282559d")
+			(uuid "2c808cc5-ddc1-4ca4-9842-0bf8a7988709")
 		)
 		(instances
 			(project "totem"
@@ -12649,16 +12649,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "9b7976de-720d-4f25-86aa-ed6f35517dc4")
+			(uuid "52354fb3-889e-4715-ab55-8f2ffd4e52da")
 		)
 		(pin "2"
-			(uuid "05d03012-2096-4deb-b293-86b820f290f6")
+			(uuid "c54c23e1-5d82-43f7-aac5-7f77ac529833")
 		)
 		(pin "3"
-			(uuid "845cda39-284f-40fc-a8e0-a191291389f3")
+			(uuid "23c8c8f3-e187-4eeb-9330-f3b89a89b00a")
 		)
 		(pin "4"
-			(uuid "4ffb2777-3101-4c30-a1c7-78a8da869d7c")
+			(uuid "67378a06-6335-4c28-9148-3b9ff6f52b97")
 		)
 		(instances
 			(project "totem"
@@ -12733,7 +12733,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c3714971-d8d4-4932-be97-8b381c24d527")
+			(uuid "34f24f70-b623-4b15-8a5c-83d3e7507c5e")
 		)
 		(instances
 			(project "totem"
@@ -12808,7 +12808,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e74f007c-e620-4a7c-9e5e-ee69f7e0c0d3")
+			(uuid "1c12c0c2-d930-41d4-bd2f-ae446d5e4766")
 		)
 		(instances
 			(project "totem"
@@ -12821,7 +12821,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 580.39 588.01 0)
+		(at 459.74 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -12831,7 +12831,7 @@
 		(dnp no)
 		(uuid "05945c66-f2cf-5b39-8cc7-919b6be8d980")
 		(property "Reference" "#PWR68"
-			(at 580.39 576.01 0)
+			(at 459.74 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12842,7 +12842,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 580.39 580.01 0)
+			(at 459.74 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12852,7 +12852,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 580.39 584.01 0)
+			(at 459.74 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -12863,7 +12863,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 580.39 588.01 0)
+			(at 459.74 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12873,7 +12873,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 580.39 588.01 0)
+			(at 459.74 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -12883,7 +12883,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6605f537-fad4-4dfa-bfb4-1d1723f81d8a")
+			(uuid "38ac70ff-f048-4539-8aca-88f01b0e7886")
 		)
 		(instances
 			(project "totem"
@@ -12957,10 +12957,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "ce549ab0-95ac-48a6-b715-bb336dd4ec50")
+			(uuid "a0144ab6-369a-4de0-a8ac-d5a035211b13")
 		)
 		(pin "2"
-			(uuid "44c8547b-8cfa-40b4-b976-e2d272075910")
+			(uuid "45f9f338-3941-4f0c-97d8-55cf2a12cb5b")
 		)
 		(instances
 			(project "totem"
@@ -13034,10 +13034,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "c6470b31-5aeb-46ac-bb22-f7aee120249f")
+			(uuid "1433abb5-90d9-4801-a7cd-5d280ecfff4d")
 		)
 		(pin "2"
-			(uuid "fe15ac63-9d8b-4c57-a300-9d77c892aaf2")
+			(uuid "20e22cb7-06b5-4a47-9893-ea06e90e8586")
 		)
 		(instances
 			(project "totem"
@@ -13112,7 +13112,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "80346bd2-ffc6-4c59-a3a4-2574e24a5055")
+			(uuid "8f842812-8e97-48a8-9102-d72be144fda5")
 		)
 		(instances
 			(project "totem"
@@ -13186,16 +13186,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "49b4c290-c7e5-490c-b580-67ad90e2e08c")
+			(uuid "45b2ca40-3bae-46d3-8324-5be2104b4f26")
 		)
 		(pin "2"
-			(uuid "92ae52d2-7f09-4062-9df1-a1027a0cc54d")
+			(uuid "f004225d-2234-4655-95ca-7e59f6116546")
 		)
 		(pin "3"
-			(uuid "5b6a394a-9122-470d-92b5-2129279d6dc6")
+			(uuid "4e926474-f806-4f5e-87f5-1abc2cedfa71")
 		)
 		(pin "4"
-			(uuid "ad434561-ddda-457a-bd71-32bc67a7a163")
+			(uuid "8d51a235-b3b5-41d1-ab6b-de73480e5ae7")
 		)
 		(instances
 			(project "totem"
@@ -13270,7 +13270,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e097f966-60c1-4d54-a407-0e951db9e97d")
+			(uuid "1eb6f5ab-485d-4ac7-927b-afa1365b033e")
 		)
 		(instances
 			(project "totem"
@@ -13345,7 +13345,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f8a66eab-2587-4d7a-9533-b7c01b56d086")
+			(uuid "762a9b09-9182-41fc-9060-f2ed769f7de7")
 		)
 		(instances
 			(project "totem"
@@ -13420,7 +13420,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d69f8602-ac30-40dd-bb15-1045713601c3")
+			(uuid "82d1f15d-c7c2-414e-936b-0a92be05f8b5")
 		)
 		(instances
 			(project "totem"
@@ -13494,16 +13494,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "06603c14-2600-493e-b984-be7da64e6154")
+			(uuid "b5c167d0-7ba5-4b77-b53d-d0e182ae3208")
 		)
 		(pin "2"
-			(uuid "ddf2e894-49fd-4590-b5ff-0db3b29c2a55")
+			(uuid "e8de4115-c8b7-4d2a-837f-537e176062bf")
 		)
 		(pin "3"
-			(uuid "04a5f022-becc-43a6-8d10-18bee90a0d51")
+			(uuid "3f0dc472-866b-43ab-a1e4-d60f6600899f")
 		)
 		(pin "4"
-			(uuid "66af3e97-3845-4536-b0be-9047fc56cc8f")
+			(uuid "b425ea9e-348a-4e33-b27c-747b7ea9fc34")
 		)
 		(instances
 			(project "totem"
@@ -13577,10 +13577,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "9231bb64-90f6-4b4f-827e-30768dad737d")
+			(uuid "109c6a86-bb62-430d-8f30-19569a6edd76")
 		)
 		(pin "2"
-			(uuid "f8f3c158-893a-4628-8452-1c0159f32605")
+			(uuid "b1c88633-1090-48a6-90d3-58584e5d7eea")
 		)
 		(instances
 			(project "totem"
@@ -13655,7 +13655,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f30b2bdf-88dd-457d-a2dd-8b171101c193")
+			(uuid "cf29d002-c530-43ac-b913-f4485ac8d295")
 		)
 		(instances
 			(project "totem"
@@ -13668,7 +13668,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 299.72 654.05 0)
+		(at 180.34 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -13678,7 +13678,7 @@
 		(dnp no)
 		(uuid "0c59e7c3-6023-58a7-9b12-906d68c2ab3f")
 		(property "Reference" "#PWR75"
-			(at 299.72 642.05 0)
+			(at 180.34 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13689,7 +13689,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 299.72 646.05 0)
+			(at 180.34 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -13699,7 +13699,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 299.72 650.05 0)
+			(at 180.34 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -13710,7 +13710,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 299.72 654.05 0)
+			(at 180.34 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -13720,7 +13720,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 299.72 654.05 0)
+			(at 180.34 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -13730,7 +13730,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6c6889a9-2fa5-4886-840d-8f8be8bebf26")
+			(uuid "e9e007c6-8d35-48ae-9b08-d78fde889554")
 		)
 		(instances
 			(project "totem"
@@ -13805,7 +13805,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3fd632e5-619b-4d4f-9f67-5cfdbc4d4792")
+			(uuid "185ebff1-24e9-4b33-9a2e-b619b4b7f3bf")
 		)
 		(instances
 			(project "totem"
@@ -13880,7 +13880,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b9f7bd45-ad6e-4749-b350-1b258ff06f3e")
+			(uuid "f0e2cd7d-b422-4795-95b9-db2660ef11c8")
 		)
 		(instances
 			(project "totem"
@@ -13954,16 +13954,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "073add83-18c5-4828-864a-48685f3c86c5")
+			(uuid "9b2c3d28-3233-4435-9439-d5b4b30b9a27")
 		)
 		(pin "2"
-			(uuid "62ada04c-e9ad-4e30-86f2-1fdea192dec3")
+			(uuid "bf0c100d-6eee-436d-8643-1fe07ac17ce8")
 		)
 		(pin "3"
-			(uuid "e0d833e1-fe27-412c-a6be-958cbb79b0f6")
+			(uuid "da3186ce-24e0-4732-9319-70f82be0694c")
 		)
 		(pin "4"
-			(uuid "72244f48-b298-4b68-bd3f-9ceb2399cee1")
+			(uuid "8333da8a-2a05-456a-93cb-f0242bd0542d")
 		)
 		(instances
 			(project "totem"
@@ -14038,7 +14038,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7a65c75f-8653-42f0-96b6-749c3f3bd933")
+			(uuid "ca5f89f3-f1db-4caf-9d18-ab277b2c291b")
 		)
 		(instances
 			(project "totem"
@@ -14113,7 +14113,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4a7099ac-20bd-449e-9de1-ec3d8df42bb9")
+			(uuid "4b83fa53-6e28-4cfa-bfb6-fe4b2bdb250c")
 		)
 		(instances
 			(project "totem"
@@ -14187,10 +14187,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "2890cac1-49b7-4646-bafb-0d8a806f2403")
+			(uuid "55993f97-1843-4038-9c4b-6d3bfd93ce1b")
 		)
 		(pin "2"
-			(uuid "3fd2916d-c6bb-4520-b7a4-672937440c44")
+			(uuid "96355814-478b-49ae-a83a-eacd31046bb1")
 		)
 		(instances
 			(project "totem"
@@ -14264,10 +14264,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "659adfc1-ae58-4687-848c-967439f27fab")
+			(uuid "96986b25-9c71-4ce8-b155-8750397c38eb")
 		)
 		(pin "2"
-			(uuid "16c001b3-8635-466d-9801-b44565bc6c18")
+			(uuid "d253e723-53bb-485b-8327-000f721b305f")
 		)
 		(instances
 			(project "totem"
@@ -14342,7 +14342,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a8b8c059-02c6-4421-aacc-456f8ba4c585")
+			(uuid "557010cf-fc06-4e7e-972c-617928a6d312")
 		)
 		(instances
 			(project "totem"
@@ -14416,10 +14416,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "d09aae20-104a-4ed5-a849-5a68ed641468")
+			(uuid "6552d0ef-5975-4f64-82b3-4783d0e46318")
 		)
 		(pin "2"
-			(uuid "9dceb9f7-503a-479e-873e-802d6c2b2f14")
+			(uuid "75115eae-3c58-44be-9c3d-d43ef4b48dfe")
 		)
 		(instances
 			(project "totem"
@@ -14494,7 +14494,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "50dfdc1b-274a-4c4d-8b5c-f884c88cf2bc")
+			(uuid "476a382d-ccc4-4a2d-9815-62c4929d407c")
 		)
 		(instances
 			(project "totem"
@@ -14569,7 +14569,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "81025020-5582-41c0-9942-2872212a6616")
+			(uuid "4d47e0b2-7e93-4abc-a0f7-920d2f213b64")
 		)
 		(instances
 			(project "totem"
@@ -14644,7 +14644,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "9008332e-6cad-4655-84ec-92edd5178b77")
+			(uuid "118c3f6f-730d-4fe3-92e4-cbf4e3e918b2")
 		)
 		(instances
 			(project "totem"
@@ -14657,7 +14657,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 820.42 654.05 0)
+		(at 180.34 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -14667,7 +14667,7 @@
 		(dnp no)
 		(uuid "12dcc89a-8f67-5c5c-ba95-270e9bed997a")
 		(property "Reference" "#PWR84"
-			(at 820.42 642.05 0)
+			(at 180.34 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14678,7 +14678,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 820.42 646.05 0)
+			(at 180.34 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14688,7 +14688,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 820.42 650.05 0)
+			(at 180.34 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -14699,7 +14699,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 820.42 654.05 0)
+			(at 180.34 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14709,7 +14709,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 820.42 654.05 0)
+			(at 180.34 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -14719,7 +14719,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "67e13f84-1311-4d83-ac5c-8c1bc624c8e4")
+			(uuid "89ebfa2e-8418-4f8c-ae55-7e2203209fe7")
 		)
 		(instances
 			(project "totem"
@@ -14794,7 +14794,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e00385ef-782e-41b2-b74f-50ae17e3a94e")
+			(uuid "d698a8aa-80aa-4c00-b073-84b5cb0c79e3")
 		)
 		(instances
 			(project "totem"
@@ -14869,7 +14869,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "178a4569-fc4d-4a59-a7b7-2a92ba1b904c")
+			(uuid "20630451-8dac-4885-8491-a4bc88be46bf")
 		)
 		(instances
 			(project "totem"
@@ -14944,7 +14944,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "57f25cc7-319c-43cd-a2e0-af695545826e")
+			(uuid "98f8d7cf-c527-4c4e-96bb-25ee1580d84d")
 		)
 		(instances
 			(project "totem"
@@ -15018,16 +15018,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "eedcba61-d47f-4115-a24b-66cf5958752e")
+			(uuid "7846ffa7-8629-4029-a417-bbe9bda17bb5")
 		)
 		(pin "2"
-			(uuid "a710a9e2-379b-4fcc-bd1b-a64e0ea3ee39")
+			(uuid "238a88b9-466d-4043-a991-3f0dd85de3d7")
 		)
 		(pin "3"
-			(uuid "62d7519e-9d23-48a8-979a-3bcb21442387")
+			(uuid "b3fd25b1-f526-447b-b3a2-bab637d4f7db")
 		)
 		(pin "4"
-			(uuid "cbd0add5-a5f3-43f7-9df9-6fb2e7e04100")
+			(uuid "613033ab-972f-46fa-b58a-33e3b9039998")
 		)
 		(instances
 			(project "totem"
@@ -15102,7 +15102,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "aaf28582-4615-469f-bcde-bb1624b1ef2e")
+			(uuid "6be836cc-6414-49db-8639-a9e39e1189f2")
 		)
 		(instances
 			(project "totem"
@@ -15176,13 +15176,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "bc74d865-aad8-4fd4-8f49-e2396157534d")
+			(uuid "0c40e452-2238-42b3-b1b5-08b6547919e0")
 		)
 		(pin "2"
-			(uuid "eaf36e91-f61e-40f2-89ee-78c0b33b926c")
+			(uuid "648a27e9-3f16-4deb-89f4-f407867dde2a")
 		)
 		(pin "3"
-			(uuid "0196edef-9eca-4e24-993b-02545f114d80")
+			(uuid "935349a5-ab68-4234-9192-e5716e6c22ac")
 		)
 		(instances
 			(project "totem"
@@ -15195,7 +15195,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 660.4 654.05 0)
+		(at 699.77 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -15205,7 +15205,7 @@
 		(dnp no)
 		(uuid "1817c5b7-5208-52c4-94c5-3aeff28f340a")
 		(property "Reference" "#PWR92"
-			(at 660.4 642.05 0)
+			(at 699.77 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15216,7 +15216,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 660.4 646.05 0)
+			(at 699.77 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15226,7 +15226,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 660.4 650.05 0)
+			(at 699.77 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15237,7 +15237,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 660.4 654.05 0)
+			(at 699.77 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15247,7 +15247,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 660.4 654.05 0)
+			(at 699.77 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15257,7 +15257,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3b41d195-0e22-43f2-b185-a5f17ab9a587")
+			(uuid "c43e7cd7-d532-41b5-a950-09ce4579bdfb")
 		)
 		(instances
 			(project "totem"
@@ -15331,10 +15331,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "1b64a5b0-14e6-464b-95eb-f205218e02a5")
+			(uuid "153b1cd7-1a94-4dd4-bffa-ea82c55d1c5a")
 		)
 		(pin "2"
-			(uuid "8e11892d-b023-4a3f-96a6-7f8b64ef0992")
+			(uuid "6159b50d-79de-4933-90e5-3a0bf6737a00")
 		)
 		(instances
 			(project "totem"
@@ -15409,7 +15409,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "832a0528-8655-4734-b75a-924ff7e328dc")
+			(uuid "07bc6b97-8196-45af-a42a-bdfa6879a65e")
 		)
 		(instances
 			(project "totem"
@@ -15484,7 +15484,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b9f5e9b9-377a-4704-9fbe-9fd589f37758")
+			(uuid "59660206-8fec-4bd4-bfba-9cc10a0fcd6f")
 		)
 		(instances
 			(project "totem"
@@ -15559,7 +15559,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "01eaa1a3-4c4b-4305-bf86-6808c3dc47d1")
+			(uuid "654847c9-fa34-4ab0-b649-7ee9fd4907d1")
 		)
 		(instances
 			(project "totem"
@@ -15634,7 +15634,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "490efac4-9689-4b4b-9706-f67407eef512")
+			(uuid "68c08a6a-17b9-463e-a7f0-ed93b4eda288")
 		)
 		(instances
 			(project "totem"
@@ -15647,7 +15647,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 779.78 588.01 0)
+		(at 539.75 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -15657,7 +15657,7 @@
 		(dnp no)
 		(uuid "1b9bfd02-27fb-5bcf-930d-be58a018f1e6")
 		(property "Reference" "#PWR91"
-			(at 779.78 576.01 0)
+			(at 539.75 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15668,7 +15668,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 779.78 580.01 0)
+			(at 539.75 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15678,7 +15678,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 779.78 584.01 0)
+			(at 539.75 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -15689,7 +15689,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 779.78 588.01 0)
+			(at 539.75 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15699,7 +15699,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 779.78 588.01 0)
+			(at 539.75 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -15709,7 +15709,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0bba4d7e-939f-4849-9f6f-83df8927a2b4")
+			(uuid "69d4ec94-2789-480f-ac4d-787c7b09970b")
 		)
 		(instances
 			(project "totem"
@@ -15784,7 +15784,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6f363606-c0b0-4a85-8d02-9a402bb1a547")
+			(uuid "10d98e97-08e0-4bb2-81e2-cc637f439e7e")
 		)
 		(instances
 			(project "totem"
@@ -15801,7 +15801,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -15858,7 +15858,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ab86f0d1-f04f-446f-bd18-f0d9fa09f59d")
+			(uuid "545187e3-55ab-4ae7-b186-84645c44220d")
 		)
 		(instances
 			(project "totem"
@@ -15932,58 +15932,58 @@
 			)
 		)
 		(pin "1"
-			(uuid "3b21a690-090b-4a57-8c3b-25d62f6fe2c4")
+			(uuid "e5b57f44-97cf-454c-b5b0-a46d719268f2")
 		)
 		(pin "2"
-			(uuid "91668440-55d2-4cd1-925a-4acea46e295d")
+			(uuid "7d835761-275c-477e-b4fe-8b764d50bbbe")
 		)
 		(pin "3"
-			(uuid "7079940b-2985-40d9-800f-51c826276287")
+			(uuid "f9e43134-f195-435e-8543-c4a610ab0165")
 		)
 		(pin "4"
-			(uuid "3ab16f74-5aae-4ecf-9802-680d21f4635b")
+			(uuid "e44da0d1-cf8f-4980-9745-d0baaf1e2967")
 		)
 		(pin "5"
-			(uuid "86355c46-a62a-4bf8-a002-d1b5c121ea26")
+			(uuid "cb8bc22d-865d-4940-ba44-0c31ca5e4d9a")
 		)
 		(pin "6"
-			(uuid "843f49e0-3048-449c-90e0-20e02789f700")
+			(uuid "d5427041-344b-4a7e-9c6d-2f2fcf8688db")
 		)
 		(pin "7"
-			(uuid "e52316c9-231d-4296-bab9-49689a128908")
+			(uuid "9d0d3d1b-30f2-4adb-aebb-1f8934f65d0c")
 		)
 		(pin "8"
-			(uuid "19bc807a-4420-40f4-adb6-396cb64ef020")
+			(uuid "65a7600d-7d87-419c-b127-e2196f56a41a")
 		)
 		(pin "9"
-			(uuid "31b56a69-bb2d-4bd5-802a-42fab2ea85dd")
+			(uuid "d5622ace-7293-47de-b707-80ed32f83bf2")
 		)
 		(pin "10"
-			(uuid "c97cf794-f8a1-408f-99bf-f3832435c4f6")
+			(uuid "ff567a88-70e0-47ec-bcb8-3afd05e388b3")
 		)
 		(pin "11"
-			(uuid "aaa2bbd0-54af-44f7-ace3-04a8b8596d15")
+			(uuid "681655ab-45af-406e-aaec-701b2c78bc2a")
 		)
 		(pin "12"
-			(uuid "c9f53914-1dae-4b6c-a847-0267ec9b2eee")
+			(uuid "5b4c85fb-f24a-4691-b328-e332764a7bf1")
 		)
 		(pin "13"
-			(uuid "e1863c61-7607-4da9-aca3-601b682f038f")
+			(uuid "5d4f7481-4e5c-474e-b582-b9b6365774a3")
 		)
 		(pin "14"
-			(uuid "fd1023bc-5dd6-4574-b3d1-11e80c6f51b4")
+			(uuid "e6e3df8d-c844-4c87-a2d9-e710001bf3c5")
 		)
 		(pin "15"
-			(uuid "4de8870d-c28c-4947-9311-6a8a2dcb704a")
+			(uuid "b7082946-2156-42b0-92cc-45d6e9dcce94")
 		)
 		(pin "16"
-			(uuid "25a07238-c8af-49af-9023-e6348e93f246")
+			(uuid "622fb001-b45e-48cd-82c3-6923abc943da")
 		)
 		(pin "17"
-			(uuid "04b5e197-a3dd-4edf-be41-dea9d425d4ac")
+			(uuid "1d692cb2-e4dd-49eb-8537-ce230b8d9032")
 		)
 		(pin "18"
-			(uuid "bcd1ef73-78cf-44a5-9029-ed5fc5028504")
+			(uuid "8c78fe02-bc15-46cf-b9fb-f8320cb7dcb7")
 		)
 		(instances
 			(project "totem"
@@ -16057,16 +16057,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "ae1b639b-eecb-4a42-b402-989f8e367b01")
+			(uuid "d0c99d47-a72d-4496-a811-d8f1c6420642")
 		)
 		(pin "2"
-			(uuid "1e9709a3-96cc-4e7d-b698-e8a30b041b7e")
+			(uuid "ba72af90-d94c-4cad-95f0-e137e616e789")
 		)
 		(pin "3"
-			(uuid "161259d7-06f7-44be-aa27-330cce26ff33")
+			(uuid "8c491eeb-dc3e-476f-a4cd-9b4b5a8872d1")
 		)
 		(pin "4"
-			(uuid "bd249398-a7f8-44b3-8d8d-2b238a0bcf38")
+			(uuid "74f8fd95-84b9-4597-92fd-cdefb9f39af2")
 		)
 		(instances
 			(project "totem"
@@ -16140,10 +16140,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "52244fdf-668d-4de6-a73a-ee15c6d59ba4")
+			(uuid "164cd929-0d58-45bf-b2f6-04443ffadf7c")
 		)
 		(pin "2"
-			(uuid "6fc47ae2-1254-4d89-af3a-4fcaf5280bc2")
+			(uuid "afec0edf-601a-4c76-84a2-655a50a1b343")
 		)
 		(instances
 			(project "totem"
@@ -16219,7 +16219,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "232d3207-6418-4ece-bfc8-653f5f902b0d")
+			(uuid "15d72338-386d-4031-a081-16b8948b93ec")
 		)
 		(instances
 			(project "totem"
@@ -16294,7 +16294,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "508e6231-3a3c-4ca2-aba6-ff0a4776cb37")
+			(uuid "69991289-e22b-4a5e-8aa6-cd2d04da2296")
 		)
 		(instances
 			(project "totem"
@@ -16369,7 +16369,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "01756387-068b-47c4-b9cd-65a01a1f8f7c")
+			(uuid "95e8bb20-4cbe-4b2a-b24e-ee2c042fd9a4")
 		)
 		(instances
 			(project "totem"
@@ -16444,7 +16444,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0782eda3-1543-45be-8864-3bd4ded342a6")
+			(uuid "d7843135-5e06-4a57-99b6-ad7efd9d1644")
 		)
 		(instances
 			(project "totem"
@@ -16457,7 +16457,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 340.36 718.82 0)
+		(at 500.38 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -16467,7 +16467,7 @@
 		(dnp no)
 		(uuid "24fa0f33-aa83-5156-9031-6b6d3a01d8b7")
 		(property "Reference" "#PWR70"
-			(at 340.36 706.82 0)
+			(at 500.38 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16478,7 +16478,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 340.36 710.82 0)
+			(at 500.38 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -16488,7 +16488,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 340.36 714.82 0)
+			(at 500.38 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -16499,7 +16499,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 340.36 718.82 0)
+			(at 500.38 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -16509,7 +16509,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 340.36 718.82 0)
+			(at 500.38 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -16519,7 +16519,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b7e8b698-aa99-4213-85ba-0410886b8251")
+			(uuid "e1de3b4e-196a-4498-a5db-fa5309ad0d4e")
 		)
 		(instances
 			(project "totem"
@@ -16594,7 +16594,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "9cc046e5-aea5-4c63-b5a2-0b98f8b62ccf")
+			(uuid "a5c25d77-f2a4-40f1-8c95-ce8203fa01e1")
 		)
 		(instances
 			(project "totem"
@@ -16668,16 +16668,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "58316f40-3f95-4ed0-8a60-c87b5e9b8352")
+			(uuid "4c3fe0f1-6dea-47f2-a4bd-97de5141f9cd")
 		)
 		(pin "2"
-			(uuid "69102241-0838-490c-b8dd-edebb35d4e10")
+			(uuid "1ceca6ea-d641-4444-b99a-d958cc975728")
 		)
 		(pin "3"
-			(uuid "d4498794-4f11-41f4-8da4-e140b4924b20")
+			(uuid "44b193e8-e9a7-49b2-bf88-3e492ceff299")
 		)
 		(pin "4"
-			(uuid "ee355905-f681-4dce-93ca-9e396a78178d")
+			(uuid "5957256b-e3c3-484d-85e5-fd7d029aab74")
 		)
 		(instances
 			(project "totem"
@@ -16752,7 +16752,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f867c02f-635a-4293-b5f6-c949fc4676db")
+			(uuid "05a6cd5b-837c-4aef-b285-27dc4a9e52b7")
 		)
 		(instances
 			(project "totem"
@@ -16827,7 +16827,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d8b8f83b-2b17-4697-8f22-f1704c313042")
+			(uuid "154cf725-f67c-4b57-a37f-8090f9ba0df2")
 		)
 		(instances
 			(project "totem"
@@ -16901,31 +16901,31 @@
 			)
 		)
 		(pin "1"
-			(uuid "07b692b9-f988-46ff-8d97-0f9bbc0e48a2")
+			(uuid "392cab04-4627-42a0-9959-9161376e5032")
 		)
 		(pin "2"
-			(uuid "22ec4ace-717c-4de6-9171-ffb207b7ac5d")
+			(uuid "3b583195-6809-49c5-a470-5748aec0265f")
 		)
 		(pin "3"
-			(uuid "4758f8c0-0934-4b6a-8b9d-50013056400c")
+			(uuid "1f257c82-3af3-461c-b305-411eb1041f4f")
 		)
 		(pin "4"
-			(uuid "3ec827e5-d19a-481c-8f9b-a60384166f06")
+			(uuid "4f980ff6-8b81-46ca-b4af-9f7d9c5e9e93")
 		)
 		(pin "5"
-			(uuid "4eed63e3-18a8-497a-959a-8c9bb1e903ed")
+			(uuid "025ca458-ea56-4f69-9bd2-1767992d0506")
 		)
 		(pin "6"
-			(uuid "b70a350a-3baf-493f-af8a-a00736be944e")
+			(uuid "52ce67a1-3c76-4aac-89e1-0ebe5e163b80")
 		)
 		(pin "7"
-			(uuid "e038fca8-7c8c-4034-92a3-281d2347cd9d")
+			(uuid "4783b211-2235-4ee6-978a-92f6ba7ade9e")
 		)
 		(pin "8"
-			(uuid "447e8462-455d-40ed-ae24-28cc7bc7f3ff")
+			(uuid "7c833dad-84b8-498f-ba57-2492afe44154")
 		)
 		(pin "9"
-			(uuid "39c1673b-275e-4e54-b709-b557096c45fd")
+			(uuid "fced8e8d-239c-4d05-ba2e-ceb84d77174d")
 		)
 		(instances
 			(project "totem"
@@ -17000,7 +17000,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f5aa67a9-6438-4092-90d1-6d6c6707a058")
+			(uuid "53354d37-8964-4268-892f-aed5c34f1667")
 		)
 		(instances
 			(project "totem"
@@ -17074,16 +17074,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "094d070c-6395-4d8d-8731-7bd54d2df110")
+			(uuid "7ebb1044-0711-427c-8c67-187cd457ba59")
 		)
 		(pin "2"
-			(uuid "f21f445f-a6c3-4ac8-8167-67e6ae5fcaae")
+			(uuid "12c9fe55-fcd6-41bd-88d4-0aaac1fb494f")
 		)
 		(pin "3"
-			(uuid "c095d2d4-05b0-4709-8b4f-2fdf1ae8a8e4")
+			(uuid "cd1c2bc5-a16d-4c56-95dc-0a095b415693")
 		)
 		(pin "4"
-			(uuid "9274de6c-05a9-4ad3-a730-ee929ddbffe5")
+			(uuid "994a50ec-317c-4584-ba37-365cbb3551e6")
 		)
 		(instances
 			(project "totem"
@@ -17157,16 +17157,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "cb662dd2-dfd3-457f-93fe-e8148ac894fb")
+			(uuid "41f26cf3-2558-44b4-9557-6434e1878f97")
 		)
 		(pin "2"
-			(uuid "435e3a44-b49b-4ce9-a7b7-6089c86a4923")
+			(uuid "21a66f99-2f1d-4a9e-a1f7-14300470dfd8")
 		)
 		(pin "3"
-			(uuid "0f991d9a-4986-46ac-a446-1acf96e1ad16")
+			(uuid "054dc0f1-68a6-4e13-a629-b2a5a3b9b597")
 		)
 		(pin "4"
-			(uuid "b6ca707b-3970-4147-9a55-ca2a20743e6b")
+			(uuid "53f948c8-730f-418c-8e67-b4ade563d63e")
 		)
 		(instances
 			(project "totem"
@@ -17241,7 +17241,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2dceb1f9-d490-45e3-859b-c751cbeaefe5")
+			(uuid "402701cb-5bbf-46b1-8332-cd7d84bc429c")
 		)
 		(instances
 			(project "totem"
@@ -17317,7 +17317,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "56916d47-ca2f-4ebd-b0a8-d77de52878cb")
+			(uuid "8e160e4a-1947-4a65-bf01-d6e02251e4ea")
 		)
 		(instances
 			(project "totem"
@@ -17392,7 +17392,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "480d1301-703f-464b-b628-376a909a5cf3")
+			(uuid "4be4c23d-5ad9-4f45-9ae8-73b5ba01b78c")
 		)
 		(instances
 			(project "totem"
@@ -17467,7 +17467,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5890772c-9073-4a70-8e01-c09093b1c15b")
+			(uuid "0d99a746-4f66-4c0c-9aeb-158f31a01a68")
 		)
 		(instances
 			(project "totem"
@@ -17541,10 +17541,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "573a0a3f-e6a2-43fd-ac60-4dbfe1cc2db0")
+			(uuid "118572a6-18be-4a63-8f1f-88529571c97d")
 		)
 		(pin "2"
-			(uuid "36d230b6-58e6-4675-be56-81fc0cef07a6")
+			(uuid "1e05898d-1cf3-4e3a-8e6a-dd40fdd49f7f")
 		)
 		(instances
 			(project "totem"
@@ -17618,16 +17618,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "d42e5f10-7e32-4c8f-86ad-4f89cd129fd4")
+			(uuid "97d6d877-cca8-4ba6-a2d4-d5029899cfc5")
 		)
 		(pin "2"
-			(uuid "b623f50a-dd12-40bb-82d2-359e81959a46")
+			(uuid "61903f54-2673-46f5-9de8-0262b4fa4cde")
 		)
 		(pin "3"
-			(uuid "0cfed624-03a8-41ac-806d-2a26023c4c89")
+			(uuid "c593f7bf-2537-484f-8658-5c0a79914d00")
 		)
 		(pin "4"
-			(uuid "b37a3518-4d4d-41e0-84e6-d00d957435d5")
+			(uuid "6ab065c1-7b0d-47ea-95d2-b16cbcdd9e4a")
 		)
 		(instances
 			(project "totem"
@@ -17702,7 +17702,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4cd6c3a4-c3d2-4a0b-920c-407f2108fe63")
+			(uuid "747a080d-d3d7-4a28-9202-4e5b00e479a3")
 		)
 		(instances
 			(project "totem"
@@ -17776,16 +17776,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "a68a5682-a337-4903-a4a8-51a565fd3b1f")
+			(uuid "90c24a70-9027-4ab9-ac70-76baf5b0af85")
 		)
 		(pin "2"
-			(uuid "a31b2334-63ce-4769-8c3c-193622faf442")
+			(uuid "052a469c-48a6-4d52-bbf4-d2b7e6923960")
 		)
 		(pin "3"
-			(uuid "a2783863-557d-45dd-bcde-c0edb066c56e")
+			(uuid "a0ef8fd7-8ffc-443e-9049-dc7c856b5971")
 		)
 		(pin "4"
-			(uuid "c302cbad-654f-4166-87a8-1b69d469545a")
+			(uuid "6730c4d6-a975-4684-ad84-9ee01953c4ae")
 		)
 		(instances
 			(project "totem"
@@ -17859,10 +17859,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "7563e6fd-6933-4f81-98f5-17d204c1b07e")
+			(uuid "af74ce4f-d9f4-4f08-b8ed-0e7fae1fbc79")
 		)
 		(pin "2"
-			(uuid "cbe186db-f5d2-4706-9a1c-afe7444b670e")
+			(uuid "70de8383-ec9c-4fbc-9291-1dc76f818ebb")
 		)
 		(instances
 			(project "totem"
@@ -17936,16 +17936,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "95963688-9d8d-4d8d-8969-e175798f714d")
+			(uuid "ad61b7e0-0db4-4e64-9462-38875ae87b54")
 		)
 		(pin "2"
-			(uuid "0d3fcbca-e65c-4120-a786-cb355f95a992")
+			(uuid "e411f139-93da-4f29-b932-3ba3d763333f")
 		)
 		(pin "3"
-			(uuid "126953d4-4d67-48d6-82ae-c83bd7769a88")
+			(uuid "09388ea5-c18f-4f73-bbd8-256305d86354")
 		)
 		(pin "4"
-			(uuid "31941939-c388-4e8a-86e1-7c7d9f1258b9")
+			(uuid "d7e5f8ed-5441-4c1a-bc3e-c42b7656eab2")
 		)
 		(instances
 			(project "totem"
@@ -18020,7 +18020,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "9cf075b0-42ab-4c62-a882-9b00865aa004")
+			(uuid "76422208-c341-40d2-9b95-0e7108d302b5")
 		)
 		(instances
 			(project "totem"
@@ -18094,19 +18094,19 @@
 			)
 		)
 		(pin "1"
-			(uuid "4424ec73-7c8d-4415-932a-ac4f42063c30")
+			(uuid "15413416-576e-4e65-87da-bc803f9f8e75")
 		)
 		(pin "2"
-			(uuid "ed5e034d-7c77-40b5-b2db-8531b0bcc5e2")
+			(uuid "71bc4073-5775-4208-8dc7-7eb40759d249")
 		)
 		(pin "3"
-			(uuid "969085e6-34df-4bc2-84ac-5d5cfb99ca65")
+			(uuid "343c4180-9357-40c2-908b-a48372f31d12")
 		)
 		(pin "4"
-			(uuid "a36754f0-12d5-49fd-9178-a6094c77d8e7")
+			(uuid "386c0365-904e-46af-a407-e8f7095a447c")
 		)
 		(pin "5"
-			(uuid "56b2c628-d3a9-4e2a-8505-84a4aad6c683")
+			(uuid "3a51710f-199e-4561-86b6-158024fbcba0")
 		)
 		(instances
 			(project "totem"
@@ -18181,7 +18181,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1da11b1d-234c-48c9-be56-96f0ea354021")
+			(uuid "800c16c3-2ec5-4f32-b14d-089e711a4736")
 		)
 		(instances
 			(project "totem"
@@ -18255,16 +18255,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "7b693b9f-bb82-400d-9f5a-103c22f5b721")
+			(uuid "509726f2-f52c-4c1b-bf07-8a08ed5f68c3")
 		)
 		(pin "2"
-			(uuid "c5f4dccc-ccce-401b-80a8-ed53c1dcfb1d")
+			(uuid "8f316788-0e60-4b78-abbe-dae7555fb7b7")
 		)
 		(pin "3"
-			(uuid "50cbf54c-6dc7-46fc-b80c-144d36d6f721")
+			(uuid "33e43c06-e9cb-41dd-80ac-bd2e260eb3d6")
 		)
 		(pin "4"
-			(uuid "c44b3de8-dd60-4043-a860-99fde0ad0ea8")
+			(uuid "7633c128-31cd-41e4-a7df-826cc471fc81")
 		)
 		(instances
 			(project "totem"
@@ -18339,7 +18339,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e9af0bba-1e64-4ed9-aa4c-b61a8fbf3ec7")
+			(uuid "8ef097d0-3e0e-490b-a2ed-6e7be374836a")
 		)
 		(instances
 			(project "totem"
@@ -18413,16 +18413,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "65ffad3b-a011-47c0-9cf1-33f87e1a4b8b")
+			(uuid "62f56571-9f87-4bea-8241-3c750d364e50")
 		)
 		(pin "2"
-			(uuid "0578ba90-6458-4652-942d-3f1447e9b711")
+			(uuid "6a10da5e-bdc0-4554-8b50-5d638d8c5b8a")
 		)
 		(pin "3"
-			(uuid "80ec03f7-effd-4e5f-95b1-1a90fe947af4")
+			(uuid "4b6f9f12-a072-463d-84ee-fb2e2859676b")
 		)
 		(pin "4"
-			(uuid "62ddc885-a067-402d-a364-1b4b401ef2a9")
+			(uuid "15e67226-8383-47cd-b780-8ebde46bc98a")
 		)
 		(instances
 			(project "totem"
@@ -18496,10 +18496,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "bc126dcb-ed6d-4fe1-9522-7d6970c08efa")
+			(uuid "47b062ee-fc3f-4081-a22a-20c88c0582b2")
 		)
 		(pin "2"
-			(uuid "72ea6882-c6b0-4d4f-a1b5-96dcbbe42a81")
+			(uuid "51bbc98f-a9c2-4b96-8909-cb7265dccda8")
 		)
 		(instances
 			(project "totem"
@@ -18574,7 +18574,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "aec7ecb9-5719-45e0-9712-27e2b1ced078")
+			(uuid "a285d8e4-6d99-4fc9-bfd1-85f9f4367b9f")
 		)
 		(instances
 			(project "totem"
@@ -18648,16 +18648,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "c9b9b5fe-4f1e-4d75-9cf9-3b3ffbc10f36")
+			(uuid "e20d2ace-312d-4571-9024-39c6d077b010")
 		)
 		(pin "2"
-			(uuid "a44c280c-779f-406d-8cc8-ab0eddeba15c")
+			(uuid "c1143025-966b-4322-9c01-5647530893cf")
 		)
 		(pin "3"
-			(uuid "f358b131-7942-4a26-8d2a-097ec9b03b88")
+			(uuid "b123e960-e30b-4333-8ef9-f262c9841cdc")
 		)
 		(pin "4"
-			(uuid "1f90b544-d2ce-4d83-aa13-bfc8a3a4355d")
+			(uuid "04ec157d-3fc5-4a43-872c-fa9ab38bf2a3")
 		)
 		(instances
 			(project "totem"
@@ -18732,7 +18732,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "48242595-887c-42c6-879f-c4b59cf8b092")
+			(uuid "59c68422-d0e3-42dd-b9d5-3c80d2e7a2da")
 		)
 		(instances
 			(project "totem"
@@ -18807,7 +18807,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "506b2082-95cb-41b9-aee1-eba7360918d9")
+			(uuid "b65ed8bb-5141-44ce-89c1-0106236102bb")
 		)
 		(instances
 			(project "totem"
@@ -18881,10 +18881,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "ca5f4110-01a8-4cf5-9911-21f96fcc1402")
+			(uuid "10f86257-7a70-4348-989d-bc4d3fcaf526")
 		)
 		(pin "2"
-			(uuid "1256ecbf-e1f7-47e5-91fb-2ebfc6ea392d")
+			(uuid "2b01575a-d758-4751-bde0-7b4b80883031")
 		)
 		(instances
 			(project "totem"
@@ -18958,16 +18958,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "06d9bd23-2fbe-4ddf-9763-0b2268164df0")
+			(uuid "9eff4e1d-3531-4e60-b0a9-57bfa669f3a9")
 		)
 		(pin "2"
-			(uuid "fe2ee096-437a-4a57-a413-9e5624ac40b4")
+			(uuid "94d232c4-9c98-4a3e-8709-803c6f850cc6")
 		)
 		(pin "3"
-			(uuid "8f0b01ff-27af-4770-95ac-5095b38f830c")
+			(uuid "c2ab2a5d-999d-41ee-9dea-b3c70559bb87")
 		)
 		(pin "4"
-			(uuid "e6758851-2fb0-416b-a62e-9c02bca29a54")
+			(uuid "6f3bce3d-53da-44a4-bcb5-56b94e7f88be")
 		)
 		(instances
 			(project "totem"
@@ -19042,7 +19042,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "abebfb49-7b7f-4289-ae64-15eff2a98b43")
+			(uuid "b933ecad-0c95-4c0c-b390-906ab8445ae7")
 		)
 		(instances
 			(project "totem"
@@ -19116,16 +19116,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "89fe0c96-7010-40df-ab72-61d05910407c")
+			(uuid "5ec202ed-dcc6-4d0c-8983-8949d2a09baf")
 		)
 		(pin "2"
-			(uuid "5f9fab6c-0e05-4981-9c79-0411efbf619b")
+			(uuid "5e88812f-9c16-4555-af10-1587d965bdc8")
 		)
 		(pin "3"
-			(uuid "e4aa2e6b-127d-4f8a-acee-e12214a17e51")
+			(uuid "dba1036b-a324-4299-b6de-fb3af06a2c8b")
 		)
 		(pin "4"
-			(uuid "86c7cc59-dfdc-4114-89f0-cf2410691a35")
+			(uuid "fb54152d-4aed-4032-b9d1-f22275bf1376")
 		)
 		(instances
 			(project "totem"
@@ -19199,10 +19199,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "06f7d651-08e5-478c-b5e6-e5a798dbe717")
+			(uuid "634672f4-3430-422a-b0d9-98aeec16792e")
 		)
 		(pin "2"
-			(uuid "0ed37376-2db6-46d3-b148-8c6f11643a49")
+			(uuid "2bd7b4ea-bdcf-4e4f-859c-ea876400a027")
 		)
 		(instances
 			(project "totem"
@@ -19278,7 +19278,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2e546aa9-dc23-41f3-abcb-96489838330e")
+			(uuid "bfccfce3-c851-4b7f-802f-eece79863de2")
 		)
 		(instances
 			(project "totem"
@@ -19353,7 +19353,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "57962cdf-466c-4f34-a32c-19cd20975518")
+			(uuid "0293c3f8-0ff3-44f5-9ea5-6bdee2455690")
 		)
 		(instances
 			(project "totem"
@@ -19428,7 +19428,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0ebd60e6-aa8a-49ec-bc6c-526deec39418")
+			(uuid "de2d46e1-9603-49e0-8c45-7b3bcef2133b")
 		)
 		(instances
 			(project "totem"
@@ -19502,16 +19502,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "1d9c6098-0e56-4f3c-a66d-6b76fc5bcf1d")
+			(uuid "e9de0490-68a4-4638-8618-c69b03290843")
 		)
 		(pin "2"
-			(uuid "ffa9309c-a3ea-45f2-a990-32ee8accc320")
+			(uuid "a60383d0-dd4a-4713-9edb-5eed2a5c930e")
 		)
 		(pin "3"
-			(uuid "f3d2c262-6e64-4ff5-9e4c-5526599e8338")
+			(uuid "a133cb27-63f0-430b-94f6-16bc465dc12a")
 		)
 		(pin "4"
-			(uuid "250abfe6-bcc6-4f9f-b729-16ad2e139c19")
+			(uuid "a161e4cc-521d-4634-b194-384332afd7ba")
 		)
 		(instances
 			(project "totem"
@@ -19585,16 +19585,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "e2589104-3379-43d7-ae64-4f0a67b5c6f2")
+			(uuid "ece28855-a759-41e0-b4f1-311256854f7b")
 		)
 		(pin "2"
-			(uuid "f19c9b70-5224-4624-aabd-df664eed2c1a")
+			(uuid "71c77b70-5136-44fc-a56e-151a9d1567ea")
 		)
 		(pin "3"
-			(uuid "422bbb81-2ebe-458b-a872-cc580355d019")
+			(uuid "9587b839-cb97-4759-8b83-0e7f728c279d")
 		)
 		(pin "4"
-			(uuid "ca2ee6a9-6392-4669-9cb4-f3c904441f6b")
+			(uuid "d4447998-a1b3-4e2c-a10b-36d56a94a0fa")
 		)
 		(instances
 			(project "totem"
@@ -19669,7 +19669,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "fb8b730f-5fc3-4343-a59c-9ea8f0e2d3a4")
+			(uuid "fd09b69a-c152-46db-b345-004ac5f98bc7")
 		)
 		(instances
 			(project "totem"
@@ -19744,7 +19744,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "dabc2727-f6b4-4f1f-9eaf-c1de2d6cc6da")
+			(uuid "71d9d934-cda9-4bc7-8fe8-f84585371505")
 		)
 		(instances
 			(project "totem"
@@ -19757,7 +19757,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 100.33 718.82 0)
+		(at 260.35 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -19767,7 +19767,7 @@
 		(dnp no)
 		(uuid "3fe3f301-e14f-592e-86aa-d511f747ec3e")
 		(property "Reference" "#PWR80"
-			(at 100.33 706.82 0)
+			(at 260.35 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19778,7 +19778,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 100.33 710.82 0)
+			(at 260.35 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -19788,7 +19788,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 100.33 714.82 0)
+			(at 260.35 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -19799,7 +19799,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 100.33 718.82 0)
+			(at 260.35 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -19809,7 +19809,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 100.33 718.82 0)
+			(at 260.35 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -19819,7 +19819,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "161a72f2-fd27-43c7-a464-3bf68af7e034")
+			(uuid "f5445ea0-b840-4015-b062-22ec41c80f79")
 		)
 		(instances
 			(project "totem"
@@ -19893,16 +19893,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "1fb31a1e-e979-4c75-9697-887f378effdc")
+			(uuid "47499827-2b93-4b10-bfd4-2063e700619e")
 		)
 		(pin "2"
-			(uuid "0da5e3c3-6b66-4938-b4d5-9ae8b6645839")
+			(uuid "502cc444-bae4-4167-b28a-00ba4de86a73")
 		)
 		(pin "3"
-			(uuid "c6d50c6f-d779-414d-b1a3-3d90a31a55fd")
+			(uuid "46dcdcee-9b8c-4349-8059-847698c4e195")
 		)
 		(pin "4"
-			(uuid "2b81e79e-f8c0-4b21-8bc1-cb6ea79ff9f1")
+			(uuid "7de9ba92-9e06-497e-bbb9-19a342b7a4cf")
 		)
 		(instances
 			(project "totem"
@@ -19976,16 +19976,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "d1c5a3b6-b7d5-43fb-b51d-fb9d5aee4180")
+			(uuid "0dfcc73d-95b2-4849-bfde-33e394246cb0")
 		)
 		(pin "2"
-			(uuid "ef61fef7-7291-4a3c-93d6-87fe959ef4a2")
+			(uuid "21ce4f37-088f-4a5c-adb8-36fbc5acf98a")
 		)
 		(pin "3"
-			(uuid "dc436901-45e4-46ba-90ad-e4df986ea7ad")
+			(uuid "f467f4ce-dfe0-4931-9161-4d80c65c1b60")
 		)
 		(pin "4"
-			(uuid "0d63ba9b-e5a0-4453-8cd0-21a850723d22")
+			(uuid "26e83f22-47e3-4645-b9df-b93fe5beeb17")
 		)
 		(instances
 			(project "totem"
@@ -20060,7 +20060,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e936d97a-bcb8-4422-a4bd-cc9fb2271bab")
+			(uuid "ee7f8a71-bdcc-4f4a-b466-5dad2e8e9ba8")
 		)
 		(instances
 			(project "totem"
@@ -20135,7 +20135,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "863ff86c-a103-42f4-bfef-3e5d9bd8b088")
+			(uuid "cfb3618d-3be7-44f2-802a-009c063643cb")
 		)
 		(instances
 			(project "totem"
@@ -20210,7 +20210,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "cd470c43-9bcb-4007-8952-788e09da907b")
+			(uuid "3df7b4cc-d5f5-4339-a0b1-8061acdcb665")
 		)
 		(instances
 			(project "totem"
@@ -20285,7 +20285,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "551b40ea-a091-463f-b9d1-d552b0224892")
+			(uuid "1de7de3e-56a9-4863-918d-4adffd6059cc")
 		)
 		(instances
 			(project "totem"
@@ -20360,7 +20360,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3b330a07-0836-4216-80af-bf0ceb6e501f")
+			(uuid "473ec38d-50ff-45c5-ba66-cb07ce3af866")
 		)
 		(instances
 			(project "totem"
@@ -20434,10 +20434,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "1d6ed7c4-541d-4015-a21b-810d23611034")
+			(uuid "3f1ece86-681a-493b-99b5-5b72ac3b1116")
 		)
 		(pin "2"
-			(uuid "af6f17e6-1bf6-449a-b864-823a7c5e85b9")
+			(uuid "9bc47d5e-7778-4839-9f9c-e71995f8612a")
 		)
 		(instances
 			(project "totem"
@@ -20511,16 +20511,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "5a25a2fc-ab1a-4872-90b4-947ad722ce8f")
+			(uuid "d795a972-c75e-4440-af83-c39970498800")
 		)
 		(pin "2"
-			(uuid "77ea7c67-6934-461a-a3c5-0931adb5ab7e")
+			(uuid "1cb6f7de-b515-4ee3-9988-ebb2f799ca14")
 		)
 		(pin "3"
-			(uuid "23abaf6d-f101-41f1-b0d4-27570e2ec988")
+			(uuid "428951a5-a874-4583-b452-fede5fddf38d")
 		)
 		(pin "4"
-			(uuid "abd58660-23bd-46bc-845c-7cb0ea9ab070")
+			(uuid "82fc126e-3de7-4734-9d9e-41704fc430f6")
 		)
 		(instances
 			(project "totem"
@@ -20594,13 +20594,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "cc702034-7039-4225-8cac-9d994101d288")
+			(uuid "70a1c6f0-21da-41bf-993e-55f4c8f9e4bd")
 		)
 		(pin "2"
-			(uuid "21655aa9-fc56-48d6-80e5-125e4fee59f3")
+			(uuid "9d04a4f8-1a8e-46ec-8b54-59d80157be8d")
 		)
 		(pin "3"
-			(uuid "add59004-8b6f-4e81-a0bb-f5cfebc4f4d4")
+			(uuid "19da2d76-bde0-497e-a0c5-723bc7c54c9b")
 		)
 		(instances
 			(project "totem"
@@ -20675,7 +20675,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2eaf18f2-7796-4be8-bce6-73954becf7f3")
+			(uuid "377714b2-1810-499e-bb55-4cbe6a70b7ca")
 		)
 		(instances
 			(project "totem"
@@ -20750,7 +20750,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "02187aef-339a-4d27-91b9-49454227020d")
+			(uuid "848a2bc4-c763-43a0-9dd6-9451a7e194c5")
 		)
 		(instances
 			(project "totem"
@@ -20763,7 +20763,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 59.69 96.52 0)
+		(at 167.64 373.38 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -20773,7 +20773,7 @@
 		(dnp no)
 		(uuid "47ea5389-dbe6-5813-8857-8a80a77ef400")
 		(property "Reference" "#PWR146"
-			(at 59.69 84.52 0)
+			(at 167.64 361.38 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20784,7 +20784,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 59.69 101.52 0)
+			(at 167.64 378.38 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -20794,7 +20794,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 59.69 92.52 0)
+			(at 167.64 369.38 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -20805,7 +20805,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 59.69 96.52 0)
+			(at 167.64 373.38 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -20815,7 +20815,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 59.69 96.52 0)
+			(at 167.64 373.38 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -20825,7 +20825,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3df2124e-ddd1-424e-b624-71778e5a8e93")
+			(uuid "838054fa-856a-4c69-8a6f-7e83dbe07417")
 		)
 		(instances
 			(project "totem"
@@ -20899,10 +20899,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "75ad9779-8d36-411f-96bf-a7826bc77a63")
+			(uuid "a2157c29-aaa7-4db1-80db-772418633be8")
 		)
 		(pin "2"
-			(uuid "41bfd770-245c-46e4-9d2f-453742ef1a39")
+			(uuid "ea07adec-e26f-49dd-b390-d026260e9e1e")
 		)
 		(instances
 			(project "totem"
@@ -20977,7 +20977,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4568d4aa-948a-4bce-9843-4e71699d4768")
+			(uuid "0388ee9f-33ee-47ce-acbd-c210973676ff")
 		)
 		(instances
 			(project "totem"
@@ -21052,7 +21052,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8d92c4ab-794a-4ff0-9c87-6cb20b56c711")
+			(uuid "762ae946-c573-4b63-80f1-71c91c313def")
 		)
 		(instances
 			(project "totem"
@@ -21127,7 +21127,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c6fb4072-4f29-469d-91a4-2cec9d4b7dd5")
+			(uuid "0e7a1978-a7f8-47b9-97db-57b3b9b512ec")
 		)
 		(instances
 			(project "totem"
@@ -21140,7 +21140,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 219.71 654.05 0)
+		(at 779.78 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -21150,7 +21150,7 @@
 		(dnp no)
 		(uuid "4b1e7283-94f8-52b3-a73b-c3b67f496936")
 		(property "Reference" "#PWR79"
-			(at 219.71 642.05 0)
+			(at 779.78 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21161,7 +21161,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 219.71 646.05 0)
+			(at 779.78 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21171,7 +21171,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 219.71 650.05 0)
+			(at 779.78 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21182,7 +21182,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 219.71 654.05 0)
+			(at 779.78 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21192,7 +21192,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 219.71 654.05 0)
+			(at 779.78 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21202,7 +21202,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "14366fb8-ce90-4dd8-b83e-5f074e86cc0c")
+			(uuid "f73158b6-20b0-40d9-af88-ab10ae3678c5")
 		)
 		(instances
 			(project "totem"
@@ -21219,7 +21219,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -21276,7 +21276,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1dee9e2f-a50a-4506-8421-218a8e3937e1")
+			(uuid "7b3f53b1-f219-4531-9b21-baf762474a15")
 		)
 		(instances
 			(project "totem"
@@ -21289,7 +21289,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 539.75 676.91 0)
+		(at 660.4 610.87 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -21299,7 +21299,7 @@
 		(dnp no)
 		(uuid "4c1ce1ed-eadd-5fa2-8dc0-10c023b4a667")
 		(property "Reference" "#PWR145"
-			(at 539.75 664.91 0)
+			(at 660.4 598.87 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21310,7 +21310,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 539.75 681.91 0)
+			(at 660.4 615.87 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21320,7 +21320,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 539.75 672.91 0)
+			(at 660.4 606.87 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -21331,7 +21331,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 539.75 676.91 0)
+			(at 660.4 610.87 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21341,7 +21341,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 539.75 676.91 0)
+			(at 660.4 610.87 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -21351,7 +21351,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0346c8dd-0308-4f1d-a0d7-584110d6e50c")
+			(uuid "de1e0a49-88fa-449e-bace-f0ad9bdb3224")
 		)
 		(instances
 			(project "totem"
@@ -21426,7 +21426,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "45ab573a-3a74-4a0b-ad23-cce148c36f75")
+			(uuid "7b2df69e-8cc7-4830-b9db-a1badab9dfe5")
 		)
 		(instances
 			(project "totem"
@@ -21501,7 +21501,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "35a05997-e589-42cd-a388-57d810cf4063")
+			(uuid "c2560fe1-7a46-4f68-9cb3-83f711acd3b6")
 		)
 		(instances
 			(project "totem"
@@ -21575,76 +21575,76 @@
 			)
 		)
 		(pin "1"
-			(uuid "5522fb14-f61d-4d88-8174-5d009e2b423c")
+			(uuid "ef67e803-ebe0-453e-a337-afc038be1e93")
 		)
 		(pin "2"
-			(uuid "d084dad8-8599-490c-a140-3d005933be60")
+			(uuid "31fe3534-c715-4bd3-902f-048bab4f0269")
 		)
 		(pin "3"
-			(uuid "39a0048b-4f6f-4969-9c62-7512a60bcbad")
+			(uuid "c1fca2c3-30a4-425a-8615-a04d0bd36efa")
 		)
 		(pin "4"
-			(uuid "e546a95b-c0f6-4089-91fb-5b1026494c65")
+			(uuid "36034902-d1c3-4a73-99f3-fea84455eb29")
 		)
 		(pin "5"
-			(uuid "bffea762-f8ee-4e8c-b719-65df71b713a0")
+			(uuid "ba837cf2-319a-44b4-96f2-45b30deada1a")
 		)
 		(pin "6"
-			(uuid "780c6820-780a-4062-96c6-ec9a05fe0677")
+			(uuid "a9d14304-d5d1-47d3-97f5-e04b73a13aba")
 		)
 		(pin "7"
-			(uuid "97a16b2b-0c16-484c-98cf-84c56eb48218")
+			(uuid "b524b0e8-8acb-41d1-baed-c9a9dfb74d33")
 		)
 		(pin "8"
-			(uuid "eda01e91-82d2-4b96-9821-d6450aba06e8")
+			(uuid "4c2277e6-345b-4a10-8512-d70764c073bf")
 		)
 		(pin "9"
-			(uuid "06c8256b-3eee-4843-b4d9-4ccad5d338af")
+			(uuid "79e39b56-3a90-4efc-b624-ceee74fcafd1")
 		)
 		(pin "10"
-			(uuid "38cc86c2-79d3-48de-9b56-5d365af1e8e0")
+			(uuid "0c0f9479-4ae8-45dc-ab99-c7fb19b85d73")
 		)
 		(pin "11"
-			(uuid "03f84a41-1ecc-4d87-b09f-f8e08047e5f3")
+			(uuid "c37e2d01-8d0c-4f6f-b961-814cc80bab67")
 		)
 		(pin "12"
-			(uuid "b3fb369e-81c1-4bf5-b9e6-a6fe89ebed95")
+			(uuid "bd24f2f2-3080-4f12-b48b-f80855338295")
 		)
 		(pin "13"
-			(uuid "f580b8c2-44eb-4575-a42b-0a8455b54b77")
+			(uuid "f77b964b-8fcf-4327-9008-da9510f9954e")
 		)
 		(pin "14"
-			(uuid "cc53dd70-53e8-47be-b2cb-27752cae91a5")
+			(uuid "26383723-2b13-4979-8d56-7c191b4f9938")
 		)
 		(pin "15"
-			(uuid "5ae5a8da-389e-4363-bffb-bf57e8657cdf")
+			(uuid "5cd57c96-c1d9-496e-be52-702390b2abc2")
 		)
 		(pin "16"
-			(uuid "2035879f-9639-4031-b942-3fdc45d4d513")
+			(uuid "f38382bd-ef92-40bd-ab57-d5b19e142507")
 		)
 		(pin "17"
-			(uuid "2b7970a7-fd11-4d58-af32-dbabc4d9424c")
+			(uuid "84d1e842-b430-4c3c-9509-037131202b91")
 		)
 		(pin "18"
-			(uuid "1fd85615-23c0-4f10-93f1-4f67f206a601")
+			(uuid "469d56d7-921b-440b-bc9f-7e01c7b791a3")
 		)
 		(pin "19"
-			(uuid "14e58295-f264-403e-9700-3324160a926e")
+			(uuid "8cae2688-f1f4-48ed-a364-2a2ed8c450a8")
 		)
 		(pin "20"
-			(uuid "014d0865-1486-48fb-a425-fa4471ba65fd")
+			(uuid "2bd0ab3b-5e00-49ec-98c1-5622368565ed")
 		)
 		(pin "21"
-			(uuid "e0441cd1-1c58-4612-84cc-0c500403e51d")
+			(uuid "ab6f5514-42ae-4032-88e4-e7e5f8a0df7f")
 		)
 		(pin "22"
-			(uuid "50ab6eae-e686-4db3-bbdb-f72637793b45")
+			(uuid "33b7c531-08b8-42a9-b6f4-7fe04644cfc3")
 		)
 		(pin "23"
-			(uuid "b129e7bf-a1ce-4cd7-baa1-0e1fe1969257")
+			(uuid "dd07c134-05c1-4415-a973-73f64d505eb4")
 		)
 		(pin "24"
-			(uuid "0632ab81-a39d-4467-b3cb-72670c4d4737")
+			(uuid "2d8dfa86-ffa4-4bd2-9db7-8d52d68d3310")
 		)
 		(instances
 			(project "totem"
@@ -21719,7 +21719,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "dfe30f27-a7cf-4743-adf8-a3ebd827f764")
+			(uuid "bf2f9def-0f50-486c-9371-06c0371c9058")
 		)
 		(instances
 			(project "totem"
@@ -21793,16 +21793,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "66a56363-55bc-4152-86db-0f1ba9034bb2")
+			(uuid "7f5d9056-bcc5-4c90-a19f-daf0f44994d4")
 		)
 		(pin "2"
-			(uuid "9abaf6ef-3a7b-46a0-b8a4-02378c50acc4")
+			(uuid "a2b11e92-ea71-4dbc-b4e5-578218ea8276")
 		)
 		(pin "3"
-			(uuid "98479d58-fd72-43f0-8bbd-692ad576a84d")
+			(uuid "780da618-a841-4667-9e60-22160e3cd6d2")
 		)
 		(pin "4"
-			(uuid "97287408-efb2-4312-88bb-ab9a765e142f")
+			(uuid "02dbccba-623d-4953-88d5-fd5955967651")
 		)
 		(instances
 			(project "totem"
@@ -21877,7 +21877,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a022a4bf-dd6a-41d2-af93-9b5d914c4146")
+			(uuid "029cdc14-8a21-4d19-ade5-d64c35a74d0b")
 		)
 		(instances
 			(project "totem"
@@ -21951,10 +21951,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "d0220e65-d9dc-4d53-ad97-55341379b88b")
+			(uuid "631b6c5b-877c-4afc-8fba-c85a7808abe5")
 		)
 		(pin "2"
-			(uuid "4ee8ab79-5ed7-4841-ab8b-ee97344c8310")
+			(uuid "d3cbc720-5e28-4dbd-b543-f9bbcf1be7e6")
 		)
 		(instances
 			(project "totem"
@@ -22028,16 +22028,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "dad4b1d5-f972-42d2-aad9-9fa942d04bfe")
+			(uuid "e17f780b-76e7-4324-b7c7-8fc25c31af0f")
 		)
 		(pin "2"
-			(uuid "c3d5ef5c-2c97-4dfb-92a2-a4599dddc7d5")
+			(uuid "f038b264-d073-42ca-9347-d4553b3f3f7d")
 		)
 		(pin "3"
-			(uuid "171f4128-7222-4ce0-b011-da3c42ffdbfa")
+			(uuid "927ac789-f055-4fbd-a7ee-f84fca8a7c4c")
 		)
 		(pin "4"
-			(uuid "6e5a811f-54de-4494-bd2f-9b8056e28326")
+			(uuid "05d81883-63ca-488a-9a98-df553121b682")
 		)
 		(instances
 			(project "totem"
@@ -22111,16 +22111,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "fdf9bdd9-6913-4833-baec-3ef2d5336671")
+			(uuid "887fe307-2c5c-4ad1-ae39-68647cb431a8")
 		)
 		(pin "2"
-			(uuid "caea9ee0-cc50-46e1-b1ac-8122c79d343a")
+			(uuid "9c0c26d3-3190-475b-b742-f47220d4204b")
 		)
 		(pin "3"
-			(uuid "0e420d94-29e4-48d7-a7f1-834286e5f1f3")
+			(uuid "7d30570e-0ff8-4f75-b24d-ab41019a7dbc")
 		)
 		(pin "4"
-			(uuid "8a7e3136-89ad-470f-8eea-6f7f9e9f9a49")
+			(uuid "2265276a-6a7c-49f3-88fa-9db1537ef247")
 		)
 		(instances
 			(project "totem"
@@ -22194,16 +22194,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "726de5e4-e521-4ce3-9208-6745638e28d9")
+			(uuid "ab7e2249-6dac-4c4d-b81b-acfc85c82642")
 		)
 		(pin "2"
-			(uuid "5d53af18-62da-47e3-b1bb-e2f4fda660d1")
+			(uuid "bb23f9f2-307c-4608-a3bf-212dd53e42a4")
 		)
 		(pin "3"
-			(uuid "4d91b063-1a35-48db-9b70-dd9112469ed0")
+			(uuid "b8bf9c79-db0e-499d-bb71-b7de505a7e9a")
 		)
 		(pin "4"
-			(uuid "84a65a17-c513-445c-922b-c617c214e69e")
+			(uuid "91df6592-d8ab-4048-bb01-b9c1a03ae6c2")
 		)
 		(instances
 			(project "totem"
@@ -22277,16 +22277,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "3e4cefa2-8edb-4b8b-94a5-8851ec6edc11")
+			(uuid "336c407a-3636-4e4e-bfc9-e48ce6ef3d8c")
 		)
 		(pin "2"
-			(uuid "08d09cf6-387e-4695-8370-a6540edcbfc8")
+			(uuid "657fdb92-079c-4573-a633-377773932535")
 		)
 		(pin "3"
-			(uuid "d69c4ec6-79ea-4815-be51-36fd9fa717f2")
+			(uuid "331989b4-88e6-412f-9286-816591e9ba04")
 		)
 		(pin "4"
-			(uuid "37e92318-7511-4aa9-9d96-fd978f9464cc")
+			(uuid "61d0cdc6-6a0e-453d-8d71-07f5bc6f5d34")
 		)
 		(instances
 			(project "totem"
@@ -22361,7 +22361,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "68390fd7-576b-44e1-a02e-bc2d73816d22")
+			(uuid "ecd9fa37-2b55-425b-a14d-dbea5a0cb7e5")
 		)
 		(instances
 			(project "totem"
@@ -22436,7 +22436,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2e612654-57cd-4622-a3e5-735c12e42905")
+			(uuid "be970788-5ee5-43c8-90fd-ea93958fdec7")
 		)
 		(instances
 			(project "totem"
@@ -22510,16 +22510,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "2409245e-3ef4-4b28-86de-43c6280a43c8")
+			(uuid "e2c490f5-30f1-47bd-a6fe-89070ecca3a0")
 		)
 		(pin "2"
-			(uuid "3fe7c5ff-829e-4a07-bc79-68328c10faa4")
+			(uuid "c4a9142c-36c8-41ee-975e-782f04878117")
 		)
 		(pin "3"
-			(uuid "cdf601b5-9aab-4e91-a3e2-13c2fe4a7550")
+			(uuid "02772bf0-222e-4dce-bfef-6b78c1291946")
 		)
 		(pin "4"
-			(uuid "4c71d33f-1d53-4bed-a15b-547aeb8b7d51")
+			(uuid "e7cde4ca-6b40-4898-ae5f-dc69436ff75b")
 		)
 		(instances
 			(project "totem"
@@ -22594,7 +22594,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "59bf3bc5-ce27-4751-b3ba-bd42ad1b0b81")
+			(uuid "0ec861bb-1da2-490a-9db5-ae3409d7fcac")
 		)
 		(instances
 			(project "totem"
@@ -22668,16 +22668,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "7f70d1ae-e96c-4b85-9ee6-7b189d3ba14a")
+			(uuid "7f5ef410-16c2-4ea3-91da-6ead096fadff")
 		)
 		(pin "2"
-			(uuid "f0e0dc82-c90a-43da-935a-0d9a6b4869fc")
+			(uuid "d4d99b1a-0e4d-4aad-aa5c-dac428066aea")
 		)
 		(pin "3"
-			(uuid "a641270e-bf8b-4d59-942e-4f4bf8b40f8d")
+			(uuid "963c5d5a-f70d-487f-82e6-589ba4dfc5d9")
 		)
 		(pin "4"
-			(uuid "c03fe36f-78ee-40ed-8b12-a30452bec2c5")
+			(uuid "a9fda129-cb88-44f4-80b0-17bac6bff51d")
 		)
 		(instances
 			(project "totem"
@@ -22751,10 +22751,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "32a9d1ec-5b20-4d74-9ebe-851feaad6466")
+			(uuid "488e8a0b-7b00-4767-bb38-a1fe38c07e8b")
 		)
 		(pin "2"
-			(uuid "8cc7d250-211d-4a8f-83db-2d402ebce5a1")
+			(uuid "8b8210e6-8162-4acb-b053-af8e57bb123e")
 		)
 		(instances
 			(project "totem"
@@ -22771,7 +22771,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -22828,7 +22828,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "239fd447-da9c-437c-aeef-1a655dcf18cc")
+			(uuid "d3d33111-f88b-4086-b9e1-e22ab736dadf")
 		)
 		(instances
 			(project "totem"
@@ -22902,10 +22902,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "5820f6ba-9669-46d1-87d0-068fda96ab99")
+			(uuid "f4a7cfa0-3f4e-4c3e-9fee-d6b83e05f11b")
 		)
 		(pin "2"
-			(uuid "8d42ca98-1716-4694-87f3-fdbc68221953")
+			(uuid "0a4d2301-b678-4bfb-9fb0-5f1a9e517015")
 		)
 		(instances
 			(project "totem"
@@ -22980,7 +22980,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0e26f1b1-68ef-4983-ab97-8760c1ae3a02")
+			(uuid "016d6b93-9f63-45cf-be8d-9acf61b2a0c5")
 		)
 		(instances
 			(project "totem"
@@ -23054,16 +23054,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "095e50a4-e15e-4c5e-b04f-71c3a710e8ee")
+			(uuid "7f1ab7e3-1d77-4447-934a-367806564def")
 		)
 		(pin "2"
-			(uuid "edd1ef1f-0bf2-4628-aaa1-b445c1b878bd")
+			(uuid "2a11e66d-2e81-4356-83d9-b7ae04ba159f")
 		)
 		(pin "3"
-			(uuid "59a846ef-e104-4cb0-8c9d-e3d85cd6f2c4")
+			(uuid "b518dd0d-8e5c-4392-93ac-1ffa927cede4")
 		)
 		(pin "4"
-			(uuid "1195bb61-90c7-4414-be8a-12f245dff1ad")
+			(uuid "4dd8dfb0-f752-4c8c-874f-e1826514b8a8")
 		)
 		(instances
 			(project "totem"
@@ -23137,16 +23137,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "366cae4e-8f26-4d97-a45c-d9b97ea4f7f4")
+			(uuid "5b310d81-b016-49c3-9197-c63d10f4a130")
 		)
 		(pin "2"
-			(uuid "2c2413c3-0d2e-48e5-bf33-b780331a8bcb")
+			(uuid "30fcf68d-36df-4a66-a39c-941958061644")
 		)
 		(pin "3"
-			(uuid "ae9b2cde-a848-49b2-8390-62d5e99b33c9")
+			(uuid "86a61eda-3e5a-4e3b-92c9-9da3e9d6a6b8")
 		)
 		(pin "4"
-			(uuid "4bb6504d-b331-465b-aeb8-bb0f175fc522")
+			(uuid "21b5e880-469d-41bb-a1ff-bca0134a3ed6")
 		)
 		(instances
 			(project "totem"
@@ -23220,16 +23220,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "2f121984-3cae-4dff-b03c-d5afc71f0aa0")
+			(uuid "c06a9aec-8093-49da-bc62-d97f0f0b942f")
 		)
 		(pin "2"
-			(uuid "225cce3f-d735-493b-9130-2935ed78a35e")
+			(uuid "d54fa717-e2e3-4371-8011-c2cfb36180a9")
 		)
 		(pin "3"
-			(uuid "0936ffc3-76f4-4ce1-9dc4-218788007b0d")
+			(uuid "e5e97416-76ef-4784-9228-9de4be304e97")
 		)
 		(pin "4"
-			(uuid "bf494b86-7477-4527-b641-603f31ba7a8d")
+			(uuid "28b7126f-e906-43c0-b909-93732c1d55e3")
 		)
 		(instances
 			(project "totem"
@@ -23303,16 +23303,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "84351f0e-52f0-4867-92be-0d35c56df449")
+			(uuid "5d1837e7-e355-4b5e-a810-4c14f8762fcd")
 		)
 		(pin "2"
-			(uuid "e42b570e-7958-4682-9318-ca562161a7a6")
+			(uuid "4cf976c4-2227-4ec7-a2e5-0f96e9d2d5d1")
 		)
 		(pin "3"
-			(uuid "90cb726a-50e2-44cb-880f-4c0db9b93bc4")
+			(uuid "030325b5-2588-4a6b-9ab3-364335d176e2")
 		)
 		(pin "4"
-			(uuid "744a4d5b-b11a-49cf-9d91-faca09405c98")
+			(uuid "db4cbfe0-f8e0-4b5e-9b28-e8acf9542112")
 		)
 		(instances
 			(project "totem"
@@ -23387,7 +23387,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1d5ec080-24d2-4316-9832-7214b57d84fd")
+			(uuid "60abf757-f514-4e33-be49-3d152e32b423")
 		)
 		(instances
 			(project "totem"
@@ -23404,7 +23404,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -23461,7 +23461,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5c87e646-1849-4360-bf11-d956ebc2429a")
+			(uuid "d0c60011-1292-4ab9-be71-829ce3f2e2b1")
 		)
 		(instances
 			(project "totem"
@@ -23536,7 +23536,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c190ccea-0e92-4d6e-b6f1-68dcda43dde9")
+			(uuid "05efbd05-4358-46bc-9707-2186bfffa0d8")
 		)
 		(instances
 			(project "totem"
@@ -23611,7 +23611,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c0819f61-07ff-4d66-802e-0e130e7c2402")
+			(uuid "925c97f5-85a8-46fd-8198-343caf15de66")
 		)
 		(instances
 			(project "totem"
@@ -23685,10 +23685,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "4f3c4cd0-0ab7-439a-ae90-13fc07182519")
+			(uuid "53844cfb-431c-4d24-82f3-d93827fc88e2")
 		)
 		(pin "2"
-			(uuid "e52cdee1-9eb5-48e1-b5a4-15ca334ead1e")
+			(uuid "ba71deb3-7ca3-4e12-bb4e-ff6dc2840df4")
 		)
 		(instances
 			(project "totem"
@@ -23763,7 +23763,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "208214a2-b4a5-4e57-818d-4ca1768b040f")
+			(uuid "0e198c2d-9ceb-4e54-b66c-9bae8dde1024")
 		)
 		(instances
 			(project "totem"
@@ -23838,7 +23838,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1e2ad03e-8fe4-4c8b-9e66-c770c9b69e40")
+			(uuid "7c1be081-5116-4969-be65-d0b6fcca234d")
 		)
 		(instances
 			(project "totem"
@@ -23913,7 +23913,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c00b53f4-d800-419e-a083-17397972b5c8")
+			(uuid "fd7c847d-0d2f-4c1b-b16f-50a8c424a48d")
 		)
 		(instances
 			(project "totem"
@@ -23987,10 +23987,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "69c5076e-387c-48c5-a791-86e5a4f3afba")
+			(uuid "20610675-d3bf-4a33-96af-ab2ea9619973")
 		)
 		(pin "2"
-			(uuid "062edb57-bdd3-4497-98d4-977ceb5af60b")
+			(uuid "b2f802cc-c217-4cc4-8ff9-51acb19e0898")
 		)
 		(instances
 			(project "totem"
@@ -24064,10 +24064,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "eb04b2a1-deaf-4109-bb95-8043539ffc89")
+			(uuid "4ad506ed-b2f2-4ca1-9420-82fc945d29d3")
 		)
 		(pin "2"
-			(uuid "2a270d2e-2f79-432a-89b4-6a3dc3181459")
+			(uuid "0b17e29a-94e3-49c7-b327-7c1c12a9bfb3")
 		)
 		(instances
 			(project "totem"
@@ -24141,16 +24141,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "7ed9434c-4c7c-416e-9f72-802993eb81ad")
+			(uuid "a4328863-6929-4c1a-8f65-7af10724a7fe")
 		)
 		(pin "2"
-			(uuid "4c7a39bc-50d5-454e-a087-7e0d20710a6d")
+			(uuid "0df46b7c-d3e1-4d45-b135-347421076596")
 		)
 		(pin "3"
-			(uuid "9e9bd65b-dd40-475b-b29e-25c8177c7d83")
+			(uuid "1c4f234a-e0f0-499c-932d-2e86cee9a08b")
 		)
 		(pin "4"
-			(uuid "a28b2bdc-d18f-4f65-9425-045090f24757")
+			(uuid "3c45863c-d672-48df-acbc-46d9dfc39922")
 		)
 		(instances
 			(project "totem"
@@ -24224,10 +24224,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "143c29ff-693b-443a-a73e-e5d56bce6832")
+			(uuid "60e30816-aa79-4eda-aa33-3d57d014a6d1")
 		)
 		(pin "2"
-			(uuid "94980796-2a1b-47f1-b0f6-20ff660bad8b")
+			(uuid "a2107721-28ed-41c0-afef-285d98c5828f")
 		)
 		(instances
 			(project "totem"
@@ -24302,7 +24302,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "44d01324-4421-4f7b-ba7f-048d2913b25d")
+			(uuid "fb21ff07-c2a5-4d68-9f6f-f69a70943d9c")
 		)
 		(instances
 			(project "totem"
@@ -24315,7 +24315,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 260.35 588.01 0)
+		(at 820.42 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -24325,7 +24325,7 @@
 		(dnp no)
 		(uuid "68a61011-c0a1-561d-b119-5348fb01a361")
 		(property "Reference" "#PWR82"
-			(at 260.35 576.01 0)
+			(at 820.42 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24336,7 +24336,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 260.35 580.01 0)
+			(at 820.42 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -24346,7 +24346,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 260.35 584.01 0)
+			(at 820.42 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -24357,7 +24357,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 260.35 588.01 0)
+			(at 820.42 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -24367,7 +24367,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 260.35 588.01 0)
+			(at 820.42 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -24377,7 +24377,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6136ce00-e9cc-485a-98d7-2828e877bb44")
+			(uuid "339b07db-d24f-45e5-ba5f-1bcf232a457b")
 		)
 		(instances
 			(project "totem"
@@ -24452,7 +24452,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c2d8779f-936e-471f-bf45-5d76e7a9301c")
+			(uuid "38ff23d9-9d2e-4856-abc2-499a7e6435f0")
 		)
 		(instances
 			(project "totem"
@@ -24526,10 +24526,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "415ab8c5-49f3-4cce-a550-d7605ff5e6a3")
+			(uuid "d7974d18-a188-449e-bd09-229ed6e701b3")
 		)
 		(pin "2"
-			(uuid "201b2d58-78bb-4347-9d6e-985d210c2334")
+			(uuid "d95576fc-6cc4-4dcf-9668-c0b48444f024")
 		)
 		(instances
 			(project "totem"
@@ -24604,7 +24604,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "97805160-19af-4d44-b606-12e656e4de42")
+			(uuid "15272599-f3fd-4b68-a86b-52183e0be36b")
 		)
 		(instances
 			(project "totem"
@@ -24679,7 +24679,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6ef811dc-c33a-479f-9914-6c89c482638c")
+			(uuid "38c775f4-e2e6-4c59-b4fb-9a58a17a0908")
 		)
 		(instances
 			(project "totem"
@@ -24754,7 +24754,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "bab303c9-f4a2-41c7-b219-052bec5ad020")
+			(uuid "addfb437-7e83-4c91-bc91-ae64a50fd1a6")
 		)
 		(instances
 			(project "totem"
@@ -24829,7 +24829,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "c05e80a1-d587-4164-9f37-582a51d7dc44")
+			(uuid "7e6a8991-9e87-4244-8f07-d35ec6514442")
 		)
 		(instances
 			(project "totem"
@@ -24904,7 +24904,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "afe813fe-c54c-4980-8d5f-fb7cdd5165ac")
+			(uuid "03edc470-cfb6-414f-ae1e-f6a2b32bf8ad")
 		)
 		(instances
 			(project "totem"
@@ -24979,7 +24979,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0ed17999-d0d6-44b3-a712-ffaa8d288902")
+			(uuid "38bda787-460a-4435-b8c6-4e1dba931b40")
 		)
 		(instances
 			(project "totem"
@@ -25054,7 +25054,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1d2d28ec-ecc4-4e3e-85eb-82f969775385")
+			(uuid "8f181087-31fd-4b77-aa4e-068542362b96")
 		)
 		(instances
 			(project "totem"
@@ -25129,7 +25129,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ec4daf81-9c90-4c8f-b228-b9c7702b434d")
+			(uuid "b913bc0c-cac8-44bd-9383-023f1f18eab7")
 		)
 		(instances
 			(project "totem"
@@ -25142,7 +25142,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 660.4 610.87 0)
+		(at 539.75 676.91 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -25152,7 +25152,7 @@
 		(dnp no)
 		(uuid "70818835-0607-51b2-abb8-4bf6e5841ba6")
 		(property "Reference" "#PWR149"
-			(at 660.4 598.87 0)
+			(at 539.75 664.91 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25163,7 +25163,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 660.4 615.87 0)
+			(at 539.75 681.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25173,7 +25173,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 660.4 606.87 0)
+			(at 539.75 672.91 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25184,7 +25184,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 660.4 610.87 0)
+			(at 539.75 676.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25194,7 +25194,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 660.4 610.87 0)
+			(at 539.75 676.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25204,7 +25204,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "80ced107-e215-4eb5-a106-7fbd63a9b003")
+			(uuid "706d9b79-7c85-4170-846c-cb91b992e843")
 		)
 		(instances
 			(project "totem"
@@ -25217,7 +25217,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 100.33 588.01 0)
+		(at 660.4 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -25227,7 +25227,7 @@
 		(dnp no)
 		(uuid "70972685-fc91-559e-a249-056d67114b73")
 		(property "Reference" "#PWR90"
-			(at 100.33 576.01 0)
+			(at 660.4 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25238,7 +25238,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 100.33 580.01 0)
+			(at 660.4 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25248,7 +25248,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 100.33 584.01 0)
+			(at 660.4 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25259,7 +25259,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 100.33 588.01 0)
+			(at 660.4 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25269,7 +25269,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 100.33 588.01 0)
+			(at 660.4 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25279,7 +25279,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d2a1c3b7-adf7-4ed8-8a1a-34dc0eb48cb6")
+			(uuid "d7bf08c5-752d-4c66-887c-8f27383a3cd0")
 		)
 		(instances
 			(project "totem"
@@ -25354,7 +25354,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d5fe1f8a-e866-4c69-8ae6-943ef4319676")
+			(uuid "789de30f-0a89-4ca0-aa55-b1729d641029")
 		)
 		(instances
 			(project "totem"
@@ -25428,16 +25428,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "62979fac-ea32-43ec-ae2d-07a8b4788e86")
+			(uuid "385eac12-2cef-451c-bfe0-e10a45994623")
 		)
 		(pin "2"
-			(uuid "2468ec04-169c-41ba-bd0a-54eba780846f")
+			(uuid "bc85cc27-583f-4e74-9100-e206d7860755")
 		)
 		(pin "3"
-			(uuid "c425b92c-abee-4c61-97f8-de6c84beaaf7")
+			(uuid "147d9865-7d22-44ae-a61c-280db241042a")
 		)
 		(pin "4"
-			(uuid "34d792e2-8eb7-43a2-a8d3-662b6c97ae05")
+			(uuid "d1149890-566c-4e44-9b00-d282907cfdff")
 		)
 		(instances
 			(project "totem"
@@ -25450,7 +25450,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 260.35 718.82 0)
+		(at 420.37 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -25460,7 +25460,7 @@
 		(dnp no)
 		(uuid "73906459-42df-565f-b741-59f4856c7d4b")
 		(property "Reference" "#PWR73"
-			(at 260.35 706.82 0)
+			(at 420.37 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25471,7 +25471,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 260.35 710.82 0)
+			(at 420.37 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25481,7 +25481,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 260.35 714.82 0)
+			(at 420.37 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25492,7 +25492,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 260.35 718.82 0)
+			(at 420.37 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25502,7 +25502,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 260.35 718.82 0)
+			(at 420.37 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25512,7 +25512,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2aa8a281-7009-4e39-8251-e85ad2234dc2")
+			(uuid "e9bd9863-9f1c-4032-8e11-4f7ae5432eb1")
 		)
 		(instances
 			(project "totem"
@@ -25587,7 +25587,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2d01b59c-89ea-4e41-9e38-344f98067705")
+			(uuid "2bdea463-6e36-47bc-aff3-1e650e81f37a")
 		)
 		(instances
 			(project "totem"
@@ -25600,7 +25600,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 420.37 741.68 0)
+		(at 59.69 96.52 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -25610,7 +25610,7 @@
 		(dnp no)
 		(uuid "74bdfaa4-da22-57ed-8595-5f37a6799393")
 		(property "Reference" "#PWR144"
-			(at 420.37 729.68 0)
+			(at 59.69 84.52 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25621,7 +25621,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 420.37 746.68 0)
+			(at 59.69 101.52 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25631,7 +25631,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 420.37 737.68 0)
+			(at 59.69 92.52 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -25642,7 +25642,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 420.37 741.68 0)
+			(at 59.69 96.52 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25652,7 +25652,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 420.37 741.68 0)
+			(at 59.69 96.52 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -25662,7 +25662,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a92d66c8-7da0-4f8c-a08c-cd3fd8352159")
+			(uuid "79b2ac85-b4c0-4662-9acf-7ba9d8447623")
 		)
 		(instances
 			(project "totem"
@@ -25737,7 +25737,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a9c1d761-c1f7-4f1a-9f9a-5e5f251a49ab")
+			(uuid "a8a33121-60ab-46f3-af67-e65286d02ed9")
 		)
 		(instances
 			(project "totem"
@@ -25811,16 +25811,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "1e734678-1aa2-4b8b-93eb-e9d503ca1e32")
+			(uuid "b97c201d-c08b-4640-bf89-cbf71116d4ac")
 		)
 		(pin "2"
-			(uuid "e96efe99-f01f-4c3f-8355-9e37e8b3b224")
+			(uuid "88831a07-377c-4420-9eb2-1ad411a02129")
 		)
 		(pin "3"
-			(uuid "2ea59f3c-1c57-430f-95a7-bab3c436cbf9")
+			(uuid "7e93ef1f-e583-4bc9-a556-34fb227bbde0")
 		)
 		(pin "4"
-			(uuid "00254321-b938-41ba-8933-e0f420e5ccc8")
+			(uuid "9402d7b2-c227-411c-b24e-9b0b715a97b9")
 		)
 		(instances
 			(project "totem"
@@ -25894,10 +25894,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "159a4511-c870-4293-b8e5-6513fd3c893e")
+			(uuid "c325212d-36ba-4c00-beda-a3498f9d8c73")
 		)
 		(pin "2"
-			(uuid "8ff0efad-1830-4066-99ef-d2d58bfffec7")
+			(uuid "0a8a24dc-5b27-4ddd-8da6-38cc1758ba3d")
 		)
 		(instances
 			(project "totem"
@@ -25972,7 +25972,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b14672e6-6e91-483b-ae5a-2a0581f93c0f")
+			(uuid "4ce58079-c803-414a-80e5-0e401817d516")
 		)
 		(instances
 			(project "totem"
@@ -26046,16 +26046,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "746b114e-6591-48db-aa96-daa94e265078")
+			(uuid "68187ac6-3616-4b34-85f5-68236013da9b")
 		)
 		(pin "2"
-			(uuid "c102acf1-942f-4f8e-b00a-a5b902b2a65b")
+			(uuid "ace2244f-eb37-4a3b-a8b1-1193a2c540c0")
 		)
 		(pin "3"
-			(uuid "0560a9ca-f9fb-4988-8dec-f9a071ca56b3")
+			(uuid "bc930203-8a76-4784-a9ea-f3d5d64c8f38")
 		)
 		(pin "4"
-			(uuid "8feddb37-9fc9-4537-a552-1775fd07eb5f")
+			(uuid "039c10af-3452-4461-8ef4-e752d18eb24a")
 		)
 		(instances
 			(project "totem"
@@ -26068,7 +26068,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 539.75 718.82 0)
+		(at 580.39 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -26078,7 +26078,7 @@
 		(dnp no)
 		(uuid "7b4dd3a3-d174-539a-987a-aafd77d76644")
 		(property "Reference" "#PWR93"
-			(at 539.75 706.82 0)
+			(at 580.39 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26089,7 +26089,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 539.75 710.82 0)
+			(at 580.39 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -26099,7 +26099,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 539.75 714.82 0)
+			(at 580.39 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -26110,7 +26110,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 539.75 718.82 0)
+			(at 580.39 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -26120,7 +26120,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 539.75 718.82 0)
+			(at 580.39 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -26130,7 +26130,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5de752e2-ad01-4e5b-8a4c-bbc71be4ad60")
+			(uuid "b863dd4a-d45b-4262-a3d7-58ac2e51e060")
 		)
 		(instances
 			(project "totem"
@@ -26204,16 +26204,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "9083cc5d-2edc-4960-81b7-ce11d3f03852")
+			(uuid "e87e3cb1-1f74-4fcb-9b59-325dde2966bf")
 		)
 		(pin "2"
-			(uuid "e8e0eaa5-eb6f-4fa9-92b0-700621d955af")
+			(uuid "1f7c14ac-1223-41f2-8057-ece89c457d6a")
 		)
 		(pin "3"
-			(uuid "5d8e959e-dd80-46c0-b1be-ce6f35f0fbbd")
+			(uuid "6594bdce-8bf4-418d-b607-c6ae1c1e490c")
 		)
 		(pin "4"
-			(uuid "30f410e5-1532-4cc6-8601-68d87454fcb6")
+			(uuid "102ddaca-432e-4ca3-a52f-8e90c5d2f1a3")
 		)
 		(instances
 			(project "totem"
@@ -26288,7 +26288,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "74f47c53-88c1-4a3c-ba34-ec2067c9d48d")
+			(uuid "7bae4fc0-cb25-4701-83ef-e51a82eb31c5")
 		)
 		(instances
 			(project "totem"
@@ -26363,7 +26363,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "23bd7c1d-e002-4789-b179-a0fe3c7001b9")
+			(uuid "69f8e7e0-ff56-4a26-b73d-d11eea48008f")
 		)
 		(instances
 			(project "totem"
@@ -26437,112 +26437,112 @@
 			)
 		)
 		(pin "2"
-			(uuid "270d5964-655b-4e56-a069-c355bfec0486")
+			(uuid "ab8f02b0-818c-4dc7-8c47-5f5cf09992c4")
 		)
 		(pin "3"
-			(uuid "596407f4-65d1-432c-9c55-9176d9f0c7ac")
+			(uuid "dd526dc0-0a2a-4922-9265-4b9535f2b71f")
 		)
 		(pin "4"
-			(uuid "29524699-24c8-4c13-9b0d-52a4b591cd1c")
+			(uuid "cfdd84fe-8ee6-4d86-ad41-b165bb86d56c")
 		)
 		(pin "5"
-			(uuid "74e9cff4-6f40-4259-8baa-00ad66e4e625")
+			(uuid "45ed4205-b59d-4ded-96a5-4e1705747259")
 		)
 		(pin "6"
-			(uuid "2fc02675-201a-419e-9c1b-bdae9dcb0cef")
+			(uuid "755ddea0-ba00-4e14-906c-fc5dfe9cf86f")
 		)
 		(pin "7"
-			(uuid "85673f82-6a7f-4d6f-8c5c-47225d665078")
+			(uuid "3df40d3b-b385-43b4-902f-fc53d3c71854")
 		)
 		(pin "8"
-			(uuid "f822a5bb-0a42-4bf1-aa4c-cb28879f0618")
+			(uuid "417fa1b8-bf43-43a7-a9df-ecd4fff1299d")
 		)
 		(pin "9"
-			(uuid "6c53b6ca-8f89-4d0f-8099-736b2fa7c992")
+			(uuid "d687ea8e-1de3-4a53-80a0-852542609406")
 		)
 		(pin "10"
-			(uuid "f97662b3-2ebd-49e0-a260-321907b2308e")
+			(uuid "3110282e-16ad-4136-9ae9-ae5006cf120d")
 		)
 		(pin "11"
-			(uuid "fe6f0d84-8c08-4bf6-b2d4-f83ad1b738db")
+			(uuid "bf2c7489-2145-4432-9b69-8d76bb715d60")
 		)
 		(pin "12"
-			(uuid "5a044531-da05-4f21-89c0-eb72541f3bc1")
+			(uuid "883686d1-1ede-46af-a4e9-eb8f1f609b65")
 		)
 		(pin "13"
-			(uuid "d0df3cda-8ea4-4be5-a9a2-aed61deeea0b")
+			(uuid "a19b5dfa-d606-413d-b966-678c37f88a9e")
 		)
 		(pin "14"
-			(uuid "94fa8d60-b96d-4625-ae15-28aa8ff4c523")
+			(uuid "8cb7a44e-24e9-4331-bc76-5da462849ae5")
 		)
 		(pin "16"
-			(uuid "d7c23fcb-1fd1-4d1f-b5d0-2f5335483a09")
+			(uuid "230c053d-b58a-4a74-a6e7-6a6b2a362129")
 		)
 		(pin "17"
-			(uuid "3fe2548b-57ea-4f12-85b1-b592cdb18732")
+			(uuid "f8969cfa-c434-4a62-ba46-464df5d604ff")
 		)
 		(pin "18"
-			(uuid "ffebbed0-9967-4ff7-8fa4-b984e9dbc0a8")
+			(uuid "30655bda-4b5c-4f99-8aa4-e87b4fcb7e05")
 		)
 		(pin "19"
-			(uuid "5c9dc777-48e3-4687-922f-c07da6d75f7a")
+			(uuid "77dc3cb4-8894-4b44-ab42-d8d6ac22bd4e")
 		)
 		(pin "20"
-			(uuid "3c21a102-cba6-4a7b-8203-b36a359dd44f")
+			(uuid "c2229c91-b58a-41a6-a12f-dcb01637fd94")
 		)
 		(pin "21"
-			(uuid "8ae96461-9345-4260-aa88-b6dab4fbaecc")
+			(uuid "1e2a7b90-0387-49b1-86b2-de65c04c4144")
 		)
 		(pin "22"
-			(uuid "1e55c7fe-7e3a-45a7-aae0-4cb2bee86749")
+			(uuid "9119ca9a-0f7e-4e9f-a702-f55301c94885")
 		)
 		(pin "23"
-			(uuid "80b32b2e-0118-405e-9982-657549670f8f")
+			(uuid "d111034d-454e-4fc7-a9cb-8712e9b4f580")
 		)
 		(pin "24"
-			(uuid "75666ec1-7937-485a-b12e-090ef58569dc")
+			(uuid "360a5e04-3452-4a58-a392-6fe0208c0dd4")
 		)
 		(pin "25"
-			(uuid "76276aa9-9d5e-4e74-bbaf-79ead7753e18")
+			(uuid "8807cecb-b90c-420e-8ca6-8ec663688c6b")
 		)
 		(pin "26"
-			(uuid "9393f299-0083-478f-858e-7b3dc097b6a7")
+			(uuid "8a786cfe-9611-4eb8-a409-bff465729801")
 		)
 		(pin "27"
-			(uuid "181c3e9b-e1b3-41d5-981a-3a9474c77d23")
+			(uuid "4fad6514-7a7c-4add-8ce9-803d32f1c234")
 		)
 		(pin "28"
-			(uuid "2acdc009-6d46-4fea-9460-0a2e10db3b7a")
+			(uuid "ff78884b-c317-40ac-98ed-68c46bdec3a6")
 		)
 		(pin "29"
-			(uuid "5d85fb03-c507-4f99-9498-95175fff790f")
+			(uuid "09e351a3-2c83-40c3-8268-8b0bee162fa0")
 		)
 		(pin "30"
-			(uuid "a2c4d258-1402-428a-8d89-a8d5b538a341")
+			(uuid "ba4ddb9f-167e-4f81-897b-b41fe20d2707")
 		)
 		(pin "31"
-			(uuid "41986025-f070-4429-b060-5c3e4b0d9961")
+			(uuid "6e35a8ad-2c30-4108-8e27-090e9b22cfb5")
 		)
 		(pin "32"
-			(uuid "11f864e2-61fd-4c2e-a907-79ff533bd508")
+			(uuid "66e7abc0-5a08-48da-9c66-aa8c3138d4e9")
 		)
 		(pin "33"
-			(uuid "0f0cf765-11e0-4e88-9fd2-c3b194642f28")
+			(uuid "a4460cdf-f784-4ea9-afdf-66d90dd62b36")
 		)
 		(pin "34"
-			(uuid "ab47a2f7-db22-4a3e-ab8c-0f50c8c3b927")
+			(uuid "056c99e4-060c-43b9-82d7-d2db474926ee")
 		)
 		(pin "35"
-			(uuid "e2c23803-aefd-4776-8005-acab864a2601")
+			(uuid "3622d702-c480-4ede-8531-8b051d7d80ce")
 		)
 		(pin "36"
-			(uuid "20a9b56c-896a-45f6-bade-ec9c755b11b4")
+			(uuid "c4ca7586-399e-41dd-ae25-82cd74e18551")
 		)
 		(pin "37"
-			(uuid "124fff72-fa5a-4e67-93c0-4044ec8ed995")
+			(uuid "577fe592-847d-47a8-a86a-bdc7ba7e3fba")
 		)
 		(pin "[1,15,38,39]"
-			(uuid "fda2c98a-3b06-463a-b0b8-f90d82fbe775")
+			(uuid "f0f72551-b20a-444c-bcc3-32c4014bbbf6")
 		)
 		(instances
 			(project "totem"
@@ -26617,7 +26617,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ea60cde6-dd26-44f3-af13-8fee389a912d")
+			(uuid "eeea5fd0-4a57-403f-9f13-89c7f30ecc91")
 		)
 		(instances
 			(project "totem"
@@ -26692,7 +26692,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5f8530ab-89ef-4c2f-87ac-6320a87f038f")
+			(uuid "473335fc-7a1c-44a2-b306-3d67f4540646")
 		)
 		(instances
 			(project "totem"
@@ -26766,16 +26766,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "094ed967-b87a-4817-9130-4b2983e69547")
+			(uuid "86a1174d-d54a-497d-89cb-6ea95714c668")
 		)
 		(pin "2"
-			(uuid "3e4ab594-011c-4fae-977a-9fc4b0ba8b93")
+			(uuid "d6118077-9990-4afd-bc31-39bcae4aea27")
 		)
 		(pin "3"
-			(uuid "45d8c8ef-70cf-431c-a9c8-9d282b515c57")
+			(uuid "28aeea2c-5166-4727-8029-c477fc814356")
 		)
 		(pin "4"
-			(uuid "9828e0a4-08e7-4cae-ac94-5b16e9d343bd")
+			(uuid "b2c8246c-55d6-4700-99f3-30ac78354a4d")
 		)
 		(instances
 			(project "totem"
@@ -26849,16 +26849,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "30a52a9a-548c-468d-93b2-e7b531a11b7c")
+			(uuid "2e19cfcc-2e9e-4194-b515-a946d3cba63a")
 		)
 		(pin "2"
-			(uuid "3a706368-fbbe-43ab-8280-f60a794a5bf8")
+			(uuid "520d39e7-caf1-4b3d-b1bf-efc23ebd306b")
 		)
 		(pin "3"
-			(uuid "4be7cd7a-0221-4055-b73b-5811e641b4bf")
+			(uuid "62a34fdd-9a97-4d24-b288-4176b3cbef2e")
 		)
 		(pin "4"
-			(uuid "cdf0db27-e3a0-4bab-b722-1d3319816530")
+			(uuid "cf6db10f-0faf-4bab-b3f6-27746caf8cc7")
 		)
 		(instances
 			(project "totem"
@@ -26933,7 +26933,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b318f6c2-3030-409a-807a-86741690eade")
+			(uuid "445eb2b8-252c-485b-8183-c3101d7990a1")
 		)
 		(instances
 			(project "totem"
@@ -27007,10 +27007,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "0d6cd776-81cd-41be-abdf-c7b3f524b23f")
+			(uuid "0fec4bab-3e3e-4b36-b979-fbfb2012352e")
 		)
 		(pin "2"
-			(uuid "026b37b3-bc4c-45a4-a241-73b679c81ef8")
+			(uuid "ddbfa586-239d-4593-8ce4-e2bb59ac6187")
 		)
 		(instances
 			(project "totem"
@@ -27023,7 +27023,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 180.34 588.01 0)
+		(at 740.41 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27033,7 +27033,7 @@
 		(dnp no)
 		(uuid "82e61c41-09db-5977-acc0-505331f9af50")
 		(property "Reference" "#PWR86"
-			(at 180.34 576.01 0)
+			(at 740.41 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27044,7 +27044,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 180.34 580.01 0)
+			(at 740.41 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27054,7 +27054,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 180.34 584.01 0)
+			(at 740.41 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27065,7 +27065,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 180.34 588.01 0)
+			(at 740.41 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27075,7 +27075,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 180.34 588.01 0)
+			(at 740.41 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27085,7 +27085,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a4bcd350-a538-4c1b-9748-eef5c9e75f04")
+			(uuid "e3d62613-c6ca-43e5-aa6b-2507e757d4ac")
 		)
 		(instances
 			(project "totem"
@@ -27102,7 +27102,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -27159,7 +27159,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "30554782-649e-4cf1-b035-f080d8fd54cf")
+			(uuid "61a92d2f-103a-4257-a7ef-49fa5a674dbc")
 		)
 		(instances
 			(project "totem"
@@ -27234,7 +27234,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0db9c0b3-54d4-4295-8294-041d2401fe9f")
+			(uuid "fef608fc-fe13-4baa-a863-058290c01193")
 		)
 		(instances
 			(project "totem"
@@ -27309,7 +27309,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b80ae37a-10bb-4962-a687-97fcc80214e9")
+			(uuid "4dbfbde7-23bf-49e8-9262-e4a17b140866")
 		)
 		(instances
 			(project "totem"
@@ -27384,7 +27384,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "55be8f29-1d4d-4903-b0c5-a6797a081398")
+			(uuid "541f84b6-155d-4408-9a96-81012d2c87a1")
 		)
 		(instances
 			(project "totem"
@@ -27458,16 +27458,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "3d39f65e-0815-4988-a416-299a8a529237")
+			(uuid "4e73ff55-a129-4c42-ae77-f270f57e7dac")
 		)
 		(pin "2"
-			(uuid "bb2206ad-96a9-4f3f-94c6-29147ef9026e")
+			(uuid "430c12da-2856-4ce1-aa73-d3e3f677eb2a")
 		)
 		(pin "3"
-			(uuid "7432d613-03da-47fe-aa3e-f304bb4725d9")
+			(uuid "41341ce8-de81-4c5d-8cf4-539d002d77db")
 		)
 		(pin "4"
-			(uuid "14647307-1bec-4526-981e-cd4e249ea577")
+			(uuid "a844f804-2504-4e6d-be2e-ab7f84cec787")
 		)
 		(instances
 			(project "totem"
@@ -27480,7 +27480,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 420.37 718.82 0)
+		(at 660.4 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27490,7 +27490,7 @@
 		(dnp no)
 		(uuid "8a39fd92-7080-5bc3-8250-3f0fcec0beed")
 		(property "Reference" "#PWR66"
-			(at 420.37 706.82 0)
+			(at 660.4 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27501,7 +27501,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 420.37 710.82 0)
+			(at 660.4 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27511,7 +27511,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 420.37 714.82 0)
+			(at 660.4 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27522,7 +27522,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 420.37 718.82 0)
+			(at 660.4 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27532,7 +27532,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 420.37 718.82 0)
+			(at 660.4 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27542,7 +27542,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1a566e16-8ead-4f25-a805-9347f7dfe6f4")
+			(uuid "8938d573-3dcd-4c4f-a078-03b6906e00e2")
 		)
 		(instances
 			(project "totem"
@@ -27555,7 +27555,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 100.33 654.05 0)
+		(at 660.4 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27565,7 +27565,7 @@
 		(dnp no)
 		(uuid "8bed62b7-0816-5ed2-bdec-8c7766b3796b")
 		(property "Reference" "#PWR51"
-			(at 100.33 642.05 0)
+			(at 660.4 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27576,7 +27576,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 100.33 646.05 0)
+			(at 660.4 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27586,7 +27586,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 100.33 650.05 0)
+			(at 660.4 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27597,7 +27597,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 100.33 654.05 0)
+			(at 660.4 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27607,7 +27607,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 100.33 654.05 0)
+			(at 660.4 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27617,7 +27617,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e819c2d9-7ffc-4a6b-865d-33533776616d")
+			(uuid "2746497d-9d42-4798-90e9-cf8054fc75d7")
 		)
 		(instances
 			(project "totem"
@@ -27692,7 +27692,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2cf053f6-e210-4ba0-b687-819227477d02")
+			(uuid "a172e761-928d-4aa3-ac29-62b35c9475ab")
 		)
 		(instances
 			(project "totem"
@@ -27705,7 +27705,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 500.38 588.01 0)
+		(at 379.73 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27715,7 +27715,7 @@
 		(dnp no)
 		(uuid "8c2f66ec-bd59-5e70-8937-7242530b1ce4")
 		(property "Reference" "#PWR71"
-			(at 500.38 576.01 0)
+			(at 379.73 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27726,7 +27726,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 500.38 580.01 0)
+			(at 379.73 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27736,7 +27736,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 500.38 584.01 0)
+			(at 379.73 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27747,7 +27747,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 500.38 588.01 0)
+			(at 379.73 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27757,7 +27757,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 500.38 588.01 0)
+			(at 379.73 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27767,7 +27767,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "729cfb96-cd0d-4d88-a446-0ee73d495798")
+			(uuid "a80198e4-232e-46de-890a-a451f9007392")
 		)
 		(instances
 			(project "totem"
@@ -27842,7 +27842,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e0f45306-ae69-43a3-a031-274946fda870")
+			(uuid "ab9ad0f8-d403-41e0-bb93-f15fd8d87b3c")
 		)
 		(instances
 			(project "totem"
@@ -27855,7 +27855,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 500.38 307.34 0)
+		(at 934.72 182.88 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27865,7 +27865,7 @@
 		(dnp no)
 		(uuid "8fd52838-7923-561d-9a72-a8e32b17a463")
 		(property "Reference" "#PWR147"
-			(at 500.38 295.34 0)
+			(at 934.72 170.88 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27876,7 +27876,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 500.38 312.34 0)
+			(at 934.72 187.88 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27886,7 +27886,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 500.38 303.34 0)
+			(at 934.72 178.88 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27897,7 +27897,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 500.38 307.34 0)
+			(at 934.72 182.88 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27907,7 +27907,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 500.38 307.34 0)
+			(at 934.72 182.88 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27917,7 +27917,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8c8a51d1-53c8-49f7-a2dc-c5612960fa91")
+			(uuid "77469d6f-3cff-44f2-9dde-49486e2e19e5")
 		)
 		(instances
 			(project "totem"
@@ -27930,7 +27930,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 299.72 588.01 0)
+		(at 539.75 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -27940,7 +27940,7 @@
 		(dnp no)
 		(uuid "905f3db2-e38e-5137-99ab-a7cca603d963")
 		(property "Reference" "#PWR64"
-			(at 299.72 576.01 0)
+			(at 539.75 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27951,7 +27951,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 299.72 580.01 0)
+			(at 539.75 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27961,7 +27961,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 299.72 584.01 0)
+			(at 539.75 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -27972,7 +27972,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 299.72 588.01 0)
+			(at 539.75 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27982,7 +27982,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 299.72 588.01 0)
+			(at 539.75 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -27992,7 +27992,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "9ccb6a46-ad21-44e6-a831-c16ecda7b57f")
+			(uuid "ec1a1d4f-9425-43f9-b0b8-935c1b6b6a28")
 		)
 		(instances
 			(project "totem"
@@ -28066,16 +28066,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "4cae89be-abfe-44e7-a223-fd08bef0a5f8")
+			(uuid "644c5c66-9e8b-46c7-9d14-d246d0b5f047")
 		)
 		(pin "2"
-			(uuid "992c3adb-d2c5-4678-920a-f0390e243435")
+			(uuid "2d013432-0769-44ab-a363-af9e8f1ea927")
 		)
 		(pin "3"
-			(uuid "1b8c66cd-576c-4188-a30a-ba942f565f24")
+			(uuid "927655ad-35c8-435f-b60b-d229dc091bee")
 		)
 		(pin "4"
-			(uuid "8297a7c3-5e2f-44a2-b3b4-8f737448e4e5")
+			(uuid "9f4b4389-db2b-4313-bd88-4103a4cc0d1d")
 		)
 		(instances
 			(project "totem"
@@ -28149,16 +28149,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "38e8e86c-d6e1-4498-b7f3-ba97334f55cd")
+			(uuid "cc45441f-c677-41f4-ac7b-a57871a93991")
 		)
 		(pin "2"
-			(uuid "9cc41105-25ac-4623-bd02-d64121c6b258")
+			(uuid "282a45d1-6809-4855-9399-8da324fa5aaf")
 		)
 		(pin "3"
-			(uuid "e6c6fc94-d6c4-40d4-946e-25b092d5468d")
+			(uuid "c8b8016b-8f7f-48d6-a105-e570665f3c2e")
 		)
 		(pin "4"
-			(uuid "3cc679fe-7f13-42f7-93be-0e9a71f522b7")
+			(uuid "38cffcdb-9b77-4162-a425-d85e5cb6ab6e")
 		)
 		(instances
 			(project "totem"
@@ -28232,16 +28232,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "8ec23a97-62d7-42c0-a2eb-c848c4350eff")
+			(uuid "207aa861-69e9-42b7-b75f-37ed00175944")
 		)
 		(pin "2"
-			(uuid "a636a05f-d79b-4b80-8466-01184da7a889")
+			(uuid "f257f577-bbce-47c7-b2ef-59e3a0a1e9c0")
 		)
 		(pin "3"
-			(uuid "8ffe88ce-c324-452d-97bd-bdd29e418111")
+			(uuid "83bf4d41-c4d0-45e1-bca3-b540aa98f206")
 		)
 		(pin "4"
-			(uuid "df4df44e-f87a-4de2-a48d-d42c77e8ed7b")
+			(uuid "855e0284-0245-497a-90ad-c9abcc36096b")
 		)
 		(instances
 			(project "totem"
@@ -28316,7 +28316,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f2ebcaf4-6f9e-4ee3-b607-86ea0ba578bd")
+			(uuid "4ca98c28-d9be-4342-b0c2-4e10cc563f56")
 		)
 		(instances
 			(project "totem"
@@ -28329,7 +28329,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 340.36 741.68 0)
+		(at 459.74 676.91 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -28339,7 +28339,7 @@
 		(dnp no)
 		(uuid "925e3606-1830-53b3-a829-b80b3187962e")
 		(property "Reference" "#PWR115"
-			(at 340.36 729.68 0)
+			(at 459.74 664.91 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28350,7 +28350,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 340.36 746.68 0)
+			(at 459.74 681.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28360,7 +28360,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 340.36 737.68 0)
+			(at 459.74 672.91 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28371,7 +28371,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 340.36 741.68 0)
+			(at 459.74 676.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28381,7 +28381,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 340.36 741.68 0)
+			(at 459.74 676.91 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28391,7 +28391,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "dbf29ab2-7c17-457c-8525-d7a9a860cb8b")
+			(uuid "0a6f3f73-478a-4e32-b3fe-8f6b50f001dd")
 		)
 		(instances
 			(project "totem"
@@ -28404,7 +28404,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 660.4 718.82 0)
+		(at 779.78 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -28414,7 +28414,7 @@
 		(dnp no)
 		(uuid "945446f3-cc48-59c9-bc4d-89543c483cff")
 		(property "Reference" "#PWR54"
-			(at 660.4 706.82 0)
+			(at 779.78 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28425,7 +28425,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 660.4 710.82 0)
+			(at 779.78 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28435,7 +28435,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 660.4 714.82 0)
+			(at 779.78 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28446,7 +28446,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 660.4 718.82 0)
+			(at 779.78 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28456,7 +28456,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 660.4 718.82 0)
+			(at 779.78 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28466,7 +28466,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "97e8c8a5-0660-4652-a7f4-848c8ee43169")
+			(uuid "0341b2f6-b4eb-40d7-992b-78b577bf6949")
 		)
 		(instances
 			(project "totem"
@@ -28540,16 +28540,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "2c4a5fd1-09c2-4df7-b775-b45677344d95")
+			(uuid "4a823774-37a8-42d1-8c5a-7933a6c6fab4")
 		)
 		(pin "2"
-			(uuid "41b59424-c91d-403c-a461-6d65fa139a69")
+			(uuid "cf1364a6-a18a-4633-8c33-c5394a10ae79")
 		)
 		(pin "3"
-			(uuid "2a500f55-7057-405e-a50a-35eb66841bdd")
+			(uuid "f46c66fd-a14c-4d78-b149-7572edce2233")
 		)
 		(pin "4"
-			(uuid "9a4016e3-e859-4406-8f51-05791baa59fe")
+			(uuid "ed9be551-9aaa-48d9-a7fd-111d06a51448")
 		)
 		(instances
 			(project "totem"
@@ -28624,7 +28624,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5195d401-c78d-4651-a151-0a23c8bb6f4a")
+			(uuid "f47ac2aa-4253-401f-b2df-eb9d074b5ce7")
 		)
 		(instances
 			(project "totem"
@@ -28699,7 +28699,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "80f78084-7469-4d7c-bc76-89583f5d7cbe")
+			(uuid "f2f8a688-5fee-4736-a2f9-968842cef38c")
 		)
 		(instances
 			(project "totem"
@@ -28774,7 +28774,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d0081bdc-0ca2-457e-823d-5892c03c9860")
+			(uuid "677b2a5a-8be3-4ecb-8c86-0ac5ef762146")
 		)
 		(instances
 			(project "totem"
@@ -28849,7 +28849,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4cb194fb-fa38-4778-b71a-f232eebb5e5e")
+			(uuid "e8592787-6315-48fb-ac68-13efae5aa86b")
 		)
 		(instances
 			(project "totem"
@@ -28862,7 +28862,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 459.74 676.91 0)
+		(at 965.2 116.84 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -28872,7 +28872,7 @@
 		(dnp no)
 		(uuid "97d35ef5-f4aa-5abf-b7f4-dd35cca9fcff")
 		(property "Reference" "#PWR118"
-			(at 459.74 664.91 0)
+			(at 965.2 104.84 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28883,7 +28883,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 459.74 681.91 0)
+			(at 965.2 121.84 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28893,7 +28893,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 459.74 672.91 0)
+			(at 965.2 112.84 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -28904,7 +28904,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 459.74 676.91 0)
+			(at 965.2 116.84 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28914,7 +28914,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 459.74 676.91 0)
+			(at 965.2 116.84 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -28924,7 +28924,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6bd20030-30e4-476d-ac1e-698ba6ab276c")
+			(uuid "351813be-4c9a-4bff-898c-d582ab017a52")
 		)
 		(instances
 			(project "totem"
@@ -28998,16 +28998,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "4c9a9041-c3bf-4212-81b3-b080275e87ac")
+			(uuid "5d0fb9e7-4d13-47bc-bca9-533ff236ee83")
 		)
 		(pin "2"
-			(uuid "7d0d5925-af94-44f9-8b60-00b7af2d17c4")
+			(uuid "20936da8-a3b9-4f2d-a3ad-091cd6f680d0")
 		)
 		(pin "3"
-			(uuid "53654001-f9ae-43c7-b1fb-d0d398f2ca09")
+			(uuid "d94588f8-4067-48b8-87d5-a1853cd43647")
 		)
 		(pin "4"
-			(uuid "b2d5ac4a-f1bb-4a46-86c2-838d5810861c")
+			(uuid "6a5f98cd-ae99-426c-a125-87c7f01a8c6e")
 		)
 		(instances
 			(project "totem"
@@ -29082,7 +29082,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "03d03efb-8d44-465a-befb-5a231128d294")
+			(uuid "fcbc0b91-04fe-44b6-b9e9-7c96b277ec9a")
 		)
 		(instances
 			(project "totem"
@@ -29157,7 +29157,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "818b465b-8474-47fc-8a74-ac81ea2b100c")
+			(uuid "47d6ac88-6ca1-4a49-b65f-6134374de9ef")
 		)
 		(instances
 			(project "totem"
@@ -29231,16 +29231,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "39e1155f-6da0-49a7-959e-724243b2c7c4")
+			(uuid "04cc1554-7a44-4a25-a710-046d84ea624a")
 		)
 		(pin "2"
-			(uuid "a9957dbd-cc81-4a39-9b91-7cbd07d25c2c")
+			(uuid "318da4a0-efbd-43e0-9fd5-7a11ff9c61a2")
 		)
 		(pin "3"
-			(uuid "f2cbec11-486c-4337-9430-83eba1eee45e")
+			(uuid "42d175c4-ff6d-4392-bd59-4e475b59b407")
 		)
 		(pin "4"
-			(uuid "dd96c113-10d9-4bc2-8399-129283e94784")
+			(uuid "6bcde736-efef-4a0b-8186-bbf43e9edca6")
 		)
 		(instances
 			(project "totem"
@@ -29315,7 +29315,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d517b5c1-cd85-4f5f-8d8c-0a07ac8db149")
+			(uuid "4981f699-c9ac-469d-8cfd-e008b123ec68")
 		)
 		(instances
 			(project "totem"
@@ -29390,7 +29390,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2b88594e-8cd8-4a85-813c-bd34c437a903")
+			(uuid "abc374b1-e22c-405e-b8a2-17cf5f9fcfed")
 		)
 		(instances
 			(project "totem"
@@ -29465,7 +29465,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b1b2a0ae-ee85-4ab7-a548-4179c37f3ddf")
+			(uuid "2bb3018e-9512-4196-86bb-17d1cf39da0a")
 		)
 		(instances
 			(project "totem"
@@ -29540,7 +29540,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e2b1a286-0b9f-4272-9f08-b310b7193a03")
+			(uuid "c524f405-9008-4a4f-9747-815bb9cde050")
 		)
 		(instances
 			(project "totem"
@@ -29615,7 +29615,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "80d70aba-f1be-457d-8f07-47762ab8fb26")
+			(uuid "a726ef52-2d23-46c9-bf01-af004afe5799")
 		)
 		(instances
 			(project "totem"
@@ -29690,7 +29690,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7c237127-c84d-4a38-a620-6758a3fbaaef")
+			(uuid "9e9931cb-8b9a-46ac-88af-6244232b9594")
 		)
 		(instances
 			(project "totem"
@@ -29765,7 +29765,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d227a478-c58b-4b42-a980-467c67e89be0")
+			(uuid "3e4bfe2d-71ef-4039-9cb7-4e3c841affbe")
 		)
 		(instances
 			(project "totem"
@@ -29840,7 +29840,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2fce0a5b-f5ac-41fd-99c4-99d3fcff4690")
+			(uuid "d454172a-ed0a-4b76-8110-4ae7b0563a10")
 		)
 		(instances
 			(project "totem"
@@ -29915,7 +29915,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "56521984-6349-4060-b2a7-a97d7b885768")
+			(uuid "d1c22ac8-e834-4c8b-8c68-24c6bc01a774")
 		)
 		(instances
 			(project "totem"
@@ -29990,7 +29990,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f2298f05-ed99-4e39-a3b0-201aeeb285a7")
+			(uuid "634d8beb-a84c-4003-8297-f658a8cc15bf")
 		)
 		(instances
 			(project "totem"
@@ -30065,7 +30065,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5bb2779b-d5e3-4f68-a37a-52dfcb33577d")
+			(uuid "7b4dad0f-86c0-4a81-904b-27b63b7f9f34")
 		)
 		(instances
 			(project "totem"
@@ -30139,10 +30139,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "249ccd80-a0cd-46c7-aab0-c2d5ec261290")
+			(uuid "355c2ed5-0bec-4556-b8a9-c15e81c7d3cd")
 		)
 		(pin "2"
-			(uuid "fc570e7b-ae0e-43a8-b0ad-dfb78bf98b04")
+			(uuid "f516946e-6d70-4d0e-b8d8-bb2921736754")
 		)
 		(instances
 			(project "totem"
@@ -30217,7 +30217,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "94fe1426-3b7a-4703-afc7-8aeadf28c16a")
+			(uuid "4b60922c-3376-40e1-a5af-b9f26fbe6677")
 		)
 		(instances
 			(project "totem"
@@ -30291,16 +30291,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "40f57d1e-6de7-4fd7-a2a9-d9f0955b1d18")
+			(uuid "60386d13-98e1-4a46-b587-0e0daa7616e6")
 		)
 		(pin "2"
-			(uuid "d43ce9e2-efcc-4989-8eea-a3920aa8eca0")
+			(uuid "f156d2c5-4bb5-4358-ac71-68d37628386f")
 		)
 		(pin "3"
-			(uuid "b3c1120c-71e9-4474-a7c1-70f96b81aabc")
+			(uuid "3adcdb70-e299-43e0-b4f3-25eec438b029")
 		)
 		(pin "4"
-			(uuid "69cc5ff9-e156-402e-b431-b7c1e6bc0ab9")
+			(uuid "1305ec26-06e8-4da0-b656-57a4f3751f9e")
 		)
 		(instances
 			(project "totem"
@@ -30375,7 +30375,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "19497796-cfa1-423b-9668-096330ba7065")
+			(uuid "c56d1afd-8f78-4a7d-8a1c-f764db4cac8e")
 		)
 		(instances
 			(project "totem"
@@ -30450,7 +30450,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7154efb5-380e-4d59-81aa-92a780744527")
+			(uuid "59d0ac10-d5e7-4a87-9374-5d02502933eb")
 		)
 		(instances
 			(project "totem"
@@ -30525,7 +30525,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b34bd7b9-8441-4dd7-8825-b4f78ae42a59")
+			(uuid "ac2ca558-bb14-43ea-8a98-ccbcadbda21e")
 		)
 		(instances
 			(project "totem"
@@ -30538,7 +30538,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 660.4 588.01 0)
+		(at 580.39 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -30548,7 +30548,7 @@
 		(dnp no)
 		(uuid "a9b7b64c-59a3-54f4-9427-84992a947880")
 		(property "Reference" "#PWR67"
-			(at 660.4 576.01 0)
+			(at 580.39 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -30559,7 +30559,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 660.4 580.01 0)
+			(at 580.39 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -30569,7 +30569,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 660.4 584.01 0)
+			(at 580.39 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -30580,7 +30580,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 660.4 588.01 0)
+			(at 580.39 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -30590,7 +30590,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 660.4 588.01 0)
+			(at 580.39 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -30600,7 +30600,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e0163326-d82a-492d-807d-c3c97b511d1e")
+			(uuid "6ead011d-7ca4-43f6-ae45-4eecac97cd62")
 		)
 		(instances
 			(project "totem"
@@ -30675,7 +30675,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6b067f94-15ef-434a-a146-a0112c0a2170")
+			(uuid "3f775119-c229-44ce-89af-1e96ad99c228")
 		)
 		(instances
 			(project "totem"
@@ -30750,7 +30750,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f278f24d-40e6-4a13-94a9-811bf683451f")
+			(uuid "5afe70ef-2952-403a-ab31-3d53686f8072")
 		)
 		(instances
 			(project "totem"
@@ -30825,7 +30825,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a08e2370-70e1-4fa4-a80c-1019d50b4576")
+			(uuid "3d084328-2d63-4539-a167-ea699cc1de98")
 		)
 		(instances
 			(project "totem"
@@ -30900,7 +30900,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ec82b6a2-d3ed-428e-866e-5a9fd4aa3909")
+			(uuid "a360b062-c1e2-4620-903a-db09690d2dda")
 		)
 		(instances
 			(project "totem"
@@ -30975,7 +30975,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "15b85cd0-2d5c-451a-b36f-6a8963d841c9")
+			(uuid "9f844709-86c0-445b-a8f5-a237670f31e6")
 		)
 		(instances
 			(project "totem"
@@ -31050,7 +31050,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "524b7aa6-deba-467f-b250-369d26082dfe")
+			(uuid "dbbda033-4949-4ab7-935d-11733dcf1343")
 		)
 		(instances
 			(project "totem"
@@ -31125,7 +31125,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8309cb42-12fe-4574-8c96-579756177d85")
+			(uuid "d639867d-0ab3-4a2a-be5d-2d27ba635771")
 		)
 		(instances
 			(project "totem"
@@ -31199,16 +31199,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "36af37e9-87b7-4d6d-bacf-46c1ea5f7aeb")
+			(uuid "8246723d-5e76-4bfd-b42a-c3e4830baf28")
 		)
 		(pin "2"
-			(uuid "e64402c6-123d-4ad2-b689-06d77b8eab97")
+			(uuid "634b55c9-493f-4a0f-abdc-51c53b32c5d4")
 		)
 		(pin "3"
-			(uuid "717ed38f-f595-4b8b-a6d3-bfb1e5cc9719")
+			(uuid "d1d1882b-c9bc-4b42-a292-8a5f31e8904f")
 		)
 		(pin "4"
-			(uuid "d876df73-457a-407d-8c0c-5905fc08129f")
+			(uuid "416dc642-d602-4593-b654-a7bf76acb742")
 		)
 		(instances
 			(project "totem"
@@ -31283,7 +31283,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f7fe923b-9249-4db3-aca8-7ffafa202016")
+			(uuid "0adac27b-2a2d-4b97-bc95-9aea0feb26d0")
 		)
 		(instances
 			(project "totem"
@@ -31359,7 +31359,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8f7d91f1-b913-46de-9712-865236283011")
+			(uuid "b95753b4-01f7-4c3a-909f-ada21fc73387")
 		)
 		(instances
 			(project "totem"
@@ -31434,7 +31434,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "12be2bac-f533-4e35-a520-bf3d95ab1408")
+			(uuid "6c288fca-c4f2-4fcd-aec0-37a237f88ac3")
 		)
 		(instances
 			(project "totem"
@@ -31509,7 +31509,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f5427690-4663-443b-bdd4-c4a45af3b477")
+			(uuid "a70448b3-a9d7-4180-9c7c-b6824a2a17d9")
 		)
 		(instances
 			(project "totem"
@@ -31584,7 +31584,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7c1df0bd-081c-47a4-b722-4728792724bd")
+			(uuid "9b0bdf00-577a-4cdf-a54f-2e5946874fa1")
 		)
 		(instances
 			(project "totem"
@@ -31659,7 +31659,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "fd0911f0-5e79-4a1e-9ed9-54837b2b5506")
+			(uuid "9fcad954-1d95-45f6-9fa1-73bf7b46c27e")
 		)
 		(instances
 			(project "totem"
@@ -31672,7 +31672,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 619.76 718.82 0)
+		(at 779.78 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -31682,7 +31682,7 @@
 		(dnp no)
 		(uuid "b2bfa6e5-a400-5121-b0a8-cad7999bafd7")
 		(property "Reference" "#PWR89"
-			(at 619.76 706.82 0)
+			(at 779.78 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -31693,7 +31693,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 619.76 710.82 0)
+			(at 779.78 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -31703,7 +31703,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 619.76 714.82 0)
+			(at 779.78 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -31714,7 +31714,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 619.76 718.82 0)
+			(at 779.78 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -31724,7 +31724,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 619.76 718.82 0)
+			(at 779.78 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -31734,7 +31734,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "38636a7f-8214-42d7-b0d0-72396557e281")
+			(uuid "3b472750-b7ea-40a9-b6ff-ad1b53302788")
 		)
 		(instances
 			(project "totem"
@@ -31809,7 +31809,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8dd0031e-3830-4f21-8a26-dff7c1f86cc8")
+			(uuid "13c1833f-0387-449d-b8e3-7391f73ef4f4")
 		)
 		(instances
 			(project "totem"
@@ -31884,7 +31884,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8db69ea0-3036-417b-84e4-dffac39f9997")
+			(uuid "aac2474a-d151-4f04-acca-962f0a381247")
 		)
 		(instances
 			(project "totem"
@@ -31958,10 +31958,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "7d7cef16-4817-480c-b068-62d7dfb21d4e")
+			(uuid "c84caf58-5af8-4f24-ac99-dc3b7a68c4ea")
 		)
 		(pin "2"
-			(uuid "9c1b7ea7-52eb-436e-91d6-4ec8c41c2a22")
+			(uuid "f0754d24-9653-4c97-9edf-dfa8f1dfccf4")
 		)
 		(instances
 			(project "totem"
@@ -32036,7 +32036,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "75b5ff91-67c4-4748-a560-d5abf8325599")
+			(uuid "c27ccbbf-b4db-46e7-8f03-8136a4d2a897")
 		)
 		(instances
 			(project "totem"
@@ -32111,7 +32111,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1170b0c9-e5bf-4256-83cf-00ffa25e3cff")
+			(uuid "de2c1eab-2f34-479b-a86b-6fe2b5d3eb99")
 		)
 		(instances
 			(project "totem"
@@ -32186,7 +32186,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "96ce3762-e723-4659-b36e-eb0045dfc800")
+			(uuid "a40ab250-4a28-4a28-8a62-e6cb5efcc0e5")
 		)
 		(instances
 			(project "totem"
@@ -32260,16 +32260,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "42eb4124-c982-42e9-bdd2-b958f49c9ab9")
+			(uuid "a09fe3e3-90d9-48ef-8a0d-b5ad00c1afcf")
 		)
 		(pin "2"
-			(uuid "c9477c56-5c68-48a5-b2cb-a7783097d4b9")
+			(uuid "9eb69eb1-4d4c-437e-bcc8-1e15c0903f94")
 		)
 		(pin "3"
-			(uuid "44ec5df6-dc42-449b-ae03-cdc8364408fe")
+			(uuid "3300bbfd-9ac2-4652-9a44-2bbd0b45ed15")
 		)
 		(pin "4"
-			(uuid "221841c9-e1f5-4869-bb74-65f078d9d4a9")
+			(uuid "068b8ec2-4e51-4f87-b578-d1ac58298b26")
 		)
 		(instances
 			(project "totem"
@@ -32301,7 +32301,7 @@
 				)
 			)
 		)
-		(property "Value" "touch"
+		(property "Value" "touch spring"
 			(at 849.63 371.73 0)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32343,7 +32343,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "7ac465cb-82bb-4f3e-bec4-37df37a73ac3")
+			(uuid "33916c06-9b79-47b2-adf8-8569066c9aa0")
 		)
 		(instances
 			(project "totem"
@@ -32418,7 +32418,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "48818250-f6be-4baf-9fc9-fc125b549f1e")
+			(uuid "4f84c60b-d8bf-4b44-bfb0-c6cc660b35ae")
 		)
 		(instances
 			(project "totem"
@@ -32431,7 +32431,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 379.73 654.05 0)
+		(at 260.35 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -32441,7 +32441,7 @@
 		(dnp no)
 		(uuid "b8a2dee4-6032-5d34-a602-f24e23f9ab8a")
 		(property "Reference" "#PWR72"
-			(at 379.73 642.05 0)
+			(at 260.35 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32452,7 +32452,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 379.73 646.05 0)
+			(at 260.35 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32462,7 +32462,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 379.73 650.05 0)
+			(at 260.35 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32473,7 +32473,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 379.73 654.05 0)
+			(at 260.35 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32483,7 +32483,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 379.73 654.05 0)
+			(at 260.35 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32493,7 +32493,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "dff121f5-65c4-4dfb-9250-efe8e30747f1")
+			(uuid "5fb687b1-8234-4848-bde9-2e1e7dba8dbf")
 		)
 		(instances
 			(project "totem"
@@ -32567,10 +32567,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "fc768c53-edba-490a-940f-4eef098d3091")
+			(uuid "076e4cbc-01bf-465e-85cb-790d17fd8658")
 		)
 		(pin "2"
-			(uuid "8a3d9e64-3372-4424-ba6d-4598c14d28b7")
+			(uuid "141c17a1-a24b-4b5d-a72e-32fc4ec3b5aa")
 		)
 		(instances
 			(project "totem"
@@ -32583,7 +32583,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 459.74 718.82 0)
+		(at 299.72 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -32593,7 +32593,7 @@
 		(dnp no)
 		(uuid "baebac71-cce7-5073-85ce-6dc6dd77163a")
 		(property "Reference" "#PWR96"
-			(at 459.74 706.82 0)
+			(at 299.72 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32604,7 +32604,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 459.74 710.82 0)
+			(at 299.72 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32614,7 +32614,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 459.74 714.82 0)
+			(at 299.72 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32625,7 +32625,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 459.74 718.82 0)
+			(at 299.72 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32635,7 +32635,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 459.74 718.82 0)
+			(at 299.72 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32645,7 +32645,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f445144b-a0db-4e28-bae6-4285b0d40bc2")
+			(uuid "5680cad6-f653-4dd1-95d2-3c22695d54f9")
 		)
 		(instances
 			(project "totem"
@@ -32719,10 +32719,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "1023022a-d9af-411e-b050-c1788cd92838")
+			(uuid "301a57fc-d690-440a-9fe4-2720b47c03e7")
 		)
 		(pin "2"
-			(uuid "45ba5e4a-8fa0-42b6-a7d6-df3a8558d284")
+			(uuid "29d0b3a9-bc54-4ca2-9554-c8b5ab7492fe")
 		)
 		(instances
 			(project "totem"
@@ -32735,7 +32735,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 180.34 718.82 0)
+		(at 340.36 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -32745,7 +32745,7 @@
 		(dnp no)
 		(uuid "bc7587c6-cc8d-5021-97a6-f08fdba5c063")
 		(property "Reference" "#PWR76"
-			(at 180.34 706.82 0)
+			(at 340.36 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32756,7 +32756,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 180.34 710.82 0)
+			(at 340.36 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32766,7 +32766,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 180.34 714.82 0)
+			(at 340.36 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -32777,7 +32777,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 180.34 718.82 0)
+			(at 340.36 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32787,7 +32787,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 180.34 718.82 0)
+			(at 340.36 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -32797,7 +32797,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "12eefa4d-2ef1-4808-8748-d5bb3dd37e31")
+			(uuid "d6e88f34-b112-4f6f-bfe0-a5b8262b58dd")
 		)
 		(instances
 			(project "totem"
@@ -32871,16 +32871,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "a8f99b55-132b-4be9-8651-22ec21303aee")
+			(uuid "32bb1197-4478-46e3-ad50-a78d3741473a")
 		)
 		(pin "2"
-			(uuid "a5c4566a-e7ca-4765-8b4b-60b9d1663d78")
+			(uuid "9fc41ab6-2567-4bad-b275-21da7eab102a")
 		)
 		(pin "3"
-			(uuid "3ce1814b-26a9-4355-a56d-593e744910ac")
+			(uuid "1afc5143-2351-44de-85ef-b5c4d32d53c9")
 		)
 		(pin "4"
-			(uuid "3d66f61c-5ae5-4298-9384-034276691ba3")
+			(uuid "13d4bc9a-8bdd-43c8-be5b-7a174a7f50f9")
 		)
 		(instances
 			(project "totem"
@@ -32954,16 +32954,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "c7599349-59ca-4a6d-b7ea-da754e498d3e")
+			(uuid "c9c56a22-0c99-4a12-822a-a945330ebade")
 		)
 		(pin "2"
-			(uuid "580efff6-ac47-40fc-9a83-96cdb573beec")
+			(uuid "536e16fb-1fa2-4e17-8b29-9517f723946a")
 		)
 		(pin "3"
-			(uuid "efac0e6f-9ece-4ba5-aad3-1ca4354417f3")
+			(uuid "3de3ea6e-010b-423d-acc2-ef4ccbdc0f08")
 		)
 		(pin "4"
-			(uuid "a816ebde-0806-44b3-9425-5ba7a153f0f2")
+			(uuid "c99c84f9-b75d-473f-b007-6c7d434a5789")
 		)
 		(instances
 			(project "totem"
@@ -33038,7 +33038,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "fa1f6322-0f8a-4c04-b5e6-b9860f5edd13")
+			(uuid "6a2d3018-4e09-4b85-a6e3-9acaa453feb8")
 		)
 		(instances
 			(project "totem"
@@ -33051,7 +33051,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 699.77 718.82 0)
+		(at 59.69 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -33061,7 +33061,7 @@
 		(dnp no)
 		(uuid "c025434a-fa91-5499-ae31-60e8b2400de6")
 		(property "Reference" "#PWR85"
-			(at 699.77 706.82 0)
+			(at 59.69 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33072,7 +33072,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 699.77 710.82 0)
+			(at 59.69 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33082,7 +33082,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 699.77 714.82 0)
+			(at 59.69 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33093,7 +33093,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 699.77 718.82 0)
+			(at 59.69 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33103,7 +33103,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 699.77 718.82 0)
+			(at 59.69 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33113,7 +33113,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "adf1a84b-272f-42da-b1ef-6fe1b330fddb")
+			(uuid "99d77ec0-bf7a-4c64-a6d6-cc7387d8ab09")
 		)
 		(instances
 			(project "totem"
@@ -33187,16 +33187,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "e92a3cf0-ce2a-495e-ae64-5ff28714e14a")
+			(uuid "6cf00a9b-dd3e-4580-bc2c-deb3f8d7cb55")
 		)
 		(pin "2"
-			(uuid "e066390a-9f71-4ef0-a9b0-e72095e04ad3")
+			(uuid "00deacdd-de5d-4ab6-8906-a159b9bcb565")
 		)
 		(pin "3"
-			(uuid "f60386e6-ed73-4ce8-984d-83eaf034522e")
+			(uuid "5c6abf7b-531a-4be7-b2df-14d2a1475745")
 		)
 		(pin "4"
-			(uuid "ca8a0bba-73aa-40bf-a97a-6be9e0850727")
+			(uuid "446032c9-52cb-4a70-b732-26e2c7af8ce0")
 		)
 		(instances
 			(project "totem"
@@ -33271,7 +33271,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "163b159e-b050-4b8c-9c9c-d5b1c2da952e")
+			(uuid "cd905129-1b43-498b-b851-810d8f54964f")
 		)
 		(instances
 			(project "totem"
@@ -33284,7 +33284,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 740.41 654.05 0)
+		(at 100.33 588.01 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -33294,7 +33294,7 @@
 		(dnp no)
 		(uuid "c2b61185-4123-52e6-a236-04c0894ed5f8")
 		(property "Reference" "#PWR88"
-			(at 740.41 642.05 0)
+			(at 100.33 576.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33305,7 +33305,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 740.41 646.05 0)
+			(at 100.33 580.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33315,7 +33315,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 740.41 650.05 0)
+			(at 100.33 584.01 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33326,7 +33326,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 740.41 654.05 0)
+			(at 100.33 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33336,7 +33336,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 740.41 654.05 0)
+			(at 100.33 588.01 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33346,7 +33346,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "02984ae1-15cd-47b6-bfeb-dc70e6ab0b65")
+			(uuid "4a9e265b-fe47-4534-8fc9-6b2b8ccd3fa1")
 		)
 		(instances
 			(project "totem"
@@ -33421,7 +33421,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3a8b79e7-d03d-45bc-90e2-d7447e10404d")
+			(uuid "aaf303f7-7d61-4234-b191-7017558f6e15")
 		)
 		(instances
 			(project "totem"
@@ -33496,7 +33496,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0eef6c9e-e000-4d97-96ca-909b734f14d9")
+			(uuid "dda62dff-c9e3-48f5-bb78-5421ea21f259")
 		)
 		(instances
 			(project "totem"
@@ -33571,7 +33571,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "cb84ccc1-4fa4-4121-8775-a6ab23071381")
+			(uuid "afc137fd-3fc5-4699-9b06-506cbe28bbca")
 		)
 		(instances
 			(project "totem"
@@ -33645,10 +33645,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "50e42dd8-38e6-498a-a835-2c68c3e663cf")
+			(uuid "b6b804ff-6ed4-48fe-838b-6a19f0c6b875")
 		)
 		(pin "2"
-			(uuid "a90a16b0-7c7a-4f45-b59c-37c736eb0d70")
+			(uuid "5e6ccfb9-25a6-48ca-a98d-983b460e996c")
 		)
 		(instances
 			(project "totem"
@@ -33661,7 +33661,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 459.74 654.05 0)
+		(at 340.36 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -33671,7 +33671,7 @@
 		(dnp no)
 		(uuid "c60241d2-e9cb-52f5-80ef-02e2778a4eea")
 		(property "Reference" "#PWR69"
-			(at 459.74 642.05 0)
+			(at 340.36 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33682,7 +33682,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 459.74 646.05 0)
+			(at 340.36 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33692,7 +33692,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 459.74 650.05 0)
+			(at 340.36 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33703,7 +33703,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 459.74 654.05 0)
+			(at 340.36 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33713,7 +33713,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 459.74 654.05 0)
+			(at 340.36 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33723,7 +33723,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "854d2eb0-fa22-4a70-8461-714f0eb12ae9")
+			(uuid "5f242e77-b60f-4a53-9e2e-f2b684186f3b")
 		)
 		(instances
 			(project "totem"
@@ -33798,7 +33798,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4e9141ba-e7ee-464d-8dba-d55a996f1c38")
+			(uuid "28c0b45a-887a-4c50-a631-cc72f7424c50")
 		)
 		(instances
 			(project "totem"
@@ -33873,7 +33873,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1f703978-5c25-4d14-9eeb-9690a4a52c5a")
+			(uuid "cac2becb-ac85-4108-ad0e-015fc09ad959")
 		)
 		(instances
 			(project "totem"
@@ -33947,10 +33947,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "17c27c43-e320-4d90-aec0-78e3ddd72130")
+			(uuid "dca6dc1b-a736-4fe3-91e5-d78754e43cb5")
 		)
 		(pin "2"
-			(uuid "ebceefef-e987-493e-b0c9-e5c163e03a91")
+			(uuid "eb6f0ab9-0c68-4c86-a899-4df25e7c9fdb")
 		)
 		(instances
 			(project "totem"
@@ -33963,7 +33963,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 139.7 654.05 0)
+		(at 699.77 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -33973,7 +33973,7 @@
 		(dnp no)
 		(uuid "c738ba60-26d0-5374-b2e0-a3b5e6bd040e")
 		(property "Reference" "#PWR83"
-			(at 139.7 642.05 0)
+			(at 699.77 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -33984,7 +33984,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 139.7 646.05 0)
+			(at 699.77 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -33994,7 +33994,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 139.7 650.05 0)
+			(at 699.77 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34005,7 +34005,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 139.7 654.05 0)
+			(at 699.77 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34015,7 +34015,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 139.7 654.05 0)
+			(at 699.77 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34025,7 +34025,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b80a75ec-6c75-4505-8e02-d11434b12cf9")
+			(uuid "e7d35913-406b-4daf-8a8b-95b9b1ac50bb")
 		)
 		(instances
 			(project "totem"
@@ -34100,7 +34100,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b781d589-3cb9-460f-a76e-50c71bff9b03")
+			(uuid "efb4656f-7cd1-4714-98b7-619210d854de")
 		)
 		(instances
 			(project "totem"
@@ -34117,7 +34117,7 @@
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
-		(in_bom yes)
+		(in_bom no)
 		(on_board yes)
 		(in_pos_files yes)
 		(dnp no)
@@ -34174,7 +34174,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "b4831d15-de7c-4c3c-98ec-fc84a361ffd7")
+			(uuid "7b849204-6729-4de7-9401-00aca10560bf")
 		)
 		(instances
 			(project "totem"
@@ -34187,7 +34187,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 779.78 654.05 0)
+		(at 100.33 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -34197,7 +34197,7 @@
 		(dnp no)
 		(uuid "c810ffd8-4fdb-5be3-979d-3cc439833b1e")
 		(property "Reference" "#PWR52"
-			(at 779.78 642.05 0)
+			(at 100.33 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34208,7 +34208,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 779.78 646.05 0)
+			(at 100.33 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34218,7 +34218,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 779.78 650.05 0)
+			(at 100.33 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34229,7 +34229,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 779.78 654.05 0)
+			(at 100.33 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34239,7 +34239,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 779.78 654.05 0)
+			(at 100.33 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34249,7 +34249,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d8916a7f-c662-4d4c-bf30-73fcdd397a5c")
+			(uuid "a9b3d617-356b-42f3-abbd-220d12abc9cf")
 		)
 		(instances
 			(project "totem"
@@ -34323,13 +34323,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "fc0f719f-f92b-4447-b3be-475a046bbb56")
+			(uuid "bbb03394-3b8a-41ed-a2c6-2227bc999026")
 		)
 		(pin "2"
-			(uuid "625b5ded-a342-4fb9-911f-deaf4b14b550")
+			(uuid "b1513b32-8613-4837-b70d-74c04cf13ef4")
 		)
 		(pin "3"
-			(uuid "78b0ef63-c7da-4095-8aa6-65f16b0966e7")
+			(uuid "c09b8efd-0a38-4bba-8b0a-b38ca7dbffbb")
 		)
 		(instances
 			(project "totem"
@@ -34342,7 +34342,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 965.2 116.84 0)
+		(at 340.36 741.68 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -34352,7 +34352,7 @@
 		(dnp no)
 		(uuid "cbbb82fa-44bf-5445-b04b-808ba7b7c659")
 		(property "Reference" "#PWR117"
-			(at 965.2 104.84 0)
+			(at 340.36 729.68 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34363,7 +34363,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 965.2 121.84 0)
+			(at 340.36 746.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34373,7 +34373,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 965.2 112.84 0)
+			(at 340.36 737.68 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -34384,7 +34384,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 965.2 116.84 0)
+			(at 340.36 741.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34394,7 +34394,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 965.2 116.84 0)
+			(at 340.36 741.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -34404,7 +34404,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "a17939f3-2b5f-4653-a3b3-245062347b52")
+			(uuid "7de08541-c45f-4598-95a5-71668d73af67")
 		)
 		(instances
 			(project "totem"
@@ -34479,7 +34479,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "754cea33-9d8f-4b32-a4b8-e280510ce9fd")
+			(uuid "6ec0fd03-2d1b-4fd9-880d-3551caa6c6f0")
 		)
 		(instances
 			(project "totem"
@@ -34553,16 +34553,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "0da0fdad-18f8-45e2-af04-5bab3b0330cd")
+			(uuid "159bb3b9-c809-41f5-8b37-d4b0ed675f2b")
 		)
 		(pin "2"
-			(uuid "d38c607f-7c31-4002-9f6a-75c7e464ab5a")
+			(uuid "a03b9527-fdc0-4d38-a939-d933fe3b12ff")
 		)
 		(pin "3"
-			(uuid "e1278fae-0d68-4207-a490-a19e4be79782")
+			(uuid "9bc49d35-6493-425a-90c4-55c313408e16")
 		)
 		(pin "4"
-			(uuid "476160df-1357-4a2d-9575-e7f184c8c97f")
+			(uuid "d0e1ceb0-9203-4410-bd41-d5b52b6755e7")
 		)
 		(instances
 			(project "totem"
@@ -34635,11 +34635,11 @@
 				)
 			)
 		)
-		(pin "2"
-			(uuid "9c45a1da-a3dc-433a-a3d4-766a18248a8c")
-		)
 		(pin "1"
-			(uuid "ff718025-33fe-4638-8aea-f6d55c76c2f7")
+			(uuid "11e9b3e6-9e0b-4f1a-b417-fbca52a2c689")
+		)
+		(pin "2"
+			(uuid "01cf03ee-3248-4913-8782-9b8bccc644ba")
 		)
 		(instances
 			(project "totem"
@@ -34714,7 +34714,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "4442a188-1e68-4a8b-b765-3db4b26a58b1")
+			(uuid "968446cd-5cdd-40ad-9f62-6ff6506fc7e9")
 		)
 		(instances
 			(project "totem"
@@ -34789,7 +34789,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "bdebf825-6063-49a1-87d9-549d0e03a79d")
+			(uuid "020dc741-6e94-450f-9712-3bbc67b31ce8")
 		)
 		(instances
 			(project "totem"
@@ -34863,10 +34863,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "ee7dc902-3a38-4fb7-b9da-18835229470a")
+			(uuid "8478319a-8347-4a51-b991-f3f7cba60f72")
 		)
 		(pin "2"
-			(uuid "d7c335f3-0d09-4434-ab9f-721087249fc4")
+			(uuid "78ea27d5-eeb5-4d37-bc28-6f99b23e2e2c")
 		)
 		(instances
 			(project "totem"
@@ -34941,7 +34941,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d74bc64f-c6cf-403d-9655-97579b1c6de0")
+			(uuid "b384431a-1854-4743-93df-734202b8e762")
 		)
 		(instances
 			(project "totem"
@@ -35016,7 +35016,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "02cab9cf-ba93-4b1e-9e18-9dcc35821de9")
+			(uuid "18b07e06-2f35-42c2-8c01-cd4bb7ba0045")
 		)
 		(instances
 			(project "totem"
@@ -35090,16 +35090,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "4eab1527-cb38-4553-a00c-6f3332dc2a78")
+			(uuid "3f1b2b3c-4c5d-4a4f-a38e-ed6247de33a2")
 		)
 		(pin "2"
-			(uuid "39adcce1-294e-4bdb-ae86-cd1fec47bf3d")
+			(uuid "3fa00cef-0707-43fe-8baa-5922061330df")
 		)
 		(pin "3"
-			(uuid "55bbc16c-809a-4edc-9d88-8dd71019c7dd")
+			(uuid "9640a4a5-6e43-4fa0-b1b4-a6b7808ececa")
 		)
 		(pin "4"
-			(uuid "aa69817d-9cbc-4fdc-b089-5dc5e9eabb8d")
+			(uuid "de4835d2-a4d0-496f-ab75-df345c703def")
 		)
 		(instances
 			(project "totem"
@@ -35174,7 +35174,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8c14d531-ffd5-437f-bd9f-633adaddf82c")
+			(uuid "d84c22c0-2d89-42db-91cb-57310a15ee26")
 		)
 		(instances
 			(project "totem"
@@ -35249,7 +35249,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0778abc3-0d66-4f7b-86e4-7c3f2632173d")
+			(uuid "2dee9a54-96c2-4a64-9c7a-a037c6f85f9c")
 		)
 		(instances
 			(project "totem"
@@ -35324,7 +35324,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0c79a44d-5764-4fb0-808c-d4ec075f279c")
+			(uuid "567f8bfd-e236-46d6-a08b-ce4e69bdbe82")
 		)
 		(instances
 			(project "totem"
@@ -35399,7 +35399,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1e118750-f234-44b9-b7d7-db27f233ef7c")
+			(uuid "278c73bd-cdb1-49fb-b1a4-0744d042f1a9")
 		)
 		(instances
 			(project "totem"
@@ -35473,10 +35473,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "49e299c1-c7e7-4202-b9e0-550b73f0a3b3")
+			(uuid "059d8e49-7e78-410d-8444-ececbf59f450")
 		)
 		(pin "2"
-			(uuid "ab8c2b21-d6b8-47e2-ba3a-f3e17c25a000")
+			(uuid "692a5cb8-c80c-41a2-908b-43a1f05f2718")
 		)
 		(instances
 			(project "totem"
@@ -35550,10 +35550,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "47c14d5e-08e5-4af6-894d-c749607aab41")
+			(uuid "31d68fec-6907-4b92-b9da-13f34d933903")
 		)
 		(pin "2"
-			(uuid "dafd1ea2-7f7a-490b-a65f-6fe3e0edf675")
+			(uuid "061a61c2-963f-4047-a665-ad1fdb2bff8d")
 		)
 		(instances
 			(project "totem"
@@ -35627,10 +35627,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "49f1e56f-84b4-4954-91b6-280b7a377e54")
+			(uuid "444671f3-9584-4914-a18a-68e386153837")
 		)
 		(pin "2"
-			(uuid "2961b576-0fd2-4854-a5a6-b9a10c8e1b34")
+			(uuid "88525f54-041a-49d4-a627-d4b5726c370a")
 		)
 		(instances
 			(project "totem"
@@ -35705,7 +35705,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "94696dff-832e-4f6f-a286-1b2ac1dd3e9b")
+			(uuid "fb9f42be-1fd7-4bb7-846b-d7e19204e0a1")
 		)
 		(instances
 			(project "totem"
@@ -35780,7 +35780,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "868a812b-cef3-41ee-95ac-ef37d11a6684")
+			(uuid "d46e5414-7469-42c4-8804-c83d7fefb568")
 		)
 		(instances
 			(project "totem"
@@ -35855,7 +35855,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "823124c1-936e-4b66-996a-ebadbd6ae56b")
+			(uuid "6908ca68-5b1a-4c4f-8fc1-57b8f12b749d")
 		)
 		(instances
 			(project "totem"
@@ -35868,7 +35868,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 139.7 718.82 0)
+		(at 260.35 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -35878,7 +35878,7 @@
 		(dnp no)
 		(uuid "d96cf3d0-535a-5207-8b85-a51cfabcdd5c")
 		(property "Reference" "#PWR110"
-			(at 139.7 706.82 0)
+			(at 260.35 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -35889,7 +35889,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 139.7 710.82 0)
+			(at 260.35 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -35899,7 +35899,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 139.7 714.82 0)
+			(at 260.35 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -35910,7 +35910,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 139.7 718.82 0)
+			(at 260.35 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -35920,7 +35920,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 139.7 718.82 0)
+			(at 260.35 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -35930,7 +35930,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "97afcd24-8c12-4bf7-8223-0924202caead")
+			(uuid "d45fbbd5-4278-4c85-ae07-640125033bda")
 		)
 		(instances
 			(project "totem"
@@ -35943,7 +35943,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 340.36 588.01 0)
+		(at 100.33 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -35953,7 +35953,7 @@
 		(dnp no)
 		(uuid "daaa329a-a750-5b5e-9f65-3b47e9a1ea37")
 		(property "Reference" "#PWR78"
-			(at 340.36 576.01 0)
+			(at 100.33 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -35964,7 +35964,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 340.36 580.01 0)
+			(at 100.33 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -35974,7 +35974,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 340.36 584.01 0)
+			(at 100.33 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -35985,7 +35985,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 340.36 588.01 0)
+			(at 100.33 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -35995,7 +35995,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 340.36 588.01 0)
+			(at 100.33 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36005,7 +36005,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "77d06236-7c75-4aa3-b56d-8d3fe3f4f4aa")
+			(uuid "950a17a6-bd8e-4dd8-84fb-79b0ed948487")
 		)
 		(instances
 			(project "totem"
@@ -36079,16 +36079,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "4d04e83d-d2c4-4cbb-a724-b17f0f35e0bb")
+			(uuid "a9774474-1cdd-42bd-9b3c-1f3f7c5ca2bb")
 		)
 		(pin "2"
-			(uuid "0f083682-3eca-47ca-9ade-92a116e4e4fd")
+			(uuid "f7293924-c4e7-4886-b350-89e458dda86e")
 		)
 		(pin "3"
-			(uuid "385e9c6f-09e1-4c2e-8758-6094921f0ee6")
+			(uuid "b27c032f-a9ab-451d-aabf-efd9e55c907a")
 		)
 		(pin "4"
-			(uuid "e77e48b8-33a2-4e91-b322-82b3a8b77b7e")
+			(uuid "b5e2dd30-ef06-40e3-9051-342a3215a11e")
 		)
 		(instances
 			(project "totem"
@@ -36163,7 +36163,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "d01e67f5-b019-495f-8698-1b49e81cc306")
+			(uuid "97776e13-f9e2-455b-bc1f-70632e238859")
 		)
 		(instances
 			(project "totem"
@@ -36236,11 +36236,11 @@
 				)
 			)
 		)
-		(pin "2"
-			(uuid "35f0fa62-1405-4ad1-b7a1-1b7c12e60189")
-		)
 		(pin "1"
-			(uuid "685a9e21-8a1c-4d41-b860-a15ea34813c5")
+			(uuid "f7471fee-4f84-43da-b2d1-e14289be7f49")
+		)
+		(pin "2"
+			(uuid "7a1e1827-23d8-4623-b3c0-eda6b4a42512")
 		)
 		(instances
 			(project "totem"
@@ -36253,7 +36253,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 180.34 654.05 0)
+		(at 219.71 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -36263,7 +36263,7 @@
 		(dnp no)
 		(uuid "dc6f3cd7-94b1-5217-a030-d8ce30cd5447")
 		(property "Reference" "#PWR77"
-			(at 180.34 642.05 0)
+			(at 219.71 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36274,7 +36274,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 180.34 646.05 0)
+			(at 219.71 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36284,7 +36284,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 180.34 650.05 0)
+			(at 219.71 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36295,7 +36295,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 180.34 654.05 0)
+			(at 219.71 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36305,7 +36305,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 180.34 654.05 0)
+			(at 219.71 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36315,7 +36315,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "2e42b0db-b47b-445b-af6d-0b94fda9eb43")
+			(uuid "6373e5c2-4519-4fd1-99ca-6c72e40836a5")
 		)
 		(instances
 			(project "totem"
@@ -36328,7 +36328,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 167.64 373.38 0)
+		(at 420.37 741.68 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -36338,7 +36338,7 @@
 		(dnp no)
 		(uuid "dc977494-a003-5ba3-a0d2-6363f30f3a7c")
 		(property "Reference" "#PWR148"
-			(at 167.64 361.38 0)
+			(at 420.37 729.68 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36349,7 +36349,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 167.64 378.38 0)
+			(at 420.37 746.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36359,7 +36359,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 167.64 369.38 0)
+			(at 420.37 737.68 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36370,7 +36370,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 167.64 373.38 0)
+			(at 420.37 741.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36380,7 +36380,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 167.64 373.38 0)
+			(at 420.37 741.68 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36390,7 +36390,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e27eab04-6356-4ce1-8174-13a5342c5cb4")
+			(uuid "b577a4ff-59a8-4b4e-9f05-a2ed24290f2a")
 		)
 		(instances
 			(project "totem"
@@ -36464,16 +36464,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "1f539808-c856-4025-ad64-93b6a431f0ae")
+			(uuid "bf51cf7d-b8f9-479e-9444-3acb770689be")
 		)
 		(pin "2"
-			(uuid "287c302d-080c-4ea4-91e7-0be063209a4d")
+			(uuid "efb28844-6c9f-4e7f-b0f6-d1b30b0d27b3")
 		)
 		(pin "3"
-			(uuid "331d66f8-7b57-4613-98d7-9f9efd8ce7d4")
+			(uuid "235741c4-a735-425e-a712-53e71c4ceab6")
 		)
 		(pin "4"
-			(uuid "b875c3a3-67de-404c-8620-236624d8f3a1")
+			(uuid "93bd2569-1782-4245-b568-7dc485b9f14a")
 		)
 		(instances
 			(project "totem"
@@ -36547,10 +36547,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "49c0cc7f-0c5c-455e-bcbf-e831f1b2482e")
+			(uuid "06681bea-9826-4fb6-ac9c-dc90092c2f9c")
 		)
 		(pin "2"
-			(uuid "f939485c-3c59-4a4a-9174-18e78bdef351")
+			(uuid "3c712d0c-0436-4e53-9e42-48eec73cb9d7")
 		)
 		(instances
 			(project "totem"
@@ -36625,7 +36625,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "277edef9-f6b3-488c-ba5d-6836d61ae284")
+			(uuid "b8b8ca1f-dcb1-41fc-9069-ba4902f90aa5")
 		)
 		(instances
 			(project "totem"
@@ -36700,7 +36700,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "754f92cf-87e2-4da0-aa7f-f6f6630877d1")
+			(uuid "c2b82592-0f8c-465f-ba0b-3ef53b3b75fa")
 		)
 		(instances
 			(project "totem"
@@ -36713,7 +36713,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 59.69 718.82 0)
+		(at 740.41 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -36723,7 +36723,7 @@
 		(dnp no)
 		(uuid "df91e798-f944-5fa3-aab3-db2e162d6a6a")
 		(property "Reference" "#PWR113"
-			(at 59.69 706.82 0)
+			(at 740.41 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36734,7 +36734,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 59.69 710.82 0)
+			(at 740.41 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36744,7 +36744,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 59.69 714.82 0)
+			(at 740.41 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -36755,7 +36755,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 59.69 718.82 0)
+			(at 740.41 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36765,7 +36765,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 59.69 718.82 0)
+			(at 740.41 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -36775,7 +36775,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "0ac6d2c7-d80b-45b3-abc1-d3d8acddbde4")
+			(uuid "8a97317b-72fd-44f8-8bab-856ac13be0e0")
 		)
 		(instances
 			(project "totem"
@@ -36849,16 +36849,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "5c33d508-8578-4ca0-8c9b-9feff6575d12")
+			(uuid "d1fb863b-5ff6-4a84-b099-148f021d2cf1")
 		)
 		(pin "2"
-			(uuid "d0359e1e-0dd5-48bc-8245-b6f99dea3f8d")
+			(uuid "b18fe730-effa-40f9-8ff9-562673aa3c49")
 		)
 		(pin "3"
-			(uuid "299f7cec-4e88-480f-8f8b-05ecb28f3dfb")
+			(uuid "3c8c7869-5180-4a18-8fe2-0d02fbd36b6f")
 		)
 		(pin "4"
-			(uuid "689aabb8-0529-4c28-aa9f-99e25307d3de")
+			(uuid "e980172a-cb87-4c65-9526-05081dc662bc")
 		)
 		(instances
 			(project "totem"
@@ -36932,16 +36932,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "10f3ac5f-10e3-4624-9566-a607d8f26b29")
+			(uuid "903811ca-eeac-49e4-b2ab-054971d6a77e")
 		)
 		(pin "2"
-			(uuid "c0f8108f-563f-4a34-8f31-ae8fa1b5156a")
+			(uuid "b4e61171-1243-4313-8fdc-cd4c62ebfe5f")
 		)
 		(pin "3"
-			(uuid "2a030394-4ed4-4de4-ba9f-08f7df223c41")
+			(uuid "79d228aa-c25f-4433-a069-e666646f7a00")
 		)
 		(pin "4"
-			(uuid "63365be1-28b6-4af9-ba92-9ccc47853400")
+			(uuid "71eab2d2-7ce4-4277-9667-01a576782774")
 		)
 		(instances
 			(project "totem"
@@ -37015,13 +37015,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "99fcea0e-13b9-4db7-9775-c2c9e7c641fb")
+			(uuid "e4b0e306-64fe-4c3e-9ea4-909cb91f3852")
 		)
 		(pin "2"
-			(uuid "e129c97e-3cdc-46b6-b375-09deb97d00b5")
+			(uuid "a4a888d5-be71-41c3-a2a4-4c21b0245012")
 		)
 		(pin "3"
-			(uuid "b54067d0-2536-497b-8f5d-8dc0732f4e57")
+			(uuid "ca557322-0818-4ebd-bba1-5c49640209f8")
 		)
 		(instances
 			(project "totem"
@@ -37096,7 +37096,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "5ec001ef-42d7-4324-a112-e721226f3a2e")
+			(uuid "aeb3f096-cf0b-4e6c-9d1d-b45f1338f927")
 		)
 		(instances
 			(project "totem"
@@ -37109,7 +37109,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 779.78 718.82 0)
+		(at 139.7 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -37119,7 +37119,7 @@
 		(dnp no)
 		(uuid "e206c0c0-3b05-5041-94b8-6722b6bce37e")
 		(property "Reference" "#PWR81"
-			(at 779.78 706.82 0)
+			(at 139.7 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37130,7 +37130,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 779.78 710.82 0)
+			(at 139.7 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37140,7 +37140,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 779.78 714.82 0)
+			(at 139.7 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37151,7 +37151,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 779.78 718.82 0)
+			(at 139.7 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37161,7 +37161,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 779.78 718.82 0)
+			(at 139.7 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37171,7 +37171,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e6bdbf81-ce3c-4e52-b928-7cbae2fc13fc")
+			(uuid "eca460fa-bf9e-41df-8b7b-bb6cc8b48825")
 		)
 		(instances
 			(project "totem"
@@ -37245,10 +37245,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "b7f133a5-afec-44d1-9edf-4a059874219c")
+			(uuid "57cd1ab9-4c85-4122-ab67-c9e424c01141")
 		)
 		(pin "2"
-			(uuid "1fab1fca-5b5e-4e0f-ae02-2133e4cb8102")
+			(uuid "18df66d3-468d-483b-b8e3-a67a71b9d7d3")
 		)
 		(instances
 			(project "totem"
@@ -37322,16 +37322,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "ffb87d35-a464-4cd3-9b66-9ab26f7d9460")
+			(uuid "e08b0bb8-32f1-4f32-b119-2d805592d353")
 		)
 		(pin "2"
-			(uuid "8b59fc77-a173-4ffa-9da4-686e5eb62932")
+			(uuid "c541108a-6e8c-4fe7-8301-324bd21ea915")
 		)
 		(pin "3"
-			(uuid "c73d9194-dcc4-430e-80d6-d7d50026f29d")
+			(uuid "58d69a44-4540-4b79-821b-fa73d8e2471b")
 		)
 		(pin "4"
-			(uuid "270d2516-737a-43db-a2a8-b8f431fe29b1")
+			(uuid "02a6b7fa-1633-424d-8b2e-91062ad58c14")
 		)
 		(instances
 			(project "totem"
@@ -37344,7 +37344,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 260.35 654.05 0)
+		(at 180.34 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -37354,7 +37354,7 @@
 		(dnp no)
 		(uuid "e38ca6b0-a8bd-5cbb-8f29-2fd2ea27db99")
 		(property "Reference" "#PWR109"
-			(at 260.35 642.05 0)
+			(at 180.34 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37365,7 +37365,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 260.35 646.05 0)
+			(at 180.34 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37375,7 +37375,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 260.35 650.05 0)
+			(at 180.34 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37386,7 +37386,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 260.35 654.05 0)
+			(at 180.34 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37396,7 +37396,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 260.35 654.05 0)
+			(at 180.34 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37406,7 +37406,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1e06706d-2cdc-4a77-aed7-18d318837a5c")
+			(uuid "b57d6093-9592-439c-a65a-530ec5a78768")
 		)
 		(instances
 			(project "totem"
@@ -37480,13 +37480,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "b71819c2-d3db-4e84-ae34-eb1d0200e4a4")
+			(uuid "153720e8-8bbf-42b9-a0a0-7282c4b5a3ac")
 		)
 		(pin "2"
-			(uuid "d6865ab5-d80d-41ec-922a-12e2059a13f6")
+			(uuid "94c8acd9-b963-4969-9f8e-958c800f56ed")
 		)
 		(pin "3"
-			(uuid "7b2b03d2-e8c7-474c-bc9a-dd68f5beb6f8")
+			(uuid "bd58d04c-a2e3-4f3a-87ed-1ad6b050e6ac")
 		)
 		(instances
 			(project "totem"
@@ -37560,13 +37560,13 @@
 			)
 		)
 		(pin "1"
-			(uuid "681a4195-faf5-4541-b13c-09ce3a62cc25")
+			(uuid "bd8c6b41-54bd-482e-adad-8e9ec0d531dd")
 		)
 		(pin "2"
-			(uuid "147e16e4-2a36-4c5a-8f12-504650515fc5")
+			(uuid "15f060b0-673f-40a7-bdde-1884431df0d3")
 		)
 		(pin "3"
-			(uuid "d27d7dfe-5180-4bed-ba0e-02206db61e96")
+			(uuid "9409ecf2-1a73-4fe2-9a44-57d56b6632e2")
 		)
 		(instances
 			(project "totem"
@@ -37640,10 +37640,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "f3148318-4134-454e-b7bb-3553cd606983")
+			(uuid "e9cd76a1-304a-48d0-8ef2-1cea2ed4fcdb")
 		)
 		(pin "2"
-			(uuid "5c0d9b3d-7aea-47c6-8b1a-4bbc75006e70")
+			(uuid "d5904be9-0586-4f08-a1d3-efc4108f5835")
 		)
 		(instances
 			(project "totem"
@@ -37718,7 +37718,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "6e83e8b8-7047-400b-9b9a-35d34253e05d")
+			(uuid "223e9d6e-9a4a-484b-bf03-061a13e5161d")
 		)
 		(instances
 			(project "totem"
@@ -37793,7 +37793,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ebac1957-768c-446b-9077-557a9107d138")
+			(uuid "8b524b55-2ae7-45df-8ed2-6707fe54a633")
 		)
 		(instances
 			(project "totem"
@@ -37806,7 +37806,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 420.37 588.01 0)
+		(at 299.72 654.05 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -37816,7 +37816,7 @@
 		(dnp no)
 		(uuid "e8b52cf4-fb70-544c-8ba6-140f917f62f9")
 		(property "Reference" "#PWR74"
-			(at 420.37 576.01 0)
+			(at 299.72 642.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37827,7 +37827,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 420.37 580.01 0)
+			(at 299.72 646.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37837,7 +37837,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 420.37 584.01 0)
+			(at 299.72 650.05 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -37848,7 +37848,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 420.37 588.01 0)
+			(at 299.72 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37858,7 +37858,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 420.37 588.01 0)
+			(at 299.72 654.05 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -37868,7 +37868,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "41eb6e55-059f-4865-8daa-4894714d70bc")
+			(uuid "181ad5cc-e2f8-462e-969e-01fe9c9dce24")
 		)
 		(instances
 			(project "totem"
@@ -37942,16 +37942,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "45c69f60-dfb3-4511-a8f2-1a9b0d3eb71e")
+			(uuid "29705a72-447f-46aa-9068-09aeb1795f78")
 		)
 		(pin "2"
-			(uuid "f606890e-c43e-418d-b87b-03cdce3058ce")
+			(uuid "645c28ff-6dda-449e-b7fb-f554af5b98f5")
 		)
 		(pin "3"
-			(uuid "1a3b33c6-c0ca-40fe-b9f8-d30d3f8f2e57")
+			(uuid "f296f208-89e8-414c-83ce-12071ef1eba8")
 		)
 		(pin "4"
-			(uuid "92b3cc69-5849-4f6b-9f77-ff40ebc05ed2")
+			(uuid "4ffe3d27-1635-45d3-a6cc-d7bd0ec70fcf")
 		)
 		(instances
 			(project "totem"
@@ -38026,7 +38026,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "cf6992b5-cca2-4556-bda9-3efb3b1d4d55")
+			(uuid "7d7e6341-2fc7-4104-9d1f-9afccd7e012a")
 		)
 		(instances
 			(project "totem"
@@ -38100,16 +38100,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "5b575dc3-3805-4e41-8daa-ef29b3367b47")
+			(uuid "6f723781-bd30-4716-9b27-57a767e49075")
 		)
 		(pin "2"
-			(uuid "6221853e-24a3-464a-8306-72f15828ae68")
+			(uuid "526b72c8-c8c2-45da-b561-5cf1e49944d1")
 		)
 		(pin "3"
-			(uuid "f8492bce-2931-49de-9ee4-935fa9819007")
+			(uuid "b87d1b44-99ab-46f5-abc8-48bcf09ec02b")
 		)
 		(pin "4"
-			(uuid "76a9006b-38d6-4f09-80e7-8614f843707f")
+			(uuid "f3638b29-9058-448b-90c0-d1a1accca25a")
 		)
 		(instances
 			(project "totem"
@@ -38183,16 +38183,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "e7c37bb8-33fb-4ae4-b5bb-04f0e340759c")
+			(uuid "2c1a4849-a884-49b9-a478-e4172be4e9df")
 		)
 		(pin "2"
-			(uuid "87dcafe3-4339-4f81-87f2-9e7ef651fce6")
+			(uuid "535676e9-556a-4ed2-8a53-3d92840dab4b")
 		)
 		(pin "3"
-			(uuid "412c546a-bc42-49fa-a1b5-1e9db3a1cdf3")
+			(uuid "785ba4c9-2296-4bbc-a8aa-48480c751fa1")
 		)
 		(pin "4"
-			(uuid "5df5714d-029a-4fd5-869c-718c6f0bde72")
+			(uuid "fbdc3fd1-0c87-43f5-84d2-1aa1e0f2a15d")
 		)
 		(instances
 			(project "totem"
@@ -38266,16 +38266,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "93f57779-f0d0-4289-8a0a-19523e521ada")
+			(uuid "7ae4c383-9773-4eb6-9af0-9dac6b002327")
 		)
 		(pin "2"
-			(uuid "33aa2dde-4864-4042-a9f4-d22be8e00f51")
+			(uuid "b3d87942-6067-41db-95ea-977cc920f09f")
 		)
 		(pin "3"
-			(uuid "2be777b2-abbd-4c24-8562-51a95983a62c")
+			(uuid "ba3be652-c5c1-4d5f-8c2d-4e6f39c7821e")
 		)
 		(pin "4"
-			(uuid "1025fea5-7d76-49ff-a984-91d0152cd6d8")
+			(uuid "5d27b420-5dab-405a-aae2-d4993b95b08a")
 		)
 		(instances
 			(project "totem"
@@ -38349,10 +38349,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "ecade53b-da3a-4d09-ae19-f6e21101eb94")
+			(uuid "6415ff38-1b50-4888-80f7-51df31045bb4")
 		)
 		(pin "2"
-			(uuid "ad702804-7d40-4bf4-984b-4bd503a9ced6")
+			(uuid "fffaaf3b-a1ff-4be0-8481-9b86e796f2c7")
 		)
 		(instances
 			(project "totem"
@@ -38427,7 +38427,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8039ee20-19a1-41be-991b-feff245713c9")
+			(uuid "66084d8d-d979-4e36-806c-cb5f53d0f0c8")
 		)
 		(instances
 			(project "totem"
@@ -38502,7 +38502,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e9187ae6-0859-4b83-8de1-8d9dd2ae69a3")
+			(uuid "d75a5f7f-0d7a-4f3b-8a56-602197fa0234")
 		)
 		(instances
 			(project "totem"
@@ -38515,7 +38515,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 59.69 654.05 0)
+		(at 619.76 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -38525,7 +38525,7 @@
 		(dnp no)
 		(uuid "eb44e622-6bac-5a43-ae36-30e8cec48946")
 		(property "Reference" "#PWR87"
-			(at 59.69 642.05 0)
+			(at 619.76 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -38536,7 +38536,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 59.69 646.05 0)
+			(at 619.76 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38546,7 +38546,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 59.69 650.05 0)
+			(at 619.76 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -38557,7 +38557,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 59.69 654.05 0)
+			(at 619.76 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38567,7 +38567,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 59.69 654.05 0)
+			(at 619.76 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38577,7 +38577,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "dd2d1d87-7959-4fc7-a23b-3dd9cfee9f84")
+			(uuid "938355cc-2d77-4e29-9e18-eb81636f8346")
 		)
 		(instances
 			(project "totem"
@@ -38590,7 +38590,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 539.75 654.05 0)
+		(at 420.37 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -38600,7 +38600,7 @@
 		(dnp no)
 		(uuid "edbe04f4-212c-5721-9196-2833689d550e")
 		(property "Reference" "#PWR65"
-			(at 539.75 642.05 0)
+			(at 420.37 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -38611,7 +38611,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 539.75 646.05 0)
+			(at 420.37 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38621,7 +38621,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 539.75 650.05 0)
+			(at 420.37 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -38632,7 +38632,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 539.75 654.05 0)
+			(at 420.37 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38642,7 +38642,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 539.75 654.05 0)
+			(at 420.37 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -38652,7 +38652,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "29bb73ab-633e-439c-8cd8-6ca03deacab3")
+			(uuid "fc52fa45-20e7-48c3-8477-8a27f3810377")
 		)
 		(instances
 			(project "totem"
@@ -38726,10 +38726,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "dd87d632-c82f-4e78-9640-edc3a68d4cd8")
+			(uuid "e37f1a85-37b4-4661-910a-868606724983")
 		)
 		(pin "2"
-			(uuid "7638c4fc-966e-40a0-8aec-f02ba4f5fcdd")
+			(uuid "039c7900-6017-4d21-8989-166c585baa70")
 		)
 		(instances
 			(project "totem"
@@ -38803,16 +38803,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "ad79c6c2-f03b-4087-8569-45f4623d2fb0")
+			(uuid "d5604cbf-1a05-40b4-bdf8-06e10f5c65ce")
 		)
 		(pin "2"
-			(uuid "f9f42527-76c1-450d-8868-0e214d1c7855")
+			(uuid "5d8b6d71-c0c7-4d62-9029-0514f66b11af")
 		)
 		(pin "3"
-			(uuid "48cd3b12-0837-4117-bb41-bf74d05d01fc")
+			(uuid "afb268cc-5bf3-4cfe-8cd2-f1efe23b6679")
 		)
 		(pin "4"
-			(uuid "45655830-5145-4502-8379-5e741d7687b0")
+			(uuid "5006bd08-3726-4753-b470-c203cf1b6b73")
 		)
 		(instances
 			(project "totem"
@@ -38887,7 +38887,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ee99f9a8-b951-451f-b800-9e2baf46da58")
+			(uuid "9e1324af-7365-4eee-baa5-ff8b71cb3bc5")
 		)
 		(instances
 			(project "totem"
@@ -38962,7 +38962,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "37ec8ddf-62f6-4715-9e8f-119df012db2e")
+			(uuid "3969c827-dbe6-40c8-92b6-f9cf2cb80806")
 		)
 		(instances
 			(project "totem"
@@ -39036,10 +39036,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "a5cc1a98-e37c-4ab8-85d4-6e873782b6fe")
+			(uuid "8e68ba3d-baaa-4aa9-9fc8-03fd690dffbf")
 		)
 		(pin "2"
-			(uuid "380a23f2-7b53-452f-826c-8bc080ed1079")
+			(uuid "5daf8ff6-b7c7-42cb-a0b7-2925573e8124")
 		)
 		(instances
 			(project "totem"
@@ -39114,7 +39114,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "3c85266a-ef9a-4c29-b367-aa0e41276827")
+			(uuid "4438d440-512c-4065-b2c7-3c30453a45db")
 		)
 		(instances
 			(project "totem"
@@ -39189,7 +39189,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "8c261ab4-8025-4eb3-9e25-2b7df09be3d4")
+			(uuid "5ea9596e-1742-4cbb-9d82-a00c0dc93972")
 		)
 		(instances
 			(project "totem"
@@ -39202,7 +39202,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 699.77 588.01 0)
+		(at 59.69 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -39212,7 +39212,7 @@
 		(dnp no)
 		(uuid "f2d4f8df-8109-5bd3-8422-f007acca9bac")
 		(property "Reference" "#PWR94"
-			(at 699.77 576.01 0)
+			(at 59.69 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -39223,7 +39223,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 699.77 580.01 0)
+			(at 59.69 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39233,7 +39233,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 699.77 584.01 0)
+			(at 59.69 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -39244,7 +39244,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 699.77 588.01 0)
+			(at 59.69 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39254,7 +39254,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 699.77 588.01 0)
+			(at 59.69 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39264,7 +39264,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "747a1813-d43d-4f47-8b11-89a8bb86ca05")
+			(uuid "b3ffb7b4-0fac-49f3-95e5-5672451ded7f")
 		)
 		(instances
 			(project "totem"
@@ -39339,7 +39339,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "e28b43ea-0cd9-4ec7-8cc4-dbdf93b43ceb")
+			(uuid "742fcf3f-4526-4132-aa0e-21f213e3b87c")
 		)
 		(instances
 			(project "totem"
@@ -39413,10 +39413,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "4f592b35-f27a-440e-904b-6df4391d9ea6")
+			(uuid "0a287b5c-dd9a-4c47-b040-79ba280ce353")
 		)
 		(pin "2"
-			(uuid "2294b80d-fb2e-4884-a29f-d0844e1434d5")
+			(uuid "dc156718-db02-4f86-84df-08310c4180b6")
 		)
 		(instances
 			(project "totem"
@@ -39490,16 +39490,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "027955d0-9142-4cfa-92d4-2c6bb1eacc18")
+			(uuid "806a99e3-b406-4588-8bcf-a52e4fb648ba")
 		)
 		(pin "2"
-			(uuid "33cad1cd-6b71-466d-856c-0d0810e4f53e")
+			(uuid "0a61cacb-f3d9-4150-915a-ff5f68279bb5")
 		)
 		(pin "3"
-			(uuid "4c3ab6ce-2899-4f18-aa0f-480b62f8269d")
+			(uuid "bbc37005-783f-4a9e-b205-58badcd39dac")
 		)
 		(pin "4"
-			(uuid "1230e85c-d477-49e1-9b36-cf050dbac1ba")
+			(uuid "f984e407-bc78-4dbb-bbba-0505ad329b36")
 		)
 		(instances
 			(project "totem"
@@ -39573,16 +39573,16 @@
 			)
 		)
 		(pin "1"
-			(uuid "37951d71-9e10-4312-86a5-cb5e8c52022d")
+			(uuid "80594340-62c8-4831-abe9-b7f0fc12ff2c")
 		)
 		(pin "2"
-			(uuid "3962bd51-4c40-4b0e-ab5e-ee32e3cbf77e")
+			(uuid "c682b9af-8ef1-43cb-a9da-45c4581d13ef")
 		)
 		(pin "3"
-			(uuid "7aeea6c8-d5e8-49df-b8d7-e15d5beb6971")
+			(uuid "6ed100bc-463c-4734-8d6d-b93728fd3fdf")
 		)
 		(pin "4"
-			(uuid "62ab1170-2bb4-48ac-98f9-0a98a7c8ea55")
+			(uuid "2c9a3a9a-0b43-4b21-aa07-c4a2dd2e4578")
 		)
 		(instances
 			(project "totem"
@@ -39657,7 +39657,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ec190e39-5fb0-43f4-8bb7-9f500a80d423")
+			(uuid "dda7092e-d775-4932-9674-324a6ef1b44f")
 		)
 		(instances
 			(project "totem"
@@ -39670,7 +39670,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 580.39 654.05 0)
+		(at 459.74 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -39680,7 +39680,7 @@
 		(dnp no)
 		(uuid "f5c1b957-771d-55c3-b5fa-283f96154406")
 		(property "Reference" "#PWR95"
-			(at 580.39 642.05 0)
+			(at 459.74 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -39691,7 +39691,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 580.39 646.05 0)
+			(at 459.74 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39701,7 +39701,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 580.39 650.05 0)
+			(at 459.74 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -39712,7 +39712,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 580.39 654.05 0)
+			(at 459.74 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39722,7 +39722,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 580.39 654.05 0)
+			(at 459.74 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -39732,7 +39732,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "48de128d-1849-454a-81a1-bdb01e727762")
+			(uuid "26e1bb0e-3c7d-4b8d-bcb8-a09755c1192c")
 		)
 		(instances
 			(project "totem"
@@ -39807,7 +39807,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "f3d61781-5cdc-471c-87a4-2f18de0a7e9d")
+			(uuid "ef174820-d631-4488-9aa8-5a8fe383f49e")
 		)
 		(instances
 			(project "totem"
@@ -39881,10 +39881,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "de1fd233-0f46-46ae-932d-511c9b5fe7cd")
+			(uuid "d863453e-ceb5-4785-8d27-f356d24ec981")
 		)
 		(pin "2"
-			(uuid "03572676-fdda-484e-8fb4-5c9364a2cb24")
+			(uuid "16a85fca-71fa-40e7-a4d7-e9f5246e6aa9")
 		)
 		(instances
 			(project "totem"
@@ -39959,7 +39959,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "ad7d63ef-499c-4844-8f80-805c8fc6e139")
+			(uuid "6c8f36e5-f708-486c-883d-e469be836d77")
 		)
 		(instances
 			(project "totem"
@@ -40033,10 +40033,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "6925ec80-d4a4-4d17-a5d2-182fe1f9cb99")
+			(uuid "cea219a4-f81d-4085-bc37-350c9960d7f9")
 		)
 		(pin "2"
-			(uuid "cebfc66b-4ea5-41f6-972f-11f6aa0adb00")
+			(uuid "3be394af-425d-49de-8b88-ffde06d0d140")
 		)
 		(instances
 			(project "totem"
@@ -40111,7 +40111,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "644d1e5b-b191-411b-b1bf-47268122ceef")
+			(uuid "97381218-905b-4bff-a087-fc1f33492324")
 		)
 		(instances
 			(project "totem"
@@ -40185,10 +40185,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "651f7314-51ae-473e-ba4a-1dfc6ce3896b")
+			(uuid "b04ea30a-9c25-4169-90d5-f56f4711ae8e")
 		)
 		(pin "2"
-			(uuid "d317687a-c45b-447c-a412-626c5ae9f8f0")
+			(uuid "4d23f834-9b16-4119-b160-2fbe3d2f67cd")
 		)
 		(instances
 			(project "totem"
@@ -40201,7 +40201,7 @@
 	)
 	(symbol
 		(lib_id "power:VCC")
-		(at 740.41 718.82 0)
+		(at 139.7 718.82 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -40211,7 +40211,7 @@
 		(dnp no)
 		(uuid "f84e4128-383e-5be9-a5bf-23f72ece2f21")
 		(property "Reference" "#PWR111"
-			(at 740.41 706.82 0)
+			(at 139.7 706.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -40222,7 +40222,7 @@
 			)
 		)
 		(property "Value" "VLED"
-			(at 740.41 710.82 0)
+			(at 139.7 710.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -40232,7 +40232,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 740.41 714.82 0)
+			(at 139.7 714.82 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -40243,7 +40243,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 740.41 718.82 0)
+			(at 139.7 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -40253,7 +40253,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 740.41 718.82 0)
+			(at 139.7 718.82 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -40263,7 +40263,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "900d2f67-c057-44c7-b5a7-954ef6410da1")
+			(uuid "31ae8a1d-b70d-41d4-a166-3acd6bccf56b")
 		)
 		(instances
 			(project "totem"
@@ -40338,7 +40338,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "026f0ddd-add0-4606-ba28-b7fab40b2ce8")
+			(uuid "cc19d7b2-338d-4fcb-b5b1-6e122bb7a5e4")
 		)
 		(instances
 			(project "totem"
@@ -40413,7 +40413,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "1f708a0f-5f46-467d-a08f-4f6c0d68d5e9")
+			(uuid "e363ffef-f8af-4fca-a621-1d3869324cd6")
 		)
 		(instances
 			(project "totem"
@@ -40488,7 +40488,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "541da216-37c8-4990-9cd0-f571c93f2038")
+			(uuid "58e44e4f-0cb4-4178-8e30-6264ffd61539")
 		)
 		(instances
 			(project "totem"
@@ -40563,7 +40563,7 @@
 			)
 		)
 		(pin "1"
-			(uuid "20f2429b-0a70-4ffd-bba2-1ce29e78cd93")
+			(uuid "208e3105-c15b-44a8-865d-f226610fe2d9")
 		)
 		(instances
 			(project "totem"
@@ -40637,10 +40637,10 @@
 			)
 		)
 		(pin "1"
-			(uuid "82a28e61-b520-4e02-bec5-105ffab35803")
+			(uuid "a741b143-ae0c-42a6-84b3-e802f8bae92f")
 		)
 		(pin "2"
-			(uuid "54ec5e26-633f-409f-9cdb-e9432d24a21d")
+			(uuid "5407c432-9dae-4c33-b9f3-4cb71132d0a6")
 		)
 		(instances
 			(project "totem"
@@ -40714,25 +40714,25 @@
 			)
 		)
 		(pin "A5"
-			(uuid "bc58cd27-18be-4fb7-aca6-3583f66eea89")
+			(uuid "de3285ad-372d-4cab-bb70-c98c33fe7083")
 		)
 		(pin "A9"
-			(uuid "8170f99b-50f7-4acb-a3d5-d800138b58ea")
+			(uuid "d44640b0-a343-4d53-9bd3-02fb62a41209")
 		)
 		(pin "A12"
-			(uuid "bc00b8ee-b3e4-4c79-93e4-e485724ee94a")
+			(uuid "d8699472-ee0a-437b-a8d5-512d60b703c2")
 		)
 		(pin "B5"
-			(uuid "56649377-69d2-4d55-9c3f-13fd4cc8d337")
+			(uuid "f5c23592-cd2d-4f6a-9de0-b0f2d7a03228")
 		)
 		(pin "B9"
-			(uuid "7b62a37d-e33c-43c4-a88e-ec74875ded40")
+			(uuid "02f2222b-e0b7-47b2-9269-6c3978fa333d")
 		)
 		(pin "B12"
-			(uuid "4f1be81b-9e57-4f2f-8aa6-86d264232f77")
+			(uuid "e3ec26b1-f324-411b-b1f4-e0b29b2fc550")
 		)
 		(pin "SH"
-			(uuid "5d5babdf-115b-49fb-9bd3-c0128af2736a")
+			(uuid "4b51f427-7a54-4dee-b28f-449a5973639a")
 		)
 		(instances
 			(project "totem"

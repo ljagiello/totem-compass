@@ -32,5 +32,11 @@ arc = (f"(gr_arc\n\t\t\t\t(start {p(90 + HALF_GAP)})\n\t\t\t\t(mid {p(270)})\n\t
 old = re.search(r"\(gr_circle\s*\(center 0 1\.375\)\s*\(end 1\.375 1\.375\)\s*\(width 0\.75\)\s*\(fill no\)\s*\)", t)
 assert old, "ring primitive not found"
 t = t[:old.start()] + arc + t[old.end():]
+# on this board the microphone sits in a corner and its 4.2 mm silkscreen
+# circle runs off the edge; the fab layer keeps the outline
+sil = re.search(r"\t\(fp_circle\s*\(center 0 0\)\s*\(end 2\.1 0\)\s*\(stroke\s*\(width 0\.12\)\s*\(type solid\)\s*\)"
+                r"\s*\(fill no\)\s*\(layer \"F\.SilkS\"\)\s*\(uuid \"[^\"]*\"\)\s*\)\n", t)
+assert sil, "silkscreen circle not found"
+t = t[:sil.start()] + t[sil.end():]
 open(DST, "w").write(t)
 print("wrote", DST)

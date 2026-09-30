@@ -26,6 +26,12 @@ def main():
     pro = json.load(open(PRO))
     ds = pro["board"]["design_settings"]
     ds["rules"].update(RULES)
+    # 'footprint differs from the library copy' is about keeping a board in
+    # sync with a library, not about the board: U1's copy is changed on purpose
+    # (thermal vias out, antenna keepout edge raised 0.22 mm, see build.py) and
+    # the ring LEDs' pads match their library pads exactly (fpdiff.py) but are
+    # reported at their 6-degree angles all the same
+    ds["rule_severities"]["lib_footprint_mismatch"] = "ignore"
     ds["defaults"]["zones"]["min_clearance"] = 0.2
     ds["defaults"]["zones"]["min_thickness"] = 0.2
     ds["track_widths"] = [0.0, 0.13, 0.2, 0.4, 0.6]

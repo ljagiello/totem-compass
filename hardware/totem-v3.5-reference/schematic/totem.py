@@ -204,6 +204,8 @@ gpio4 += u1["IO4"]
 tps = {n: Part("Connector", "TestPoint", ref=f"TP{i}", value=n,
                footprint="TestPoint:TestPoint_Pad_D1.0mm")
        for i, n in enumerate(("3V3", "GND", "TXD0", "RXD0", "EN", "IO0"), start=2)}
+for tp in tps.values():
+    tp.in_bom = False                    # bare pads for a pogo jig: nothing to buy
 v3v3 += tps["3V3"][1]
 gnd += tps["GND"][1]
 net("TXD0", u1["TXD0/IO1"], tps["TXD0"][1])
@@ -312,9 +314,12 @@ net("SOS_LED", u1["IO14"], r_sos[1])
 net("SOS_LED_A", r_sos[2], d_sos["A"])
 gnd += d_sos["K"]
 
-# Touch Crystal: the gold post at the centre of the crystal cluster is the
-# electrode, a plated hole the cover's contact spring lands on.
-tp1 = Part("Connector", "TestPoint", ref="TP1", value="touch",
+# Touch Crystal: the electrode is a conical contact spring standing on a
+# 2.5 mm pad at the centre of the crystal cluster (photographed), pressing on
+# the crystal. An SMD pad: the ESP32 module is right behind it on the other
+# side, where a plated hole would come out under the module. The spring is a
+# part of its own, so this one stays in the bill of materials.
+tp1 = Part("Connector", "TestPoint", ref="TP1", value="touch spring",
            footprint="TestPoint:TestPoint_Pad_D2.5mm")
 net("TOUCH", u1["IO27"], tp1[1])
 
