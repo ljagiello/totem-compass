@@ -2,3 +2,5 @@ totem.log
 totem.erc
 skidl_REPL.*
 __pycache__/
+totem_sheet.json
+totem_sheet_skin.svg

@@ -130,10 +130,20 @@ loudly on a missing measurement for the same reason; this checker now
 insists the ERC file exists before believing it.
 
 Parts are declared with explicit pins instead of pulled from KiCad's symbol
-libraries, so this runs without KiCad installed. KiCad's own installer needs
-root, which is why the drawing is a netlist rather than a sheet; `brew install
---cask kicad` from a terminal would allow `kicad-cli sch erc` and an SVG
-export on top of this.
+libraries, so the check runs without KiCad installed.
+
+### The drawing
+
+```
+python3 render.py     # writes totem_sheet.svg
+```
+
+Needs `netlistsvg` (`npm install -g netlistsvg`) and KiCad's symbol
+libraries. The sheet is **generated from the same description the ERC
+checks**, so it cannot drift away from the netlist — change `totem.py` and
+both follow. Placement is netlistsvg's own, which makes it readable but not
+arranged the way a person would arrange it. The netlist is the authority;
+the sheet is for looking at.
 
 ## Three findings worth keeping
 
