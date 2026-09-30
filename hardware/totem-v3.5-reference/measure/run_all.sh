@@ -27,6 +27,13 @@ $P edgescan.py photos/led.jpg e_arc.json row 700 2150 2950 3400 25 1
 $P edgescan.py photos/led.jpg e_lrh.json row 2300 2850 2550 2950 25 1
 $P register_led2.py  # LED photo -> board frame
 $P rectify_led.py    # out/rect_led*.png
+# what the radio side cannot see, from the LED side, then the outline again
+$P edgescan.py photos/led.jpg e_lrc.json col 2470 2770 2640 2940 15 1
+$P lr_chamfer.py     # the lower-right notch's chamfer (under the JST)
+$P right_edge.py     # the right edge's angle (mostly under the USB-C and JST)
+$P outline2.py
+$P rectify.py
+$P rectify_led.py
 $P ring.py           # ring LED centroids
 $P ring_board.py     # ring centre, radius, phase in board mm
 $P crystal.py        # the seven crystal LEDs
