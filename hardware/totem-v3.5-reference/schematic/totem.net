@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/30/2026 12:20 AM")
+    (date "09/30/2026 01:22 AM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -46,18 +46,18 @@
       (ref "C1")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C1")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -70,18 +70,18 @@
       (ref "C10")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C10")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -94,18 +94,18 @@
       (ref "C11")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C11")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -118,18 +118,18 @@
       (ref "C12")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C12")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -142,18 +142,18 @@
       (ref "C13")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C13")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -166,18 +166,18 @@
       (ref "C14")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C14")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -190,18 +190,18 @@
       (ref "C15")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C15")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -214,18 +214,18 @@
       (ref "C16")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C16")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -238,18 +238,18 @@
       (ref "C17")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C17")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -262,18 +262,18 @@
       (ref "C18")
       (value "1u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C18")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -286,18 +286,18 @@
       (ref "C2")
       (value "1u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C2")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -310,18 +310,18 @@
       (ref "C3")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C3")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -334,18 +334,18 @@
       (ref "C4")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C4")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -358,18 +358,18 @@
       (ref "C5")
       (value "10u")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C5")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -382,18 +382,18 @@
       (ref "C6")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C6")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -406,18 +406,18 @@
       (ref "C7")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C7")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -430,18 +430,18 @@
       (ref "C8")
       (value "100n")
       (description "Unpolarized capacitor")
-      (footprint "Capacitor_SMD:C_0402_1005Metric")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
         (field
           (name "Description") "Unpolarized capacitor")
         (field
-          (name "Footprint") "Capacitor_SMD:C_0402_1005Metric")
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "C8")
         (field
-          (name "SKiDL Line") "totem.py:51"))
+          (name "SKiDL Line") "totem.py:53"))
       (libsource
         (lib "Device")
         (part "C"))
@@ -465,7 +465,7 @@
         (field
           (name "SKiDL Tag") "D1")
         (field
-          (name "SKiDL Line") "totem.py:128"))
+          (name "SKiDL Line") "totem.py:130"))
       (libsource
         (lib "Diode")
         (part "1N4148W"))
@@ -489,7 +489,7 @@
         (field
           (name "SKiDL Tag") "D100")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -513,7 +513,7 @@
         (field
           (name "SKiDL Tag") "D101")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -537,7 +537,7 @@
         (field
           (name "SKiDL Tag") "D102")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -561,7 +561,7 @@
         (field
           (name "SKiDL Tag") "D103")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -585,7 +585,7 @@
         (field
           (name "SKiDL Tag") "D104")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -609,7 +609,7 @@
         (field
           (name "SKiDL Tag") "D105")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -633,7 +633,7 @@
         (field
           (name "SKiDL Tag") "D106")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -657,7 +657,7 @@
         (field
           (name "SKiDL Tag") "D107")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -681,7 +681,7 @@
         (field
           (name "SKiDL Tag") "D108")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -705,7 +705,7 @@
         (field
           (name "SKiDL Tag") "D109")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -729,7 +729,7 @@
         (field
           (name "SKiDL Tag") "D110")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -753,7 +753,7 @@
         (field
           (name "SKiDL Tag") "D111")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -777,7 +777,7 @@
         (field
           (name "SKiDL Tag") "D112")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -801,7 +801,7 @@
         (field
           (name "SKiDL Tag") "D113")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -825,7 +825,7 @@
         (field
           (name "SKiDL Tag") "D114")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -849,7 +849,7 @@
         (field
           (name "SKiDL Tag") "D115")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -873,7 +873,7 @@
         (field
           (name "SKiDL Tag") "D116")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -897,7 +897,7 @@
         (field
           (name "SKiDL Tag") "D117")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -921,7 +921,7 @@
         (field
           (name "SKiDL Tag") "D118")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -945,7 +945,7 @@
         (field
           (name "SKiDL Tag") "D119")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -969,7 +969,7 @@
         (field
           (name "SKiDL Tag") "D120")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -993,7 +993,7 @@
         (field
           (name "SKiDL Tag") "D121")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1017,7 +1017,7 @@
         (field
           (name "SKiDL Tag") "D122")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1041,7 +1041,7 @@
         (field
           (name "SKiDL Tag") "D123")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1065,7 +1065,7 @@
         (field
           (name "SKiDL Tag") "D124")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1089,7 +1089,7 @@
         (field
           (name "SKiDL Tag") "D125")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1113,7 +1113,7 @@
         (field
           (name "SKiDL Tag") "D126")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1137,7 +1137,7 @@
         (field
           (name "SKiDL Tag") "D127")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1161,7 +1161,7 @@
         (field
           (name "SKiDL Tag") "D128")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1185,7 +1185,7 @@
         (field
           (name "SKiDL Tag") "D129")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1209,7 +1209,7 @@
         (field
           (name "SKiDL Tag") "D130")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1233,7 +1233,7 @@
         (field
           (name "SKiDL Tag") "D131")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1257,7 +1257,7 @@
         (field
           (name "SKiDL Tag") "D132")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1281,7 +1281,7 @@
         (field
           (name "SKiDL Tag") "D133")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1305,7 +1305,7 @@
         (field
           (name "SKiDL Tag") "D134")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1329,7 +1329,7 @@
         (field
           (name "SKiDL Tag") "D135")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1353,7 +1353,7 @@
         (field
           (name "SKiDL Tag") "D136")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1377,7 +1377,7 @@
         (field
           (name "SKiDL Tag") "D137")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1401,7 +1401,7 @@
         (field
           (name "SKiDL Tag") "D138")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1425,7 +1425,7 @@
         (field
           (name "SKiDL Tag") "D139")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1449,7 +1449,7 @@
         (field
           (name "SKiDL Tag") "D140")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1473,7 +1473,7 @@
         (field
           (name "SKiDL Tag") "D141")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1497,7 +1497,7 @@
         (field
           (name "SKiDL Tag") "D142")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1521,7 +1521,7 @@
         (field
           (name "SKiDL Tag") "D143")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1545,7 +1545,7 @@
         (field
           (name "SKiDL Tag") "D144")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1569,7 +1569,7 @@
         (field
           (name "SKiDL Tag") "D145")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1593,7 +1593,7 @@
         (field
           (name "SKiDL Tag") "D146")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1617,7 +1617,7 @@
         (field
           (name "SKiDL Tag") "D147")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1641,7 +1641,7 @@
         (field
           (name "SKiDL Tag") "D148")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1665,7 +1665,7 @@
         (field
           (name "SKiDL Tag") "D149")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1689,7 +1689,7 @@
         (field
           (name "SKiDL Tag") "D150")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1713,7 +1713,7 @@
         (field
           (name "SKiDL Tag") "D151")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1737,7 +1737,7 @@
         (field
           (name "SKiDL Tag") "D152")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1761,7 +1761,7 @@
         (field
           (name "SKiDL Tag") "D153")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1785,7 +1785,7 @@
         (field
           (name "SKiDL Tag") "D154")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1809,7 +1809,7 @@
         (field
           (name "SKiDL Tag") "D155")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1833,7 +1833,7 @@
         (field
           (name "SKiDL Tag") "D156")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1857,7 +1857,7 @@
         (field
           (name "SKiDL Tag") "D157")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1881,7 +1881,7 @@
         (field
           (name "SKiDL Tag") "D158")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1905,7 +1905,7 @@
         (field
           (name "SKiDL Tag") "D159")
         (field
-          (name "SKiDL Line") "totem.py:265"))
+          (name "SKiDL Line") "totem.py:267"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1929,7 +1929,7 @@
         (field
           (name "SKiDL Tag") "D2")
         (field
-          (name "SKiDL Line") "totem.py:129"))
+          (name "SKiDL Line") "totem.py:131"))
       (libsource
         (lib "Diode")
         (part "BAT54W"))
@@ -1953,7 +1953,7 @@
         (field
           (name "SKiDL Tag") "D200")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1977,7 +1977,7 @@
         (field
           (name "SKiDL Tag") "D201")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2001,7 +2001,7 @@
         (field
           (name "SKiDL Tag") "D202")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2025,7 +2025,7 @@
         (field
           (name "SKiDL Tag") "D203")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2049,7 +2049,7 @@
         (field
           (name "SKiDL Tag") "D204")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2073,7 +2073,7 @@
         (field
           (name "SKiDL Tag") "D205")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2097,7 +2097,7 @@
         (field
           (name "SKiDL Tag") "D206")
         (field
-          (name "SKiDL Line") "totem.py:285"))
+          (name "SKiDL Line") "totem.py:287"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2121,7 +2121,7 @@
         (field
           (name "SKiDL Tag") "D3")
         (field
-          (name "SKiDL Line") "totem.py:298"))
+          (name "SKiDL Line") "totem.py:300"))
       (libsource
         (lib "Device")
         (part "LED"))
@@ -2145,7 +2145,7 @@
         (field
           (name "SKiDL Tag") "J1")
         (field
-          (name "SKiDL Line") "totem.py:74"))
+          (name "SKiDL Line") "totem.py:76"))
       (libsource
         (lib "Connector")
         (part "USB_C_Receptacle_USB2.0_16P"))
@@ -2169,7 +2169,7 @@
         (field
           (name "SKiDL Tag") "J2")
         (field
-          (name "SKiDL Line") "totem.py:102"))
+          (name "SKiDL Line") "totem.py:104"))
       (libsource
         (lib "Connector_Generic")
         (part "Conn_01x02"))
@@ -2193,7 +2193,7 @@
         (field
           (name "SKiDL Tag") "J3")
         (field
-          (name "SKiDL Line") "totem.py:223"))
+          (name "SKiDL Line") "totem.py:225"))
       (libsource
         (lib "Connector")
         (part "Conn_Coaxial"))
@@ -2217,7 +2217,7 @@
         (field
           (name "SKiDL Tag") "MK1")
         (field
-          (name "SKiDL Line") "totem.py:313"))
+          (name "SKiDL Line") "totem.py:315"))
       (libsource
         (lib "Device")
         (part "Microphone_Condenser"))
@@ -2241,7 +2241,7 @@
         (field
           (name "SKiDL Tag") "Q1")
         (field
-          (name "SKiDL Line") "totem.py:125"))
+          (name "SKiDL Line") "totem.py:127"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2265,7 +2265,7 @@
         (field
           (name "SKiDL Tag") "Q2")
         (field
-          (name "SKiDL Line") "totem.py:126"))
+          (name "SKiDL Line") "totem.py:128"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2289,7 +2289,7 @@
         (field
           (name "SKiDL Tag") "Q3")
         (field
-          (name "SKiDL Line") "totem.py:127"))
+          (name "SKiDL Line") "totem.py:129"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2313,7 +2313,7 @@
         (field
           (name "SKiDL Tag") "Q4")
         (field
-          (name "SKiDL Line") "totem.py:253"))
+          (name "SKiDL Line") "totem.py:255"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2337,7 +2337,7 @@
         (field
           (name "SKiDL Tag") "Q5")
         (field
-          (name "SKiDL Line") "totem.py:254"))
+          (name "SKiDL Line") "totem.py:256"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2350,18 +2350,18 @@
       (ref "R1")
       (value "120k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R1")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2374,18 +2374,18 @@
       (ref "R10")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R10")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2398,18 +2398,18 @@
       (ref "R11")
       (value "33")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R11")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2422,18 +2422,18 @@
       (ref "R12")
       (value "33")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R12")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2446,18 +2446,18 @@
       (ref "R13")
       (value "10k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R13")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2470,18 +2470,18 @@
       (ref "R14")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R14")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2494,18 +2494,18 @@
       (ref "R15")
       (value "10M")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R15")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2518,18 +2518,18 @@
       (ref "R16")
       (value "1M")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R16")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2542,18 +2542,18 @@
       (ref "R17")
       (value "10k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R17")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2566,18 +2566,18 @@
       (ref "R18")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R18")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2590,18 +2590,18 @@
       (ref "R19")
       (value "10k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R19")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2614,18 +2614,18 @@
       (ref "R2")
       (value "108k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R2")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2638,18 +2638,18 @@
       (ref "R20")
       (value "5.1k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R20")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2662,18 +2662,18 @@
       (ref "R21")
       (value "5.1k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R21")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2686,18 +2686,18 @@
       (ref "R22")
       (value "10k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R22")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2710,18 +2710,18 @@
       (ref "R23")
       (value "2.2k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R23")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2734,18 +2734,18 @@
       (ref "R24")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R24")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2758,18 +2758,18 @@
       (ref "R25")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R25")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2782,18 +2782,18 @@
       (ref "R26")
       (value "10k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R26")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2806,18 +2806,18 @@
       (ref "R3")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R3")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2830,18 +2830,18 @@
       (ref "R4")
       (value "150k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R4")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2854,18 +2854,18 @@
       (ref "R5")
       (value "2k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R5")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2878,18 +2878,18 @@
       (ref "R6")
       (value "330")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R6")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2902,18 +2902,18 @@
       (ref "R7")
       (value "4.7k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R7")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2926,18 +2926,18 @@
       (ref "R8")
       (value "4.7k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R8")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2950,18 +2950,18 @@
       (ref "R9")
       (value "100k")
       (description "Resistor")
-      (footprint "Resistor_SMD:R_0402_1005Metric")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
         (field
           (name "Description") "Resistor")
         (field
-          (name "Footprint") "Resistor_SMD:R_0402_1005Metric")
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "R9")
         (field
-          (name "SKiDL Line") "totem.py:47"))
+          (name "SKiDL Line") "totem.py:49"))
       (libsource
         (lib "Device")
         (part "R"))
@@ -2974,18 +2974,18 @@
       (ref "SW1")
       (value "power")
       (description "Push button switch, generic, two pins")
-      (footprint "totem:SW_Side_6x6")
+      (footprint "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92")
       (fields
         (field
           (name "Description") "Push button switch, generic, two pins")
         (field
-          (name "Footprint") "totem:SW_Side_6x6")
+          (name "Footprint") "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "SW1")
         (field
-          (name "SKiDL Line") "totem.py:124"))
+          (name "SKiDL Line") "totem.py:126"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -2998,18 +2998,18 @@
       (ref "SW2")
       (value "SOS")
       (description "Push button switch, generic, two pins")
-      (footprint "totem:SW_Side_6x6")
+      (footprint "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92")
       (fields
         (field
           (name "Description") "Push button switch, generic, two pins")
         (field
-          (name "Footprint") "totem:SW_Side_6x6")
+          (name "Footprint") "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "SW2")
         (field
-          (name "SKiDL Line") "totem.py:207"))
+          (name "SKiDL Line") "totem.py:209"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3022,18 +3022,18 @@
       (ref "TP1")
       (value "touch")
       (description "test point")
-      (footprint "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm")
+      (footprint "TestPoint:TestPoint_Pad_D2.5mm")
       (fields
         (field
           (name "Description") "test point")
         (field
-          (name "Footprint") "TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm")
+          (name "Footprint") "TestPoint:TestPoint_Pad_D2.5mm")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "TP1")
         (field
-          (name "SKiDL Line") "totem.py:305"))
+          (name "SKiDL Line") "totem.py:307"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3057,7 +3057,7 @@
         (field
           (name "SKiDL Tag") "TP2")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3081,7 +3081,7 @@
         (field
           (name "SKiDL Tag") "TP3")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3105,7 +3105,7 @@
         (field
           (name "SKiDL Tag") "TP4")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3129,7 +3129,7 @@
         (field
           (name "SKiDL Tag") "TP5")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3153,7 +3153,7 @@
         (field
           (name "SKiDL Tag") "TP6")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3177,7 +3177,7 @@
         (field
           (name "SKiDL Tag") "TP7")
         (field
-          (name "SKiDL Line") "totem.py:195"))
+          (name "SKiDL Line") "totem.py:197"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3201,7 +3201,7 @@
         (field
           (name "SKiDL Tag") "U1")
         (field
-          (name "SKiDL Line") "totem.py:174"))
+          (name "SKiDL Line") "totem.py:176"))
       (libsource
         (lib "RF_Module")
         (part "ESP32-WROOM-32E"))
@@ -3225,7 +3225,7 @@
         (field
           (name "SKiDL Tag") "U2")
         (field
-          (name "SKiDL Line") "totem.py:212"))
+          (name "SKiDL Line") "totem.py:214"))
       (libsource
         (lib "RF_GPS")
         (part "MAX-M10S"))
@@ -3249,7 +3249,7 @@
         (field
           (name "SKiDL Tag") "U3")
         (field
-          (name "SKiDL Line") "totem.py:91"))
+          (name "SKiDL Line") "totem.py:93"))
       (libsource
         (lib "Battery_Management")
         (part "TP4056-42-ESOP8"))
@@ -3273,7 +3273,7 @@
         (field
           (name "SKiDL Tag") "U4")
         (field
-          (name "SKiDL Line") "totem.py:154"))
+          (name "SKiDL Line") "totem.py:156"))
       (libsource
         (lib "Regulator_Linear")
         (part "AP2112K-3.3"))
@@ -3297,7 +3297,7 @@
         (field
           (name "SKiDL Tag") "U5")
         (field
-          (name "SKiDL Line") "totem.py:229"))
+          (name "SKiDL Line") "totem.py:231"))
       (libsource
         (lib "Sensor_Motion")
         (part "ICM-20948"))

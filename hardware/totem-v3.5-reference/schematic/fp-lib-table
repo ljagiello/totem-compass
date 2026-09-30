@@ -1,4 +1,0 @@
-(fp_lib_table
-	(version 7)
-	(lib (name "totem")(type "KiCad")(uri "${KIPRJMOD}/totem.pretty")(options "")(descr "Footprints made for this board, from measurements of the photographed Totem v3.5"))
-)

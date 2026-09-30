@@ -28,10 +28,12 @@ os.environ.setdefault("KICAD10_SYMBOL_DIR", KICAD_SYMBOLS)
 
 from skidl import ERC, Net, Part, Pin, generate_netlist  # noqa: E402
 
-R0402 = "Resistor_SMD:R_0402_1005Metric"
-C0402 = "Capacitor_SMD:C_0402_1005Metric"
+R0603 = "Resistor_SMD:R_0603_1608Metric"   # the reference board's resistors are 0603
+C0805 = "Capacitor_SMD:C_0805_2012Metric"   # and its bulk capacitors 0805
 C0603 = "Capacitor_SMD:C_0603_1608Metric"
 SOT23 = "Package_TO_SOT_SMD:SOT-23"
+# 6x6 mm SMD tact switch, top-actuated, tall stem through the rear cover (PTS645 land pattern)
+SW6X6 = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
 
 
 def leave_unused(part, used, why):
@@ -43,11 +45,11 @@ def leave_unused(part, used, why):
     part.unused_note = why
 
 
-def R(ref, value, fp=R0402):
+def R(ref, value, fp=R0603):
     return Part("Device", "R", ref=ref, value=value, footprint=fp)
 
 
-def C(ref, value, fp=C0402):
+def C(ref, value, fp=C0603):
     return Part("Device", "C", ref=ref, value=value, footprint=fp)
 
 
@@ -76,7 +78,7 @@ j1 = Part("Connector", "USB_C_Receptacle_USB2.0_16P", ref="J1",
 leave_unused(j1, {"A1", "A4", "A5", "A9", "A12", "B1", "B4", "B5", "B9", "B12", "SH"},
              "D+/D- and SBU are unused: charge-only")
 r_cc1, r_cc2 = R("R20", "5.1k"), R("R21", "5.1k")
-c_vbus = C("C10", "10u", C0603)
+c_vbus = C("C10", "10u", C0805)
 vbus += j1["A4"], j1["A9"], j1["B4"], j1["B9"], c_vbus[1]
 gnd += j1["A1"], j1["A12"], j1["B1"], j1["B12"], j1["SH"], c_vbus[2], r_cc1[2], r_cc2[2]
 net("CC1", j1["A5"], r_cc1[1])
@@ -93,7 +95,7 @@ u3 = Part("Battery_Management", "TP4056-42-ESOP8", ref="U3",
 leave_unused(u3, {"1", "2", "3", "4", "5", "8", "9"},
              "STDBY and CHRG are status outputs, unused: charging is sensed from VBUS")
 r_prog = R("R5", "2k")
-c_bat = C("C11", "10u", C0603)
+c_bat = C("C11", "10u", C0805)
 vbus += u3["4"], u3["8"]
 gnd += u3["1"], u3["3"], u3["9"], r_prog[2], c_bat[2]
 net("PROG", u3["2"], r_prog[1])
@@ -121,7 +123,7 @@ gnd += j2[2]
 # The first version of this latch put 4.2 V from the button straight onto
 # GPIO 4 through a resistor — above the ESP32's 3.6 V absolute maximum —
 # and made presses unreadable. This one keeps GPIO 4 inside 0..3.3 V.
-sw1 = Part("Switch", "SW_Push", ref="SW1", value="power", footprint="totem:SW_Side_6x6")
+sw1 = Part("Switch", "SW_Push", ref="SW1", value="power", footprint=SW6X6)
 q_main = Part("Transistor_FET", "AO3401A", ref="Q1", footprint=SOT23)
 q_hold = Part("Transistor_FET", "2N7002", ref="Q2", footprint=SOT23)
 q_sense = Part("Transistor_FET", "2N7002", ref="Q3", footprint=SOT23)
@@ -153,7 +155,7 @@ gpio4 = net("GPIO4", d_off["K"], q_sense["D"], r_gpio4_pu[2])
 # own input: VSYS is already switched, so the regulator just follows it.
 u4 = Part("Regulator_Linear", "AP2112K-3.3", ref="U4", footprint="Package_TO_SOT_SMD:SOT-23-5")
 leave_unused(u4, {"1", "2", "3", "5"}, "pin 4 is a no-connect on this package")
-c_ldo_in, c_ldo_out = C("C13", "10u", C0603), C("C14", "10u", C0603)
+c_ldo_in, c_ldo_out = C("C13", "10u", C0805), C("C14", "10u", C0805)
 vsys += u4["VIN"], u4["EN"], c_ldo_in[1]
 v3v3 += u4["VOUT"], c_ldo_out[1]
 gnd += u4["GND"], c_ldo_in[2], c_ldo_out[2]
@@ -178,7 +180,7 @@ leave_unused(
     {"1", "2", "3", "4", "5", "6", "10", "11", "12", "13", "15",
      "25", "26", "27", "28", "30", "31", "33", "34", "35", "38", "39"},
     "the module's remaining GPIO and its NC pins are not used")
-c_3v3_bulk, c_3v3_hf = C("C3", "10u", C0603), C("C4", "100n")
+c_3v3_bulk, c_3v3_hf = C("C3", "10u", C0805), C("C4", "100n")
 r_en_esp, c_en = R("R13", "10k"), C("C2", "1u")
 r_io0 = R("R22", "10k")
 v3v3 += u1["VDD"], c_3v3_bulk[1], c_3v3_hf[1], r_en_esp[1], r_io0[1]
@@ -204,7 +206,7 @@ esp_en += tps["EN"][1]
 # SOS button on GPIO 0 — which is also the ESP32's boot-mode strap. Holding
 # SOS while powering on enters the bootloader; that is the real board's
 # arrangement too, and it doubles as the way to flash it.
-sw2 = Part("Switch", "SW_Push", ref="SW2", value="SOS", footprint="totem:SW_Side_6x6")
+sw2 = Part("Switch", "SW_Push", ref="SW2", value="SOS", footprint=SW6X6)
 net("BTN_SOS", u1["IO0"], sw2[1], r_io0[2], tps["IO0"][1])
 gnd += sw2[2]
 
@@ -213,7 +215,7 @@ u2 = Part("RF_GPS", "MAX-M10S", ref="U2", footprint="RF_GPS:ublox_MAX")
 leave_unused(u2, {"1", "2", "3", "6", "7", "8", "10", "11", "12"},
              "TIMEPULSE, EXTINT, RESET, SAFEBOOT, LNA_EN, VIO_SEL and I2C keep "
              "their defaults; VCC_RF is an output")
-c_gnss_bulk, c_gnss_hf = C("C5", "10u", C0603), C("C6", "100n")
+c_gnss_bulk, c_gnss_hf = C("C5", "10u", C0805), C("C6", "100n")
 v3v3 += u2["VCC"], u2["VCC_IO"], u2["V_BCKP"], c_gnss_bulk[1], c_gnss_hf[1]
 gnd += u2["GND"], c_gnss_bulk[2], c_gnss_hf[2]
 # Confirmed in the firmware: UART(1, rx=16, tx=17).
@@ -254,7 +256,7 @@ q_ring = Part("Transistor_FET", "AO3401A", ref="Q4", footprint=SOT23)
 q_ring_drv = Part("Transistor_FET", "2N7002", ref="Q5", footprint=SOT23)
 r_ring_gate, r_ring_en_pd = R("R9", "100k"), R("R10", "100k")
 r_ring_din = R("R11", "33")
-c_vled1, c_vled2 = C("C15", "10u", C0603), C("C16", "10u", C0603)
+c_vled1, c_vled2 = C("C15", "10u", C0805), C("C16", "10u", C0805)
 vsys += q_ring["S"], r_ring_gate[1]
 vled += q_ring["D"], c_vled1[1], c_vled2[1]
 gnd += q_ring_drv["S"], r_ring_en_pd[2], c_vled1[2], c_vled2[2]
@@ -278,7 +280,7 @@ RING[-1]["DOUT"].do_erc = False          # the chain simply ends
 # nothing while it is off. A dark WS2812B still draws about 0.7 mA; seven of
 # them straight on the cell would flatten it in about eight days switched off.
 r_cry_din = R("R12", "33")
-c_vcry = C("C17", "10u", C0603)
+c_vcry = C("C17", "10u", C0805)
 vsys += c_vcry[1]
 gnd += c_vcry[2]
 net("CRYSTAL_DATA", u1["IO21"], r_cry_din[1])
@@ -303,7 +305,7 @@ gnd += d_sos["K"]
 # Touch Crystal: the gold post at the centre of the crystal cluster is the
 # electrode, a plated hole the cover's contact spring lands on.
 tp1 = Part("Connector", "TestPoint", ref="TP1", value="touch",
-           footprint="TestPoint:TestPoint_THTPad_D2.0mm_Drill1.0mm")
+           footprint="TestPoint:TestPoint_Pad_D2.5mm")
 net("TOUCH", u1["IO27"], tp1[1])
 
 # Microphone: an electret, read by the firmware as the deviation of the ADC
