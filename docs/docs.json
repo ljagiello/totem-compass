@@ -60,6 +60,7 @@
               "reference/f-lib",
               "reference/networking",
               "reference/building-a-client",
+              "reference/hardware",
               "reference/esp32-emulator",
               "reference/download-url",
               "reference/methodology"
