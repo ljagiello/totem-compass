@@ -97,7 +97,7 @@ photographs show at the other end.
 | `BTN_SOS` | **GPIO 0** | in, pull-up | SW2 | [Power](/subsystems/power) |
 | `SOS_LED` | **GPIO 14** | out, pull-down | DS68 | [Power](/subsystems/power) |
 | `VBAT_SENSE` | **GPIO 34** | ADC, `ATTN_11DB` | Divider off BT1 | [Power](/subsystems/power) |
-| `CHG_PRESENT` | **GPIO 39** | in | U3's status output (`CHRG`, open drain — **inferred**) | [Power](/subsystems/power) |
+| `CHG_PRESENT` | **GPIO 39** | in | A divider off VBUS, not U3's `CHRG` — see below | [Power](/subsystems/power) |
 | `MIC` | **GPIO 36** | ADC, `ATTN_11DB` | MK1 | [Power](/subsystems/power) |
 | `I2C0_SDA` | **GPIO 25** | bidirectional | U5 | [Navigation](/subsystems/navigation) |
 | `I2C0_SCL` | **GPIO 26** | out | U5 | [Navigation](/subsystems/navigation) |
@@ -131,9 +131,19 @@ U4, the SOT-23-5 sitting in its own group of capacitors, fed from the battery ra
 from USB — which is why the Totem runs identically on and off the cable, and why `GPIO 34`
 reads the cell rather than the supply.
 
-`GPIO 39` reading as `modes.is_charging` fits the TP4056's open-drain `CHRG` pin, which pulls
-low while charging. That connection is **inferred** from the part and the firmware's use of
-the pin, not traced.
+`GPIO 39` is **not** wired to the TP4056's `CHRG` pin, though that is the first guess and I
+made it here before checking. Two facts rule it out:
+
+- `modes.is_charging = self.v_in.value()` ([Power](/subsystems/power)), so the pin reads
+  **high** while charging. `CHRG` is open-drain and pulls **low** while charging. The
+  polarity is backwards.
+- GPIO 34–39 on the ESP32 are input-only and have **no internal pull resistors at all**, and
+  `Pin(39, Pin.IN)` asks for none. An open-drain output with no pull-up would float whenever
+  it was not charging, and the firmware would read noise.
+
+The firmware's own name for it is `v_in` — input voltage. A divider from VBUS satisfies both
+facts: high when the cable is in, pulled to ground by the lower resistor when it is out, and
+the thing being sensed is the supply rather than the charger's state.
 
 ### The microphone is a loudness sensor
 

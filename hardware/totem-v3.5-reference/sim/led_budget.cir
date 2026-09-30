@@ -1,0 +1,52 @@
+* LED rail: how many pixels the cell can actually carry
+*
+* 60 ring + 7 crystal = 67 addressable RGB LEDs. A WS2812-style pixel draws
+* about 20 mA per channel, so 60 mA at full white, and brightness is applied
+* as PWM duty, so current scales with it.
+*
+* The firmware's brightness (docs/subsystems/leds.mdx):
+*   config.led_brt = 0.6   default
+*   config.led_brt = 0.1   eco mode, which also blanks the ring entirely
+*
+* Two things decide whether this works, and neither is the regulator:
+*
+*   1. The cell. 1000 mAh at 1C is 1.0 A continuous, which is what a small
+*      pouch cell of this size is usually good for. This sweeps the number
+*      of lit pixels and reports where that is crossed.
+*   2. WS2812B needs VDD >= 3.5 V. The cell reaches 3.4 V before the
+*      firmware gives up on it, so the strips are out of spec at the bottom
+*      of the discharge. That is a finding, not a fix.
+*
+* This is why the strips are on the cell and not on the 3V3 rail: 3.3 V is
+* already below the pixels' minimum supply, and 2.4 A through a linear
+* regulator is not a circuit anyone builds.
+
+.param Ipix_white=60m
+.param Brt=0.6
+.param Ccell=1.0
+.param Vws_min=3.5
+.param Vbat_empty=3.4
+
+* n is swept as a voltage so it can be the sweep variable
+Vn n 0 dc 1
+
+* current drawn by n pixels at full white and the firmware's brightness
+Bi   iled 0 v = v(n) * Ipix_white * Brt
+* the same as a C rate against a 1000 mAh cell
+Bc   crate 0 v = v(n) * Ipix_white * Brt / Ccell
+* headroom the pixels have at the bottom of the discharge
+Bv   vhead 0 v = Vbat_empty - Vws_min
+
+.dc Vn 1 67 1
+
+.meas dc i_all_ma   FIND v(iled) AT=67
+.meas dc i_all_crate FIND v(crate) AT=67
+* a realistic worst case in normal use: north + 8 peers + the 7 crystal
+.meas dc i_typ_ma   FIND v(iled) AT=16
+.meas dc i_typ_crate FIND v(crate) AT=16
+* how many pixels fit inside 1C
+.meas dc n_at_1c    WHEN v(crate)=1.0 RISE=1
+* negative means the pixels are under-supplied at an empty cell
+.meas dc vws_head   FIND v(vhead) AT=67
+
+.end
