@@ -323,7 +323,7 @@ net("TOUCH", u1["IO27"], tp1[1])
 # AC-coupled onto a mid-rail divider, so the DC level sits in the ADC's
 # linear window whatever current this particular capsule draws.
 mk1 = Part("Device", "Microphone_Condenser", ref="MK1", value="electret",
-           footprint="Sensor_Audio:CUI_CMC-4013-SMT")
+           footprint="totem:CUI_CMC-4013-SMT_RingGap")
 r_mic_bias, c_mic = R("R23", "2.2k"), C("C18", "1u")
 r_mic_hi, r_mic_lo = R("R24", "100k"), R("R25", "100k")
 v3v3 += r_mic_bias[1], r_mic_hi[1]

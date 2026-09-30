@@ -164,7 +164,7 @@ for z in u1.Zones():
 # ------------------------------------------------------------ legalise
 # Photo-measured parts stay put; this design's own small parts are pushed
 # apart where their courtyards overlap, and back inside the outline.
-FIXED = {"U1", "U2", "U3", "U4", "U5", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1"} | \
+FIXED = {"U1", "U2", "U3", "U4", "U5", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1", "C16"} | \
     {r for r in placement.P if re.fullmatch(r"D(1\d\d|2\d\d)", r)}
 poly = json.load(open(os.path.join(HERE, "..", "measure", "outline2_poly.json")))
 
@@ -326,6 +326,30 @@ cu5 = (placement.P["U5"]["x"], placement.P["U5"]["y"])
 choose(FP["U5"], 0, lambda p: p["1"][0] < cu5[0] - 0.5 and p["1"][1] > cu5[1] + 0.5
        and p["6"][0] > p["1"][0] + 1.5 and abs(p["6"][1] - p["1"][1]) < 0.3)
 
+# microphone: round, so its turn is free; point its ring's gap (see
+# mic_footprint.py) down and toward the edge, where the radio side has room
+# for the signal's via
+mk = FP["MK1"]
+cmk = board_xy(mk.GetPosition())
+ring_pad = [p for p in mk.Pads() if p.GetNumber() == "1"][0]
+best = None
+for a in range(0, 360, 5):
+    mk.SetOrientationDegrees(a)
+    gap = [t for t in range(0, 360, 5)
+           if not ring_pad.HitTest(pt(cmk[0] + 1.375 * math.cos(math.radians(t)),
+                                      cmk[1] + 1.375 * math.sin(math.radians(t))), 0)]
+    if not gap:
+        continue
+    gx = sum(math.cos(math.radians(t)) for t in gap)
+    gy = sum(math.sin(math.radians(t)) for t in gap)
+    err = abs((math.degrees(math.atan2(gy, gx)) - (-115.0) + 180) % 360 - 180)
+    if best is None or err < best[0]:
+        best = (err, a)
+if best is None:
+    sys.exit("MK1: its ring shows no gap")
+mk.SetOrientationDegrees(best[1])
+print(f"MK1 turned {best[1]} degrees: ring gap within {best[0]:.0f} degrees of the target")
+
 # ------------------------------------------------------------------ planes
 def zone(net, layer, poly, prio=0, full=True, name=None):
     z = pcbnew.ZONE(B)
@@ -360,24 +384,10 @@ def annulus(cx, cy, r0, r1, n=120):
 BIG = [(-30, -30), (30, -30), (30, 30), (-30, 30)]
 zone("GND", pcbnew.In1_Cu, BIG, 0, name="GND plane")
 zone("+3V3", pcbnew.In2_Cu, BIG, 0, name="3V3 plane")
-# VLED from Q4's drain across the ring band on In2, to the outer VLED pour
-q4 = FP["Q4"]
-q4d = [board_xy(p.GetPosition()) for p in q4.Pads() if p.GetNumber() == "3"][0]
-ang = math.atan2(q4d[1] - RC[1], q4d[0] - RC[0])
-ux, uy = math.cos(ang), math.sin(ang)
-vx, vy = -uy, ux
-r0 = math.hypot(q4d[0] - RC[0], q4d[1] - RC[1]) - 1.0
-bridge = []
-for rr, w in ((r0, 1.2), (21.5, 1.2)):
-    cx, cy = RC[0] + rr * ux, RC[1] + rr * uy
-    bridge.append((cx + w * vx, cy + w * vy))
-    bridge.append((cx - w * vx, cy - w * vy))
-bridge = [bridge[0], bridge[2], bridge[3], bridge[1]]
-zone("VLED", pcbnew.In2_Cu, bridge, 1, name="VLED bridge")
 # LED side: VLED outside the ring (the outer pads), GND inside (the inner pads)
 zone("VLED", pcbnew.B_Cu, annulus(RC[0], RC[1], placement.RR + 0.35, 30), 2, name="VLED ring")
 zone("GND", pcbnew.B_Cu, circle(RC[0], RC[1], placement.RR - 0.35), 1, name="GND inside ring")
-zone("GND", pcbnew.F_Cu, BIG, 0, full=False, name="GND radio side")
+zone("GND", pcbnew.F_Cu, BIG, 0, name="GND radio side")
 
 # 67 LEDs packed 0.4 mm apart have no room for legible references; the fab
 # layer keeps them, and the assembly drawing is generated from it
@@ -413,7 +423,9 @@ def zpoly(z):
 
 g["zones"] = [{"net": z.GetNetname(), "layer": B.GetLayerName(z.GetLayer()), "name": z.GetZoneName(),
                "prio": z.GetAssignedPriority(), "poly": zpoly(z)} for z in B.Zones()]
-g["keepouts"] = [zpoly(z) for fp in FP.values() for z in fp.Zones() if z.GetIsRuleArea()]
-g["bridge_angle"] = math.degrees(ang)
+g["keepouts"] = [{"ref": fp.GetReference(), "poly": zpoly(z),
+                  "layers": [l for l in ("F.Cu", "B.Cu") if z.IsOnLayer(pcbnew.F_Cu if l == "F.Cu" else pcbnew.B_Cu)],
+                  "tracks": z.GetDoNotAllowTracks(), "vias": z.GetDoNotAllowVias()}
+                 for fp in FP.values() for z in fp.Zones() if z.GetIsRuleArea()]
 json.dump(g, open(os.path.join(HERE, "board.json"), "w"), indent=0)
 print(f"{len(FP)} footprints, {len(nets)} nets -> {out}")

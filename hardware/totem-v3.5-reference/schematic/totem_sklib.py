@@ -151,6 +151,6 @@ totem = SchLib(tool=SKIDL).add_parts(*[
         Part(**{ 'name':'LED', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'LED'}), 'ref_prefix':'D', 'fplist':[''], 'footprint':'LED_SMD:LED_0603_1608Metric', 'keywords':'LED diode', 'description':'Light emitting diode', 'datasheet':'', 'pins':[
             Pin(num='1',name='K',func=pin_types.PASSIVE,unit=1),
             Pin(num='2',name='A',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'Microphone_Condenser', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Microphone_Condenser'}), 'ref_prefix':'MK', 'fplist':[''], 'footprint':'Sensor_Audio:CUI_CMC-4013-SMT', 'keywords':'capacitance condenser microphone', 'description':'Condenser microphone', 'datasheet':'', 'pins':[
+        Part(**{ 'name':'Microphone_Condenser', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Microphone_Condenser'}), 'ref_prefix':'MK', 'fplist':[''], 'footprint':'totem:CUI_CMC-4013-SMT_RingGap', 'keywords':'capacitance condenser microphone', 'description':'Condenser microphone', 'datasheet':'', 'pins':[
             Pin(num='1',name='-',func=pin_types.PASSIVE,unit=1),
             Pin(num='2',name='+',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] })])

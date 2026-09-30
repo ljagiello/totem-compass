@@ -29,19 +29,18 @@ nothing contradicts it.
 | U2 | **u-blox MAX-M10S** | `MAX-M10S`, `u-blox`, silkscreen `GNSS` | GNSS receiver: GPS, Galileo, BeiDou and GLONASS concurrently |
 | U3 | **TP4056 LiPo charger** | `4056`, lot `L30B`, SOP-8 | Single-cell linear charger, between J1 and J2, with its programming resistors alongside. The marking is a bare `4056`, so a marking-compatible clone is not excluded |
 | U4 | **Regulator (probable)** | `ACH`, SOT-23-5 | Sits in a group of capacitors on the radio side. Package, position and decoupling are those of a 3V3 LDO; a three-letter code is shared across manufacturers, so **no part is claimed** |
-| U5 | **InvenSense ICM-20948** | *lid unmarked* | The 9-axis part: gyroscope, accelerometer **and** magnetometer in one QFN on the LED side, on I²C bus 0. The firmware names it — `c_icm20948_mag.Icm20948Mag` ([Navigation](/subsystems/navigation)) — and its on-die magnetometer is an AK09916 reached through `imu.mag()`. **There is no separate magnetometer chip on this board** |
-| U6 | **Unidentified SOIC-14** | `I2948`, `B23LA1`, `2602` | On the LED side among the passives. Fully legible and still unidentified: no claim is made from a marking alone |
+| U5 | **InvenSense ICM-20948** | `I2948`, `B23LA1`, `2602` | The 9-axis part: gyroscope, accelerometer **and** magnetometer in one 3x3 mm QFN-24 on the LED side, on I²C bus 0. The firmware names it — `c_icm20948_mag.Icm20948Mag` ([Navigation](/subsystems/navigation)) — and its on-die magnetometer is an AK09916 reached through `imu.mag()`. The marking agrees: `I2948` is TDK's top mark for the ICM-20948, `2602` a 2026 week-2 date code. It is legible only at a grazing angle under flash; head-on the lid looks blank, and an earlier version of this table listed the two views as two parts (`U5`, unmarked, and `U6`, a "SOIC-14" — the QFN's edge pads seen obliquely). **There is no separate magnetometer chip on this board** |
 | D? | **Diode** | `A7`, SOD-123 | The standard marking for a 1N4148W small-signal diode |
 | Q? | **SOT-23-3** | `J22B` | Near the LED strips |
 | — | **Chip resistor** | `124` | 120 kΩ |
 | MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
-| DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**) |
-| DS61…DS67 | **Touch Crystal cluster** | — | 7 more of the same under the moulded light pipe (**confirmed**). Six in a hexagon around a central post |
+| DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**). **1.5 x 1.5 mm packages**: measured 1.50 mm wide at a 1.91 mm pitch on an 18.24 mm radius (`hardware/totem-v3.5-reference/measure/`), which a 2 x 2 mm WS2812B-2020 could not fit; castellated pads on the ring's outer and inner edges, as the XL-1515RGBC-WS2812B's |
+| DS61…DS67 | **Touch Crystal cluster** | — | 7 more under the moulded light pipe (**confirmed**), mirror-symmetric about the ring's vertical axis around a central spring post: pairs at three heights and one below |
 | DS68 | **SOS indicator** | — | A discrete LED on its own pin, not part of either strip |
 | SW1 | **Power button** | black cap | Tactile switch. Also the power latch — see below |
 | SW2 | **SOS button** | red cap | Tactile switch |
 | TP1 | **Touch Crystal pad** | — | Capacitive pad under the light pipe |
-| J1 | **USB-C receptacle** | — | Charging and the serial console the updater uses |
+| J1 | **USB-C receptacle** | — | Charging only. The board has no USB-UART bridge (the one QFN is the IMU, above) and the ESP32-WROOM-32E has no USB of its own, so no data can reach the module through this port; updates come over Wi-Fi ([OTA](/subsystems/ota)) |
 | J2 | **JST battery connector** | — | Two-pin, red and black |
 | J3 | **u.FL / IPEX connector** | — | One coaxial pigtail, sitting **directly below U2** with U1 carrying its own PCB antenna. The GNSS antenna |
 | BT1 | **LiPo cell** | `805080`, `1000mAh`, `3.7Wh`, `3.7V`, dated `2023.05.18` | Single cell in the housing |
@@ -170,16 +169,14 @@ These are gaps, not omissions, and each one names the photograph that would clos
 
 | Unknown | What would resolve it |
 | --- | --- |
-| U6 (`I2948`) | Nothing photographic — the marking is already fully legible. It needs a vendor's marking table, or continuity onto a known net |
 | U4 (`ACH`) and Q? (`J22B`) | Same: legible, unidentified. Three- and four-letter codes are reused across manufacturers |
-| **U5's identity from the board alone** | **Nothing.** Its lid is sandblasted with no marking at all, so no photograph can ever name it. That it is an ICM-20948 comes from the firmware, not the package, and this is the general lesson: for an unmarked part, what the code says to it identifies it and a photograph cannot |
 | GNSS UART pin numbers | The traces leaving U2 are visible but not followable past the module's pads; a deeper decode of the UART init is the better route |
 | Passive values, divider ratios, series resistors | A bare board, or the manufacturer's files. Not recoverable from an assembled one — the single `124` above is the exception that shows the rule |
 | External pull-ups on I²C | Same |
 
 Flash with the halo switched off is what produced most of the markings above; the earlier set
-had the board lit by its own LEDs, which erased them. What that technique could not do is
-give U5 a marking it was never given.
+had the board lit by its own LEDs, which erased them. It also took a grazing angle to read
+U5's laser marking at all: head-on, the lid reads as blank.
 
 ## How this differs from the emulator board
 

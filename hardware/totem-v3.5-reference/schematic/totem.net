@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/30/2026 01:42 AM")
+    (date "09/30/2026 02:31 AM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -2206,12 +2206,12 @@
       (ref "MK1")
       (value "electret")
       (description "Condenser microphone")
-      (footprint "Sensor_Audio:CUI_CMC-4013-SMT")
+      (footprint "totem:CUI_CMC-4013-SMT_RingGap")
       (fields
         (field
           (name "Description") "Condenser microphone")
         (field
-          (name "Footprint") "Sensor_Audio:CUI_CMC-4013-SMT")
+          (name "Footprint") "totem:CUI_CMC-4013-SMT_RingGap")
         (field
           (name "Datasheet"))
         (field

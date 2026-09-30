@@ -1,0 +1,23 @@
+grid 980x1000 at 0.05 mm, 517 pads, 152 nets
+67 LED links, 4 power nets, 30 signals, 146 fan-outs
+links (8 s): 0 failed
+  FAIL /I2C0_SCL: U5.23 (887993 expanded)
+  FAIL /BTN_SOS: SW2.1 (736094 expanded)
+  FAIL /LED_EN: U1.31 (89208 expanded)
+  FAIL fan-out GND: C13.2
+  FAIL fan-out GND: C16.2
+  FAIL fan-out GND: C17.2
+  FAIL fan-out GND: D206.2
+  FAIL fan-out GND: J1.A12
+  FAIL fan-out +3V3: C5.1
+  FAIL fan-out +3V3: R13.1
+first pass (50 s): 10 failed
+rip-up pass 1 (83 s): 6 failed: ['/RING_DATA', '/RXD0', '/TXD0', 'GND', 'GND C1', 'GND C5']
+rip-up pass 2 (106 s): 4 failed: ['/SOS_LED', '/I2C0_SCL', '+3V3', '+3V3 C5']
+rip-up pass 3 (130 s): 4 failed: ['/IMU_AD0', '/LED_EN', 'GND', 'GND C17']
+rip-up pass 4 (148 s): 2 failed: ['/I2C0_SCL', '+3V3']
+rip-up pass 5 (156 s): 1 failed: ['/I2C0_SDA']
+rip-up pass 6 (162 s): 0 failed: []
+connectivity check 1: 0 tasks not connected: []
+225 GND stitching vias
+3115 tracks, 434 vias in 163 s; failed: []
