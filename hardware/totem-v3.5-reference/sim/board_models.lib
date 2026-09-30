@@ -1,0 +1,145 @@
+* Models for the parts on the Totem reference design.
+*
+* Discrete semiconductors use SPICE device models, so the power latch — the
+* one part of this design that was designed rather than recovered — is
+* simulated as a circuit and not as arithmetic. The integrated circuits are
+* behavioural: no vendor publishes a SPICE model for an ESP32 module or a
+* GNSS receiver, and what they do is firmware. What they present to the
+* circuit around them is a supply current and, for the ESP32, the behaviour
+* of three pins; those are modelled, with the figures named.
+*
+* Control nodes, driven by the test bench rather than by the circuit:
+*   PRESS_PWR  PRESS_SOS   1 V = the button is held
+*   FW_OFF                 1 V = firmware drives GPIO 4 low (shut_down(0))
+*   RING_ON                1 V = firmware sets GPIO 19 high (power_on())
+*   RADIO                  1 V = the ESP32's radio is transmitting
+.global PRESS_PWR PRESS_SOS FW_OFF RING_ON RADIO
+
+* ------------------------------------------------------------ discretes
+* AO3401A: P-channel, Vth -0.9 V, tens of milliohms at -4.5 V, with its
+* body diode, which matters if VSYS is ever above VBAT.
+.subckt AO3401A G S D
+M1 D G S S PAO3401 W=1 L=1
+DB D S DBODY
+.model PAO3401 PMOS (LEVEL=1 VTO=-0.9 KP=20 LAMBDA=0.01)
+.model DBODY D (IS=1e-12 N=1.2 RS=0.05)
+.ends AO3401A
+
+* 2N7002: N-channel, Vth 1.0..2.5 V, 2.1 typical, a few ohms on. The bench
+* also runs the latch at the datasheet's worst-case 2.5 V threshold.
+.subckt N2N7002 G S D
+M1 D G S S NMOS7002 W=1 L=1
+.model NMOS7002 NMOS (LEVEL=1 VTO={vth7002} KP=0.2 LAMBDA=0.02)
+.ends N2N7002
+.param vth7002=2.1
+
+* 1N4148W, the published model.
+.subckt D1N4148W K A
+D1 A K D1N4148
+.model D1N4148 D (IS=2.52n RS=0.568 N=1.752 CJO=4p M=0.4 TT=20n BV=100 IBV=100u)
+.ends D1N4148W
+
+* BAT54W Schottky: about 0.3 V at 1 mA, less at the microamps the latch uses.
+.subckt BAT54W A NC K
+D1 A K DBAT54
+RNC NC 0 1e12
+.model DBAT54 D (IS=2e-7 RS=1 N=1.0 CJO=10p BV=30 IBV=2u)
+.ends BAT54W
+
+* -------------------------------------------------------------- charger
+* TP4056: constant current to 4.2 V, then constant voltage, only with CE
+* high and the input above the cell. I = 1200 / R_PROG: 600 mA with the 2k
+* fitted. The current is taken from VCC, so the source sees the load.
+.subckt TP4056 TEMP PROG GND VCC BAT STDBY CHRG CE EPAD
+BCHG VCC BAT I = (v(CE,GND) > 1.5 && v(VCC,GND) > v(BAT,GND) + 0.3) ? max(0, min(0.6, (4.2 - v(BAT,GND)) * 20)) : 0
+RLEAK BAT GND 1e7
+RPROG PROG GND 1e12
+RTEMP TEMP GND 1e12
+RSTBY STDBY GND 1e12
+RCHRG CHRG GND 1e12
+REPAD EPAD GND 1e12
+RVCC VCC GND 1e7
+.ends TP4056
+
+* ------------------------------------------------------------- regulator
+* AP2112K-3.3: 600 mA LDO, EN high above 1.2 V and off below 0.4 V. In
+* dropout the output follows the input down; RDO is the pass element.
+.subckt AP2112K VIN GND EN NC VOUT
+BREG VINT GND V = min(3.3, max(0, v(VIN,GND) - 0.05)) * 0.5*(1+tanh((v(EN,GND)-1.0)*20)) * 0.5*(1+tanh((v(VIN,GND)-1.8)*20))
+RDO VINT VOUT 0.4
+RNC NC GND 1e12
+RIQ VIN GND 60k
+.ends AP2112K
+
+* ------------------------------------------------------------------ MCU
+* ESP32-WROOM-32E, as the circuit around it sees it. It runs once its
+* supply is above 2.8 V and its EN has risen through Espressif's RC.
+*   supply  95 mA running, 500 mA while the radio transmits.
+*   GPIO 4  high impedance except when the firmware drives it low to switch
+*           off; the external pull-up holds it high otherwise.
+*   GPIO 19 driven to VDD while the firmware lights the ring, low otherwise.
+*   GPIO 0  high impedance; the SOS button reads it.
+.subckt ESP32 VDD GND EN IO4 IO19 IO0
+BRUN RUN GND V = 0.5*(1+tanh((v(VDD,GND)-2.7)*25)) * 0.5*(1+tanh((v(EN,GND)-2.0)*25))
+RRUN RUN GND 1e9
+BLOAD VDD GND I = v(RUN,GND) * (0.095 + 0.405*0.5*(1+tanh((v(RADIO)-0.5)*20))) + (1 - v(RUN,GND)) * v(VDD,GND) / 3k
+BSINK IO4 GND I = v(IO4,GND) / 30 * v(FWCTL,GND)
+BFW FWCTL GND V = v(RUN,GND) * 0.5*(1+tanh((v(FW_OFF)-0.5)*20))
+RFW FWCTL GND 1e9
+B19 IO19X GND V = v(VDD,GND) * v(RUN,GND) * 0.5*(1+tanh((v(RING_ON)-0.5)*20))
+R19 IO19X IO19 100
+RIO0 IO0 GND 1e9
+* (GPIO 4's sink is BSINK above; no switch model needed)
+.ends ESP32
+
+* ------------------------------------------------------------- the rest
+.subckt MAXM10S VCC GND
+BACQ VCC GND I = v(VCC,GND) > 2.7 ? 0.031 : v(VCC,GND) / 1k
+.ends MAXM10S
+
+.subckt ICM20948 VDD GND REGOUT
+BRUN VDD GND I = v(VDD,GND) > 1.7 ? 0.003 : v(VDD,GND) / 10k
+VREG REGOUT GND 1.8
+.ends ICM20948
+
+* One XL-1515RGBC-WS2812B. Its datasheet: 0.5 mA for the IC (IDD typ), 5 mA
+* per colour channel, so 15.5 mA at full white. Lit, the bench sets the
+* current through ringma / cryma, at the firmware's brightness.
+.subckt WS2812_RING DOUT VSS DIN VDD
+BPX VDD VSS I = v(VDD,VSS) > 2.5 ? ringma : v(VDD,VSS) / 10k
+RDIN DIN VSS 1e9
+RDOUT DOUT VSS 1e9
+.ends WS2812_RING
+.subckt WS2812_CRY DOUT VSS DIN VDD
+BPX VDD VSS I = v(VDD,VSS) > 2.5 ? cryma : v(VDD,VSS) / 10k
+RDIN DIN VSS 1e9
+RDOUT DOUT VSS 1e9
+.ends WS2812_CRY
+.param ringma=0.5m cryma=0.5m
+
+* Buttons, under the bench's control.
+.subckt SW_PWR A B
+S1 A B PRESS_PWR 0 SWB
+.model SWB SW (VT=0.5 VH=0.1 RON=0.05 ROFF=1e10)
+.ends SW_PWR
+.subckt SW_SOS A B
+S1 A B PRESS_SOS 0 SWB2
+.model SWB2 SW (VT=0.5 VH=0.1 RON=0.05 ROFF=1e10)
+.ends SW_SOS
+
+* An electret, as its bias network sees it.
+.subckt ELECTRET M P
+R1 P M 5k
+.ends ELECTRET
+
+.subckt LED_IND K A
+D1 A K DLED
+.model DLED D (IS=1e-18 N=2.0 RS=5)
+.ends LED_IND
+
+.subckt STUB1 A
+R1 A 0 1e12
+.ends STUB1
+.subckt STUB2 A B
+R1 A B 1e12
+.ends STUB2

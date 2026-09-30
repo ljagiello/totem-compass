@@ -1,0 +1,53 @@
+* LED rail: how many pixels the cell can actually carry
+*
+* 60 ring + 7 crystal = 67 addressable RGB LEDs, XL-1515RGBC-WS2812B (measured
+* on the reference board: 1.5 mm packages). Its datasheet: 5 mA per colour
+* channel and 0.5 mA for the IC, so 15.5 mA at full white. Brightness is
+* applied as PWM duty, so the channel current scales with it.
+*
+* The firmware's brightness (docs/subsystems/leds.mdx):
+*   config.led_brt = 0.6   default
+*   config.led_brt = 0.1   eco mode, which also blanks the ring entirely
+*
+* Two things decide whether this works, and neither is the regulator:
+*
+*   1. The cell. 1000 mAh at 1C is 1.0 A continuous, which is what a small
+*      pouch cell of this size is usually good for.
+*   2. The 1515's supply range starts at 3.5 V. The firmware runs the cell to
+*      3.15 V before it switches off (docs/subsystems/power.mdx), so the
+*      pixels are out of spec at the bottom of the discharge. That is a
+*      finding, not a fix: the reference board's ring is on the cell too.
+*
+* This is why the strips are on the cell and not on the 3V3 rail: 3.3 V is
+* already below the pixels' minimum supply.
+
+.param Ipix_white=15.5m
+.param Brt=0.6
+.param Ccell=1.0
+.param Vws_min=3.5
+.param Vbat_empty=3.15
+
+* n is swept as a voltage so it can be the sweep variable
+Vn n 0 dc 1
+
+* current drawn by n pixels at full white and the firmware's brightness
+Bi   iled 0 v = v(n) * Ipix_white * Brt
+* the same as a C rate against a 1000 mAh cell
+Bc   crate 0 v = v(n) * Ipix_white * Brt / Ccell
+* how many pixels at full white fit inside 1C (more than the board has)
+Bn   n1c 0 v = Ccell / (Ipix_white * Brt)
+* headroom the pixels have at the bottom of the discharge
+Bv   vhead 0 v = Vbat_empty - Vws_min
+
+.dc Vn 1 67 1
+
+.meas dc i_all_ma   FIND v(iled) AT=67
+.meas dc i_all_crate FIND v(crate) AT=67
+* a realistic worst case in normal use: north + 8 peers + the 7 crystal
+.meas dc i_typ_ma   FIND v(iled) AT=16
+.meas dc i_typ_crate FIND v(crate) AT=16
+.meas dc n_at_1c    FIND v(n1c) AT=1
+* negative means the pixels are under-supplied at an empty cell
+.meas dc vws_head   FIND v(vhead) AT=67
+
+.end

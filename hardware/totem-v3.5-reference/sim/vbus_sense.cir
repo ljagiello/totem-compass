@@ -1,0 +1,48 @@
+* VBUS presence divider into GPIO 39
+*
+* The firmware reads this pin as `self.v_in` and assigns
+* `modes.is_charging = self.v_in.value()`, so HIGH must mean "cable in".
+*
+* Two constraints make a bare connection to the TP4056's CHRG pin wrong,
+* and a divider off VBUS right:
+*
+*   - CHRG is open drain and pulls LOW while charging. Backwards.
+*   - GPIO 34..39 are input-only with no internal pull of any kind, and
+*     Pin(39, Pin.IN) asks for none, so an open-drain source would float
+*     when idle. A divider always drives the pin.
+*
+* The design has to hold across the USB supply range while never exceeding
+* the ESP32's absolute maximum on a 3.3 V part:
+*
+*   VIH  = 0.75 * 3.3 = 2.475 V   must be cleared at the LOWEST VBUS
+*   VMAX = 3.6 V (abs max)        must not be reached at the HIGHEST VBUS
+*
+* VBUS is swept 4.40 to 5.25 V: the upper figure is the USB spec, the lower
+* is slack for a sagging charger and cable drop.
+*
+* 100k over 150k gives k = 0.600.
+
+.param Rtop=100k
+.param Rbot=150k
+.param VIH=2.475
+.param VMAX=3.6
+
+Vbus vbus 0 dc 5.0
+Rt vbus pin {Rtop}
+Rb pin 0 {Rbot}
+
+* margin above the logic threshold, and below the absolute maximum
+Bmih mih 0 v = v(pin) - VIH
+Bmax mx  0 v = VMAX - v(pin)
+* divider draw in microamps
+Biua iua 0 v = v(vbus) / (Rtop + Rbot) * 1e6
+
+.dc Vbus 4.35 5.30 0.005
+
+.meas dc vpin_lo   FIND v(pin) AT=4.40
+.meas dc vpin_hi   FIND v(pin) AT=5.25
+.meas dc mih_worst MIN v(mih)
+.meas dc max_worst MIN v(mx)
+.meas dc idiv_ua   FIND v(iua) AT=5.25
+
+.end

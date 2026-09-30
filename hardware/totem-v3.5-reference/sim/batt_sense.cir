@@ -1,0 +1,57 @@
+* Battery sense divider into GPIO 34
+*
+* The firmware converts the reading with a fixed calibration
+* (docs/subsystems/power.mdx, compass.dis:1446):
+*
+*     battery_volt = 0.0017 * v_supply.read() + 0.206
+*
+* MicroPython's ADC.read() returns 0..4095, so the divider ratio is not a
+* free choice. Writing the chain out, with k the divider ratio, VFS the
+* ATTN_11DB full scale and Voff the ADC's input offset:
+*
+*     cal(V) = 0.0017 * 4095 * (k*V - Voff)/VFS + 0.206
+*
+* For cal(V) == V at every V, both of these must hold:
+*
+*     k    = VFS / (0.0017*4095) = 3.3/6.9615 = 0.4741
+*     Voff = 0.206 * VFS / 6.9615 = 97.7 mV
+*
+* The second falls out rather than being fitted, and ~98 mV is the ESP32
+* ADC's well-known input offset. That it lands there is the evidence the
+* model is the right shape.
+*
+* 120k over 108k gives k = 0.4737. 120k because a resistor marked 124 is on
+* the board; 108k is the E96 value the ratio then asks for.
+*
+* This verifies the reconstruction, not the Totem: the real divider was
+* never traced.
+
+.param Rtop=120k
+.param Rbot=108k
+.param VFS=3.3
+.param Voff=97.7m
+
+Vbat vbat 0 dc 4.2
+Rt vbat pin {Rtop}
+Rb pin 0 {Rbot}
+
+* ADC as counts: offset first, then clamped the way the hardware clamps
+Braw raw 0 v = min(4095, max(0, (v(pin) - Voff) / VFS * 4095))
+* ...and the firmware's own calibration applied to those counts
+Bcal cal 0 v = 0.0017 * v(raw) + 0.206
+* what the firmware would report, minus the truth
+Berr err 0 v = v(cal) - v(vbat)
+* divider draw in microamps, as a voltage so .meas can read it
+Biua iua 0 v = v(vbat) / (Rtop + Rbot) * 1e6
+
+.dc Vbat 3.35 4.25 0.005
+
+.meas dc vpin_full  FIND v(pin) AT=4.2
+.meas dc vpin_empty FIND v(pin) AT=3.4
+.meas dc cal_full   FIND v(cal) AT=4.2
+.meas dc cal_empty  FIND v(cal) AT=3.4
+.meas dc err_hi     MAX v(err)
+.meas dc err_lo     MIN v(err)
+.meas dc idiv_ua    FIND v(iua) AT=4.2
+
+.end

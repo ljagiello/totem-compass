@@ -1,0 +1,50 @@
+* 3V3 rail headroom over the cell's working range
+*
+* The regulator is fed from the cell, not from USB, so the board behaves the
+* same on and off the cable. That makes the interesting question the low end
+* of the discharge: at what cell voltage does the rail stop holding the
+* ESP32 above its minimum while the radio is transmitting?
+*
+* Figures used, all datasheet rather than measured:
+*   ESP32-WROOM-32E operating range   3.0 .. 3.6 V
+*   ESP32 RF transmit, peak            500 mA  (worst case quoted for 802.11b)
+*   MAX-M10S during acquisition         ~31 mA
+*   ICM-20948 gyro + accel + mag        ~3 mA
+*
+* The LED strips are deliberately NOT on this rail: they run from the cell.
+* See led_budget.cir for why they cannot be here.
+*
+* The regulator is behavioural: an ideal 3.3 V source behind a pass
+* resistance, clamped so it can never exceed its input. Rpass = 0.2 ohm is
+* a competent 500 mA LDO (100 mV of dropout at full load). This verifies the
+* design's headroom arithmetic, not any real part's silicon.
+
+.param Vnom=3.3
+.param Rpass=0.2
+.param Iesp=500m
+.param Ignss=31m
+.param Iimu=3m
+.param Vespmin=3.0
+
+Vbat vbat 0 dc 4.2
+
+* total load on the rail
+Bild ild 0 v = (Iesp + Ignss + Iimu) * 1e3
+* the rail: 3.3 V nominal, in dropout it follows the input down
+Bout out 0 v = min(Vnom, v(vbat) - (Iesp + Ignss + Iimu) * Rpass)
+* margin over the ESP32's minimum supply
+Bmrg mrg 0 v = v(out) - Vespmin
+* dissipation in the pass element, milliwatts
+Bpd  pd  0 v = (v(vbat) - v(out)) * (Iesp + Ignss + Iimu) * 1e3
+
+.dc Vbat 3.00 4.25 0.005
+
+.meas dc iload_ma   FIND v(ild) AT=4.2
+.meas dc vout_full  FIND v(out) AT=4.2
+.meas dc vout_34    FIND v(out) AT=3.40
+.meas dc mrg_34     FIND v(mrg) AT=3.40
+.meas dc pdiss_mw   FIND v(pd)  AT=4.2
+* the cell voltage at which the rail can no longer hold the ESP32 up
+.meas dc vbat_fail  WHEN v(mrg)=0 RISE=1
+
+.end
