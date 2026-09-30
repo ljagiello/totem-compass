@@ -106,7 +106,7 @@ at("R26", 3.3, -2.4, 0, "B", why="IMU address strap")
 at("R11", -4.6, -13.2, 0, "B", why="ring data series resistor, by D100")
 at("R12", -2.1, -5.2, 0, "B", why="crystal data series resistor, by D200")
 at("C17", -6.6, 3.0, 90, "B", why="crystal supply bulk")
-at("C15", -12.27, -4.0, 90, why="ring supply bulk at Q4's drain")
+at("C15", -12.27, -4.4, 90, why="ring supply bulk at Q4's drain")
 at("C16", -18.34, -11.24, 50, "B", why="ring supply bulk in the ring's VLED pour, where VLED comes across from Q4")
 # the power latch, below the ring where the reference board has its latch SOTs
 at("Q1", -8.0, -19.0, 0, "B", why="latch P-FET")

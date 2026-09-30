@@ -164,7 +164,7 @@ for z in u1.Zones():
 # ------------------------------------------------------------ legalise
 # Photo-measured parts stay put; this design's own small parts are pushed
 # apart where their courtyards overlap, and back inside the outline.
-FIXED = {"U1", "U2", "U3", "U4", "U5", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1", "C16"} | \
+FIXED = {"U1", "U2", "U3", "U4", "U5", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1", "C16", "C15"} | \
     {r for r in placement.P if re.fullmatch(r"D(1\d\d|2\d\d)", r)}
 poly = json.load(open(os.path.join(HERE, "..", "measure", "outline2_poly.json")))
 
@@ -351,7 +351,7 @@ mk.SetOrientationDegrees(best[1])
 print(f"MK1 turned {best[1]} degrees: ring gap within {best[0]:.0f} degrees of the target")
 
 # ------------------------------------------------------------------ planes
-def zone(net, layer, poly, prio=0, full=True, name=None):
+def zone(net, layer, poly, prio=0, full=True, name=None, minw=0.2):
     z = pcbnew.ZONE(B)
     z.SetLayer(layer)
     z.SetNetCode(netinfo[net].GetNetCode())
@@ -361,7 +361,7 @@ def zone(net, layer, poly, prio=0, full=True, name=None):
         v = pt(x, y)
         ol.Append(v.x, v.y)
     z.SetAssignedPriority(prio)
-    z.SetMinThickness(mm(0.2))
+    z.SetMinThickness(mm(minw))
     z.SetLocalClearance(mm(0.2))
     z.SetPadConnection(pcbnew.ZONE_CONNECTION_FULL if full else pcbnew.ZONE_CONNECTION_THERMAL)
     if name:
@@ -386,7 +386,7 @@ zone("GND", pcbnew.In1_Cu, BIG, 0, name="GND plane")
 zone("+3V3", pcbnew.In2_Cu, BIG, 0, name="3V3 plane")
 # LED side: VLED outside the ring (the outer pads), GND inside (the inner pads)
 zone("VLED", pcbnew.B_Cu, annulus(RC[0], RC[1], placement.RR + 0.35, 30), 2, name="VLED ring")
-zone("GND", pcbnew.B_Cu, circle(RC[0], RC[1], placement.RR - 0.35), 1, name="GND inside ring")
+zone("GND", pcbnew.B_Cu, circle(RC[0], RC[1], placement.RR - 0.35), 1, name="GND inside ring", minw=0.25)  # no 0.2 mm necks between LEDs
 zone("GND", pcbnew.F_Cu, BIG, 0, name="GND radio side")
 
 # References: 0603s packed 0.3 mm apart and 67 LEDs 0.4 mm apart leave no room

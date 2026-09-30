@@ -43,6 +43,7 @@ N = NX * NY
 F, B = 0, 1
 LAYER = {"F.Cu": F, "B.Cu": B}
 MARGIN = 0.04
+EDGE_MARGIN = 0.07        # the outline is rasterised too; arcs lose a few um
 VIA_D = 0.45
 VIA_COST = 0.8            # mm-equivalent
 NEAR_PAD_COST = 0.6       # extra, as a fraction of a step, within 0.5 mm of a pad
@@ -134,7 +135,15 @@ TASKS = {}
 hist = np.zeros((2, NY, NX), np.float32)
 
 
+# the GNSS antenna feed is a 50-ohm microstrip over In1: on a 1.6 mm 4-layer
+# stack-up F.Cu sits ~0.21 mm (7628 prepreg, er 4.4) over In1, which makes
+# 50 ohms about 0.38 mm wide
+RF = {"/GNSS_RF": (0.38, 0.3)}
+
+
 def cls(net):
+    if net in RF:
+        return RF[net]
     if net in POWER:
         return 0.4, 0.2
     return 0.13, 0.13
@@ -145,6 +154,7 @@ def via_centres():
 
 
 POWER_IDS = np.array(sorted(NID[n] for n in POWER if n in NID))
+RF_IDS = np.array(sorted(NID[n] for n in RF if n in NID))
 
 
 def free_maps(nid, w, c, pads_only=False, annulus_ok=False):
@@ -158,15 +168,18 @@ def free_maps(nid, w, c, pads_only=False, annulus_ok=False):
         own = np.where(padmask[L], owner[L], -1) if pads_only else owner[L]
         foreign = (own >= 0) & (own != nid)
         pw = foreign & np.isin(own, POWER_IDS)
-        d_o = ndimage.distance_transform_edt(~(foreign & ~pw)) * G
+        rf = foreign & np.isin(own, RF_IDS)
+        d_o = ndimage.distance_transform_edt(~(foreign & ~pw & ~rf)) * G
         d_p = ndimage.distance_transform_edt(~pw) * G if pw.any() else np.full((NY, NX), 99.0)
+        d_r = ndimage.distance_transform_edt(~rf) * G if rf.any() else np.full((NY, NX), 99.0)
         m = (d_o >= hw + c + MARGIN) & (d_p >= hw + max(c, 0.2) + MARGIN) & \
-            (dist_edge >= hw + 0.3 + MARGIN) & (d_keep_tr[L] >= hw + MARGIN)
+            (d_r >= hw + max(c, 0.3) + MARGIN) & \
+            (dist_edge >= hw + 0.3 + EDGE_MARGIN) & (d_keep_tr[L] >= hw + MARGIN)
         if L == B and not annulus_ok:
             m &= d_annulus >= hw + MARGIN       # no other net's track across the band
         fr.append(m)
-        ok_v.append((d_o >= vr + max(c, 0.15) + MARGIN) & (d_p >= vr + 0.2 + MARGIN))
-    via = ok_v[F] & ok_v[B] & (dist_edge >= vr + 0.3 + MARGIN) & ~keep_via_d & ~keep & \
+        ok_v.append((d_o >= vr + max(c, 0.15) + MARGIN) & (d_p >= vr + 0.2 + MARGIN) & (d_r >= vr + 0.3 + MARGIN))
+    via = ok_v[F] & ok_v[B] & (dist_edge >= vr + 0.3 + EDGE_MARGIN) & ~keep_via_d & ~keep & \
         (dist_pad[F] >= vr + 0.1) & (dist_pad[B] >= vr + 0.1)
     if not annulus_ok:
         via &= ~annulus_d                            # nor via: a via plugs it as well
@@ -343,6 +356,9 @@ def run_net(tid, log=True, dry=False):
     aok = net in ANNULUS_OK
     while todo:
         fr, via_ok = free_maps(nid, w, c, pads_only=dry, annulus_ok=aok)
+        if net in RF:                        # a microstrip stays on F.Cu, over In1, via-free
+            via_ok[:] = False
+            fr[B][:] = False
         for p in pads:
             for L, m in p["cells"].items():
                 fr[L] = fr[L] | m
@@ -480,7 +496,7 @@ print(f"first pass ({time.time()-t0:.0f} s): {len(fails)} failed")
 import copy  # noqa: E402
 best = (len(fails), copy.deepcopy(tracks), copy.deepcopy(vias), list(fails))
 
-for attempt in range(30):
+for attempt in range(50):
     if not fails:
         break
     again = set()

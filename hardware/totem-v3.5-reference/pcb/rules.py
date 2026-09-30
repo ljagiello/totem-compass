@@ -42,8 +42,11 @@ def main():
     power = dict(default)
     power.update({"name": "Power", "clearance": 0.2, "track_width": 0.4, "via_diameter": 0.45, "via_drill": 0.2,
                   "priority": 0})
-    ns["classes"] = [default, power]
-    ns["netclass_patterns"] = [{"netclass": "Power", "pattern": n} for n in POWER]
+    rf = dict(default)
+    rf.update({"name": "RF50", "clearance": 0.3, "track_width": 0.38, "priority": 1})
+    ns["classes"] = [default, power, rf]
+    ns["netclass_patterns"] = [{"netclass": "Power", "pattern": n} for n in POWER] + \
+        [{"netclass": "RF50", "pattern": "/GNSS_RF"}]
     json.dump(pro, open(PRO, "w"), indent=2)
     print("rules set:", RULES)
 
