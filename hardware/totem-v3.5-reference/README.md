@@ -86,6 +86,94 @@ The digital parts are modelled as current sinks at their datasheet peaks, and
 the regulator and charger behaviourally, because no vendor models are to hand.
 These verify the design's arithmetic, not anyone's silicon.
 
+The whole board is simulated too, built from the schematic's own netlist
+rather than from a hand-written deck:
+
+```
+cd sim && python3 board_sim.py
+```
+
+**78 passed, 0 failed, 1 known limit**, over five corners (cell at 4.2, 3.8
+and 3.4 V; the 2N7002's threshold at 2.1 and 2.5 V). Each corner runs one
+4.5-second sequence — off, press on, press while running, ring on and off,
+firmware power-off, on again, held through a firmware power-off, released —
+and checks the rail, GPIO 4's voltage limits and the cell's idle drain at each
+step. Steady-state checks cover the rail at a TX peak with the ring lit across
+the firmware's battery bands, every pixel at full white, both sense dividers
+and charging. The known limit is the ring's supply at a 3.45 V cell, 3.34 V
+against the 1515 LEDs' 3.5 V rating, which the reference board shares: its
+ring hangs off the cell the same way.
+
+## The board
+
+`schematic/totem.kicad_pcb`, made by scripts in `pcb/` from the schematic
+and from measurements of the reference board's photographs (`measure/`,
+whose README says how, and how well, each number is known):
+
+```
+cd pcb
+KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3
+$KP build.py      # outline, parts where the photos put them, nets, planes, rules
+python route.py   # the router (numpy, scipy, opencv)
+$KP apply.py      # tracks and vias into the board, zones filled
+python3 fab.py    # gerbers, drill, placement, BOM, renders -> pcb/fab/
+```
+
+Four layers: signals on both outer layers, In1 solid GND, In2 3V3. Tracks
+0.13 mm and 0.13 mm apart, power nets 0.4 mm with 0.2 mm; vias 0.45/0.2 mm;
+copper 0.3 mm from the edge — a mainstream 4-layer process with margin.
+
+**`kicad-cli pcb drc --schematic-parity --severity-all`: 0 violations,
+0 unconnected pads, 0 footprint errors.** Three places where the reference
+board is closer than KiCad's courtyard and silkscreen margins allow (the
+TP4056 0.3 mm from the module, the SOS LED between its switch's legs) are
+narrow rules in `schematic/totem.kicad_dru`, each with its reason. The
+router (`pcb/route.py`) also checks every net's connectivity itself before
+it hands over.
+
+What is the reference board's and what is not:
+
+| | |
+| --- | --- |
+| Outline, notches, the tab | Measured: ±0.3 mm on the left half and bottom, **±1.3 mm in height on the right side** (the two photos disagree there) |
+| ESP32, MAX-M10S, TP4056, LDO, u.FL, P-FET, switches, SOS LED | Measured from their pads |
+| The ring | Measured: centre (−2.02, 2.45), radius 18.24 mm, 60 LEDs every 6°, **1.5 mm packages** |
+| The crystal, its spring post, the IMU, the microphone | Measured |
+| Passives, the latch, the ring's driver | This design's, placed beside what they serve |
+| Every trace | Routed here; the original's are not recoverable |
+
+**Measure these on the reference board before ordering** — each is where a
+photograph could not settle it:
+
+- **The board's height at the right edge**, and the distance from the USB-C
+  to the lower-right notch: the right side is known to ±1.3 mm.
+- **The USB-C.** The original's part could not be identified (its shell tabs
+  sit 2.5 mm apart and its body overhangs the edge by 2.3 mm or more). The
+  one used here, a power-only GCT USB4135, is the library part that clears
+  the ring behind it; its plug face ends up **about 0.6 mm or more further in**
+  than the original's (1.75 mm overhang). Check it against the case.
+- **The JST** sits about 2 mm further in than on the reference board, whose
+  housing overhangs the lower-right chamfer; this footprint's back pads
+  cannot.
+- **Button stem height.** The switches are 6 x 6 mm top-actuated tact
+  switches with tall stems that go through the rear cover; the BOM names a
+  9.5 mm one. The stem has to be matched to the cover.
+- **The touch spring**: a conical contact spring on a 2.5 mm pad. Its height
+  sets the pressure on the crystal.
+
+Two things are derived, not seen:
+
+- **Where the ring starts and which way it counts.** The links between the
+  ring's LEDs run on an inner layer on the reference board, so its chain can
+  not be followed. The firmware maps a bearing to pixel
+  `(60 − bearing // 6) mod 60`, counter-clockwise-positive under its
+  Madgwick convention, with pixel 0 along the IMU's +X; the IMU's marking puts
+  +X toward the buttons. So D100 is the LED nearest the buttons and the chain
+  runs counter-clockwise seen from the LED side. If the compass shows
+  mirrored or rotated on the first board, this is where to look.
+- **The IMU's pin 1** is where its laser marking reads upright; the
+  orientation of its axes follows from that and TDK's package drawing.
+
 ## The schematic, and its ERC
 
 ```
@@ -246,16 +334,15 @@ that drew that continuously would need a different package or a switcher.
 
 ## Not covered
 
-- **Trace routing and inner layers.** Not recoverable from an assembled board.
-- **The GNSS UART pins.** Visible leaving the module, not followable.
-- **U6** (`I2948` SOIC-14), the `J22B` SOT-23 and the `A7` diode. Identified as
-  markings, their nets untraced. The SOT-23 and the diode are plausible parts
-  of the GPIO 4 latch and the LED supply switch, but that is a guess and they
-  are left out rather than drawn in wrongly.
-- **Decoupling.** Omitted throughout; assume the usual per-rail capacitors.
-- **The power gate's topology.** This is the weakest part of the
-  reconstruction and is marked so in the source. The firmware fixes what
-  GPIO 4 *does* — read as an input while running, re-opened as an output and
-  driven low to switch off — but not how the latch around it is built. The
-  `A7` diode and the `J22B` SOT-23 on the board are plausible members of it.
-  Neither was traced, and the arrangement here is designed, not recovered.
+- **The reference board's traces and inner layers.** Not recoverable from an
+  assembled board; this board is routed afresh (see "The board").
+- **The GNSS UART pins** on the module side are taken from the firmware's
+  `UART(1, rx=16, tx=17)`, not traced.
+- **The `J22B` SOT-23-5 and the `A7` / `65KS` SOD-123s** on the LED side.
+  Legible markings, nets untraced. The `A7` is the usual marking of a
+  1N4148W, which this design's latch uses; the rest are left out rather than
+  drawn in wrongly. (What was listed here as a separate "U6" SOIC-14 marked
+  `I2948` is the IMU itself, photographed at an angle.)
+- **The power gate's topology** is designed to the firmware's behaviour, not
+  recovered: GPIO 4 read as an input while running, re-opened as an output and
+  driven low to switch off. It is simulated in every corner above.

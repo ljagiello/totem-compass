@@ -398,6 +398,7 @@ for ref, fp in FP.items():
 # the touch post's pad carries a spring that has to be bought and placed;
 # KiCad's test-point footprints default to leaving the bill of materials
 FP["TP1"].SetExcludedFromBOM(False)
+FP["TP1"].SetExcludedFromPosFiles(False)
 
 out = os.path.join(PROJ, "totem.kicad_pcb")
 pcbnew.SaveBoard(out, B)
