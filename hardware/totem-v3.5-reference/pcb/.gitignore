@@ -1,0 +1,5 @@
+*.rpt
+totem_sheet.net
+board.json
+routes.json
+__pycache__/

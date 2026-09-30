@@ -74,14 +74,20 @@ for n in (vbus, vbat, vsys, v3v3, vled, gnd):
 # data, so D+/D- are left unconnected. CC1/CC2 each need 5.1k to ground or a
 # USB-C source will not turn VBUS on at all — the most common way a USB-C
 # board ends up charging from an A-to-C cable and nothing else.
-j1 = Part("Connector", "USB_C_Receptacle_USB2.0_16P", ref="J1",
-          footprint="Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12")
-leave_unused(j1, {"A1", "A4", "A5", "A9", "A12", "B1", "B4", "B5", "B9", "B12", "SH"},
-             "D+/D- and SBU are unused: charge-only")
+# A power-only 6-pin receptacle, then: it has everything a charge-only port
+# uses. And it has to be all-SMD. The ring's LEDs pass within 5 mm of the
+# board edge right behind the connector, on the other side, and the
+# reference board's shell tabs sit just outside them (measured 18.75 and
+# 21.4 mm from the centre line, 2.5 mm apart); a common 16-pin part's rear
+# tabs (4.2 mm behind its front ones) would land on the ring. GCT USB4135's
+# footprint was the one in KiCad's library that clears it and still reaches
+# 1.75 mm past the edge (pcb/usbfit.py).
+j1 = Part("Connector", "USB_C_Receptacle_PowerOnly_6P", ref="J1", value="USB4135-GF-A",
+          footprint="Connector_USB:USB_C_Receptacle_GCT_USB4135-GF-A_6P_TopMnt_Horizontal")
 r_cc1, r_cc2 = R("R20", "5.1k"), R("R21", "5.1k")
 c_vbus = C("C10", "10u", C0805)
-vbus += j1["A4"], j1["A9"], j1["B4"], j1["B9"], c_vbus[1]
-gnd += j1["A1"], j1["A12"], j1["B1"], j1["B12"], j1["SH"], c_vbus[2], r_cc1[2], r_cc2[2]
+vbus += j1["A9"], j1["B9"], c_vbus[1]
+gnd += j1["A12"], j1["B12"], j1["SH"], c_vbus[2], r_cc1[2], r_cc2[2]
 net("CC1", j1["A5"], r_cc1[1])
 net("CC2", j1["B5"], r_cc2[1])
 

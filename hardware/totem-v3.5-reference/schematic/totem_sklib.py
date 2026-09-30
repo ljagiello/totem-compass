@@ -6,21 +6,11 @@ from skidl.pin import pin_types
 SKIDL_lib_version = '0.0.1'
 
 totem = SchLib(tool=SKIDL).add_parts(*[
-        Part(**{ 'name':'USB_C_Receptacle_USB2.0_16P', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'USB_C_Receptacle_USB2.0_16P'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12', 'keywords':'usb universal serial bus type-C USB2.0', 'description':'USB 2.0-only 16P Type-C Receptacle connector', 'datasheet':'https://www.usb.org/sites/default/files/documents/usb_type-c.zip', 'pins':[
-            Pin(num='A1',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='A4',name='VBUS',func=pin_types.PASSIVE,unit=1),
+        Part(**{ 'name':'USB_C_Receptacle_PowerOnly_6P', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'USB_C_Receptacle_PowerOnly_6P'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'Connector_USB:USB_C_Receptacle_GCT_USB4135-GF-A_6P_TopMnt_Horizontal', 'keywords':'usb universal serial bus type-C power-only charging-only 6P 6C', 'description':'USB Power-Only 6P Type-C Receptacle connector', 'datasheet':'https://www.usb.org/sites/default/files/documents/usb_type-c.zip', 'pins':[
             Pin(num='A5',name='CC1',func=pin_types.BIDIR,unit=1),
-            Pin(num='A6',name='D+',func=pin_types.BIDIR,unit=1),
-            Pin(num='A7',name='D-',func=pin_types.BIDIR,unit=1),
-            Pin(num='A8',name='SBU1',func=pin_types.BIDIR,unit=1),
             Pin(num='A9',name='VBUS',func=pin_types.PASSIVE,unit=1),
             Pin(num='A12',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B1',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B4',name='VBUS',func=pin_types.PASSIVE,unit=1),
             Pin(num='B5',name='CC2',func=pin_types.BIDIR,unit=1),
-            Pin(num='B6',name='D+',func=pin_types.BIDIR,unit=1),
-            Pin(num='B7',name='D-',func=pin_types.BIDIR,unit=1),
-            Pin(num='B8',name='SBU2',func=pin_types.BIDIR,unit=1),
             Pin(num='B9',name='VBUS',func=pin_types.PASSIVE,unit=1),
             Pin(num='B12',name='GND',func=pin_types.PASSIVE,unit=1),
             Pin(num='SH',name='SHIELD',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),

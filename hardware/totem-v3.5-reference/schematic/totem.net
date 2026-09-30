@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/30/2026 01:32 AM")
+    (date "09/30/2026 01:42 AM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -465,7 +465,7 @@
         (field
           (name "SKiDL Tag") "D1")
         (field
-          (name "SKiDL Line") "totem.py:131"))
+          (name "SKiDL Line") "totem.py:137"))
       (libsource
         (lib "Diode")
         (part "1N4148W"))
@@ -489,7 +489,7 @@
         (field
           (name "SKiDL Tag") "D100")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -513,7 +513,7 @@
         (field
           (name "SKiDL Tag") "D101")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -537,7 +537,7 @@
         (field
           (name "SKiDL Tag") "D102")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -561,7 +561,7 @@
         (field
           (name "SKiDL Tag") "D103")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -585,7 +585,7 @@
         (field
           (name "SKiDL Tag") "D104")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -609,7 +609,7 @@
         (field
           (name "SKiDL Tag") "D105")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -633,7 +633,7 @@
         (field
           (name "SKiDL Tag") "D106")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -657,7 +657,7 @@
         (field
           (name "SKiDL Tag") "D107")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -681,7 +681,7 @@
         (field
           (name "SKiDL Tag") "D108")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -705,7 +705,7 @@
         (field
           (name "SKiDL Tag") "D109")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -729,7 +729,7 @@
         (field
           (name "SKiDL Tag") "D110")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -753,7 +753,7 @@
         (field
           (name "SKiDL Tag") "D111")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -777,7 +777,7 @@
         (field
           (name "SKiDL Tag") "D112")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -801,7 +801,7 @@
         (field
           (name "SKiDL Tag") "D113")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -825,7 +825,7 @@
         (field
           (name "SKiDL Tag") "D114")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -849,7 +849,7 @@
         (field
           (name "SKiDL Tag") "D115")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -873,7 +873,7 @@
         (field
           (name "SKiDL Tag") "D116")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -897,7 +897,7 @@
         (field
           (name "SKiDL Tag") "D117")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -921,7 +921,7 @@
         (field
           (name "SKiDL Tag") "D118")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -945,7 +945,7 @@
         (field
           (name "SKiDL Tag") "D119")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -969,7 +969,7 @@
         (field
           (name "SKiDL Tag") "D120")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -993,7 +993,7 @@
         (field
           (name "SKiDL Tag") "D121")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1017,7 +1017,7 @@
         (field
           (name "SKiDL Tag") "D122")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1041,7 +1041,7 @@
         (field
           (name "SKiDL Tag") "D123")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1065,7 +1065,7 @@
         (field
           (name "SKiDL Tag") "D124")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1089,7 +1089,7 @@
         (field
           (name "SKiDL Tag") "D125")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1113,7 +1113,7 @@
         (field
           (name "SKiDL Tag") "D126")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1137,7 +1137,7 @@
         (field
           (name "SKiDL Tag") "D127")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1161,7 +1161,7 @@
         (field
           (name "SKiDL Tag") "D128")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1185,7 +1185,7 @@
         (field
           (name "SKiDL Tag") "D129")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1209,7 +1209,7 @@
         (field
           (name "SKiDL Tag") "D130")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1233,7 +1233,7 @@
         (field
           (name "SKiDL Tag") "D131")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1257,7 +1257,7 @@
         (field
           (name "SKiDL Tag") "D132")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1281,7 +1281,7 @@
         (field
           (name "SKiDL Tag") "D133")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1305,7 +1305,7 @@
         (field
           (name "SKiDL Tag") "D134")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1329,7 +1329,7 @@
         (field
           (name "SKiDL Tag") "D135")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1353,7 +1353,7 @@
         (field
           (name "SKiDL Tag") "D136")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1377,7 +1377,7 @@
         (field
           (name "SKiDL Tag") "D137")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1401,7 +1401,7 @@
         (field
           (name "SKiDL Tag") "D138")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1425,7 +1425,7 @@
         (field
           (name "SKiDL Tag") "D139")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1449,7 +1449,7 @@
         (field
           (name "SKiDL Tag") "D140")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1473,7 +1473,7 @@
         (field
           (name "SKiDL Tag") "D141")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1497,7 +1497,7 @@
         (field
           (name "SKiDL Tag") "D142")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1521,7 +1521,7 @@
         (field
           (name "SKiDL Tag") "D143")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1545,7 +1545,7 @@
         (field
           (name "SKiDL Tag") "D144")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1569,7 +1569,7 @@
         (field
           (name "SKiDL Tag") "D145")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1593,7 +1593,7 @@
         (field
           (name "SKiDL Tag") "D146")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1617,7 +1617,7 @@
         (field
           (name "SKiDL Tag") "D147")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1641,7 +1641,7 @@
         (field
           (name "SKiDL Tag") "D148")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1665,7 +1665,7 @@
         (field
           (name "SKiDL Tag") "D149")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1689,7 +1689,7 @@
         (field
           (name "SKiDL Tag") "D150")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1713,7 +1713,7 @@
         (field
           (name "SKiDL Tag") "D151")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1737,7 +1737,7 @@
         (field
           (name "SKiDL Tag") "D152")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1761,7 +1761,7 @@
         (field
           (name "SKiDL Tag") "D153")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1785,7 +1785,7 @@
         (field
           (name "SKiDL Tag") "D154")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1809,7 +1809,7 @@
         (field
           (name "SKiDL Tag") "D155")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1833,7 +1833,7 @@
         (field
           (name "SKiDL Tag") "D156")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1857,7 +1857,7 @@
         (field
           (name "SKiDL Tag") "D157")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1881,7 +1881,7 @@
         (field
           (name "SKiDL Tag") "D158")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1905,7 +1905,7 @@
         (field
           (name "SKiDL Tag") "D159")
         (field
-          (name "SKiDL Line") "totem.py:271"))
+          (name "SKiDL Line") "totem.py:277"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1929,7 +1929,7 @@
         (field
           (name "SKiDL Tag") "D2")
         (field
-          (name "SKiDL Line") "totem.py:132"))
+          (name "SKiDL Line") "totem.py:138"))
       (libsource
         (lib "Diode")
         (part "BAT54W"))
@@ -1953,7 +1953,7 @@
         (field
           (name "SKiDL Tag") "D200")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1977,7 +1977,7 @@
         (field
           (name "SKiDL Tag") "D201")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2001,7 +2001,7 @@
         (field
           (name "SKiDL Tag") "D202")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2025,7 +2025,7 @@
         (field
           (name "SKiDL Tag") "D203")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2049,7 +2049,7 @@
         (field
           (name "SKiDL Tag") "D204")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2073,7 +2073,7 @@
         (field
           (name "SKiDL Tag") "D205")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2097,7 +2097,7 @@
         (field
           (name "SKiDL Tag") "D206")
         (field
-          (name "SKiDL Line") "totem.py:292"))
+          (name "SKiDL Line") "totem.py:297"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2121,7 +2121,7 @@
         (field
           (name "SKiDL Tag") "D3")
         (field
-          (name "SKiDL Line") "totem.py:305"))
+          (name "SKiDL Line") "totem.py:310"))
       (libsource
         (lib "Device")
         (part "LED"))
@@ -2132,23 +2132,23 @@
       (tstamps "a31abf81-24ee-5c50-91fe-d4cecac4e7dd"))
     (comp
       (ref "J1")
-      (value "USB_C_Receptacle_USB2.0_16P")
-      (description "USB 2.0-only 16P Type-C Receptacle connector")
-      (footprint "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12")
+      (value "USB4135-GF-A")
+      (description "USB Power-Only 6P Type-C Receptacle connector")
+      (footprint "Connector_USB:USB_C_Receptacle_GCT_USB4135-GF-A_6P_TopMnt_Horizontal")
       (fields
         (field
-          (name "Description") "USB 2.0-only 16P Type-C Receptacle connector")
+          (name "Description") "USB Power-Only 6P Type-C Receptacle connector")
         (field
-          (name "Footprint") "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12")
+          (name "Footprint") "Connector_USB:USB_C_Receptacle_GCT_USB4135-GF-A_6P_TopMnt_Horizontal")
         (field
           (name "Datasheet") "https://www.usb.org/sites/default/files/documents/usb_type-c.zip")
         (field
           (name "SKiDL Tag") "J1")
         (field
-          (name "SKiDL Line") "totem.py:77"))
+          (name "SKiDL Line") "totem.py:85"))
       (libsource
         (lib "Connector")
-        (part "USB_C_Receptacle_USB2.0_16P"))
+        (part "USB_C_Receptacle_PowerOnly_6P"))
       (sheetpath
         (names "/")
         (tstamps "/"))
@@ -2169,7 +2169,7 @@
         (field
           (name "SKiDL Tag") "J2")
         (field
-          (name "SKiDL Line") "totem.py:105"))
+          (name "SKiDL Line") "totem.py:111"))
       (libsource
         (lib "Connector_Generic")
         (part "Conn_01x02"))
@@ -2193,7 +2193,7 @@
         (field
           (name "SKiDL Tag") "J3")
         (field
-          (name "SKiDL Line") "totem.py:226"))
+          (name "SKiDL Line") "totem.py:232"))
       (libsource
         (lib "Connector")
         (part "Conn_Coaxial"))
@@ -2217,7 +2217,7 @@
         (field
           (name "SKiDL Tag") "MK1")
         (field
-          (name "SKiDL Line") "totem.py:320"))
+          (name "SKiDL Line") "totem.py:325"))
       (libsource
         (lib "Device")
         (part "Microphone_Condenser"))
@@ -2241,7 +2241,7 @@
         (field
           (name "SKiDL Tag") "Q1")
         (field
-          (name "SKiDL Line") "totem.py:128"))
+          (name "SKiDL Line") "totem.py:134"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2265,7 +2265,7 @@
         (field
           (name "SKiDL Tag") "Q2")
         (field
-          (name "SKiDL Line") "totem.py:129"))
+          (name "SKiDL Line") "totem.py:135"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2289,7 +2289,7 @@
         (field
           (name "SKiDL Tag") "Q3")
         (field
-          (name "SKiDL Line") "totem.py:130"))
+          (name "SKiDL Line") "totem.py:136"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2313,7 +2313,7 @@
         (field
           (name "SKiDL Tag") "Q4")
         (field
-          (name "SKiDL Line") "totem.py:259"))
+          (name "SKiDL Line") "totem.py:265"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2337,7 +2337,7 @@
         (field
           (name "SKiDL Tag") "Q5")
         (field
-          (name "SKiDL Line") "totem.py:260"))
+          (name "SKiDL Line") "totem.py:266"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2985,7 +2985,7 @@
         (field
           (name "SKiDL Tag") "SW1")
         (field
-          (name "SKiDL Line") "totem.py:127"))
+          (name "SKiDL Line") "totem.py:133"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3009,7 +3009,7 @@
         (field
           (name "SKiDL Tag") "SW2")
         (field
-          (name "SKiDL Line") "totem.py:210"))
+          (name "SKiDL Line") "totem.py:216"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3033,7 +3033,7 @@
         (field
           (name "SKiDL Tag") "TP1")
         (field
-          (name "SKiDL Line") "totem.py:312"))
+          (name "SKiDL Line") "totem.py:317"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3057,7 +3057,7 @@
         (field
           (name "SKiDL Tag") "TP2")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3081,7 +3081,7 @@
         (field
           (name "SKiDL Tag") "TP3")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3105,7 +3105,7 @@
         (field
           (name "SKiDL Tag") "TP4")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3129,7 +3129,7 @@
         (field
           (name "SKiDL Tag") "TP5")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3153,7 +3153,7 @@
         (field
           (name "SKiDL Tag") "TP6")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3177,7 +3177,7 @@
         (field
           (name "SKiDL Tag") "TP7")
         (field
-          (name "SKiDL Line") "totem.py:198"))
+          (name "SKiDL Line") "totem.py:204"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3201,7 +3201,7 @@
         (field
           (name "SKiDL Tag") "U1")
         (field
-          (name "SKiDL Line") "totem.py:177"))
+          (name "SKiDL Line") "totem.py:183"))
       (libsource
         (lib "RF_Module")
         (part "ESP32-WROOM-32E"))
@@ -3225,7 +3225,7 @@
         (field
           (name "SKiDL Tag") "U2")
         (field
-          (name "SKiDL Line") "totem.py:215"))
+          (name "SKiDL Line") "totem.py:221"))
       (libsource
         (lib "RF_GPS")
         (part "MAX-M10S"))
@@ -3249,7 +3249,7 @@
         (field
           (name "SKiDL Tag") "U3")
         (field
-          (name "SKiDL Line") "totem.py:94"))
+          (name "SKiDL Line") "totem.py:100"))
       (libsource
         (lib "Battery_Management")
         (part "TP4056-42-ESOP8"))
@@ -3273,7 +3273,7 @@
         (field
           (name "SKiDL Tag") "U4")
         (field
-          (name "SKiDL Line") "totem.py:157"))
+          (name "SKiDL Line") "totem.py:163"))
       (libsource
         (lib "Regulator_Linear")
         (part "AP2112K-3.3"))
@@ -3297,7 +3297,7 @@
         (field
           (name "SKiDL Tag") "U5")
         (field
-          (name "SKiDL Line") "totem.py:232"))
+          (name "SKiDL Line") "totem.py:238"))
       (libsource
         (lib "Sensor_Motion")
         (part "ICM-20948"))
@@ -3945,15 +3945,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "J1")
-        (pin "A1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J1")
         (pin "A12")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J1")
-        (pin "B1")
         (pintype "PASSIVE"))
       (node
         (ref "J1")
@@ -5153,15 +5145,7 @@
         (pintype "PASSIVE"))
       (node
         (ref "J1")
-        (pin "A4")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J1")
         (pin "A9")
-        (pintype "PASSIVE"))
-      (node
-        (ref "J1")
-        (pin "B4")
         (pintype "PASSIVE"))
       (node
         (ref "J1")
