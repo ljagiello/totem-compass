@@ -1,0 +1,22 @@
+(version 1)
+
+# Exceptions the reference board itself makes, each scoped to one pair of parts.
+# Everything else is held to the board setup's rules (pcb/rules.py).
+
+# The TP4056 sits 0.3 mm below the ESP32 module's edge (measured from the
+# photographs). Bodies and pads are clear; only the module footprint's
+# courtyard margin, and the TP4056's pin-1 mark against the module outline,
+# overlap.
+(rule "TP4056 against the ESP32 module: courtyards"
+    (constraint courtyard_clearance (min -1mm))
+    (condition "(A.Reference == 'U1' && B.Reference == 'U3') || (A.Reference == 'U3' && B.Reference == 'U1')"))
+(rule "TP4056 against the ESP32 module: silkscreen"
+    (layer "F.Silkscreen")
+    (constraint silk_clearance (min -1mm))
+    (condition "(A.memberOfFootprint('U1') && B.memberOfFootprint('U3')) || (A.memberOfFootprint('U3') && B.memberOfFootprint('U1'))"))
+
+# The SOS LED sits between the SOS switch's gull-wing legs (photo). It clears
+# the switch's body and pads; only the courtyards overlap.
+(rule "SOS LED between the SOS switch's legs"
+    (constraint courtyard_clearance (min -1mm))
+    (condition "(A.Reference == 'D3' && B.Reference == 'SW2') || (A.Reference == 'SW2' && B.Reference == 'D3')"))
