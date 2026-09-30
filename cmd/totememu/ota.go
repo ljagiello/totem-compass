@@ -1,4 +1,4 @@
-//go:build tinygo && esp32
+//go:build tinygo && (esp32 || esp32s3)
 
 package main
 

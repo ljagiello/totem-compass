@@ -414,11 +414,13 @@ func (p *Power) update(b Battery) (PowerMode, bool) {
 	switch {
 	case p.off:
 		return p.mode, false
-	case b.NoPowerChip:
+	case b.NoPowerChip, b.NoBattery:
 		// No cell to be low: the zeroes such a board reports are the
 		// absence of a reading, and driving it into PowerLow would put
 		// power mode 2 in every status frame and flash the low-battery
-		// ring at someone whose device cannot go flat.
+		// ring at someone whose device cannot go flat. Both reasons for
+		// having no reading answer here — a board with no monitor at all,
+		// and a board whose monitor says no pack is fitted.
 		p.mode = PowerNormal
 	case b.Charging:
 		// On the charger first: a pack that reads flat while it charges is

@@ -19,7 +19,7 @@ func TestSimWalks(t *testing.T) {
 		t.Fatal("no fix")
 	}
 	// A minute at 5 km/h is about 83 m, mostly east.
-	d := distance(37.775, -122.42, last.Fix.Lat, last.Fix.Lon)
+	d := DistanceM(37.775, -122.42, last.Fix.Lat, last.Fix.Lon)
 	if d < 60 || d > 110 {
 		t.Errorf("walked %.0f m in a minute, want about 83", d)
 	}
@@ -57,7 +57,7 @@ func TestSimWanderIsPerSecond(t *testing.T) {
 	if off := math.Abs(float64(last.Azimuth) - 90); off > 60 {
 		t.Errorf("walked a minute and the compass moved %.0f° to %d°", off, last.Azimuth)
 	}
-	if d := distance(37.775, -122.42, last.Fix.Lat, last.Fix.Lon); d < 60 || d > 110 {
+	if d := DistanceM(37.775, -122.42, last.Fix.Lat, last.Fix.Lon); d < 60 || d > 110 {
 		t.Errorf("walked %.0f m in a minute of fast polling, want about 83", d)
 	}
 }
@@ -171,7 +171,7 @@ func TestStartAndStopSim(t *testing.T) {
 	if moving.Fix == nil || moving.Fix.SpeedKPH != 50 {
 		t.Fatalf("driving sensors = %+v", moving)
 	}
-	if d := distance(37.775, -122.42, moving.Fix.Lat, moving.Fix.Lon); d < 700 || d > 1000 {
+	if d := DistanceM(37.775, -122.42, moving.Fix.Lat, moving.Fix.Lon); d < 700 || d > 1000 {
 		t.Errorf("drove %.0f m in a minute, want about 833", d)
 	}
 	if moving.Fix.Lat >= 37.775 {

@@ -1,4 +1,4 @@
-//go:build tinygo && esp32
+//go:build tinygo && (esp32 || esp32s3)
 
 // Command totememu turns an ESP32 into a Totem on the ESP-NOW mesh. It
 // bonds with, and only talks to, the Totems listed in owned.
@@ -14,18 +14,15 @@
 package main
 
 import (
-	"device/esp"
 	"errors"
 	"fmt"
 	"log/slog"
-	"machine"
 	"math/rand/v2"
 	"os"
-	"runtime/volatile"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"tinygo.org/x/espradio"
 
@@ -52,6 +49,69 @@ var (
 	// not own, and that should be a decision made while flashing, not a
 	// keystroke away on a board sitting in someone else's crowd.
 	relayUnowned = ""
+	// bondingRSSI overrides the weakest bond request the board will accept,
+	// in dBm, as a negative number: -X main.bondingRSSI=-45.
+	//
+	// The firmware's own limit is -25, and it is there so a Totem cannot
+	// bond with a stranger across a room. This board has a stronger rule
+	// already: it only bonds with the MACs in owned, so no signal level lets
+	// a stranger in. What the limit costs here is a bench pairing, because
+	// the hand that has to hold the Touch Crystal to start pairing absorbs
+	// the Totem's own signal — measured on this board, locate frames from a
+	// Totem sitting still arrive at -21 to -25 dBm and its bond requests,
+	// sent while it is being held, at -33 to -36.
+	//
+	// Empty keeps the firmware's number, so a board flashed without thinking
+	// about it behaves like a Totem.
+	bondingRSSI = ""
+)
+
+// simWatcher is a sensor source that wants to know when the node has been
+// switched to a simulation, because it is then not being read.
+type simWatcher interface{ watchSim(func() bool) }
+
+// bondingLimit reads the bondingRSSI build flag. Anything unparseable, or
+// out of the range a signal strength can be, is reported and ignored rather
+// than silently turning the limit off.
+func bondingLimit(log *slog.Logger) int8 {
+	if bondingRSSI == "" {
+		return 0 // the node fills in the firmware's own -25
+	}
+	v, err := strconv.Atoi(bondingRSSI)
+	if err != nil || v >= 0 || v < -100 {
+		log.Warn("main.bondingRSSI is not a signal strength in dBm; keeping the firmware's limit",
+			"value", bondingRSSI, "want", "a negative number no lower than -100")
+		return 0
+	}
+	log.Warn("the bonding signal limit has been loosened from the firmware's -25",
+		"dbm", v, "note", "only the MACs in owned can bond at any strength")
+	return int8(v)
+}
+
+// magConsole is a sensor source with a compass the console can reach: read
+// it, or run the calibration turn it needs before it can be believed.
+type magConsole interface {
+	magReport()
+	calibrateMag(now func() time.Time)
+}
+
+// talkerSource is a sensor source backed by a real receiver, which can say
+// which constellations it is solving from. Reported with the rest of the
+// status rather than only at the first fix: a line logged once at boot is
+// gone by the time anyone wonders, and this is the number that bounds how
+// accurate every position the board sends can be. See gnss.Reader.Talker.
+type talkerSource interface{ Talker() string }
+
+// The battery a board reports when nothing measures one: a healthy cell,
+// not a flat one. It is both what the node is configured with and what the
+// board's sensor source falls back to, so the two cannot drift apart.
+//
+// A healthy reading on purpose. Zeroes would put the node into its low
+// power mode and hold the OTA gate shut, and neither is true of a board
+// sitting on a bench with no cell in it.
+const (
+	restingVolts = 4.1
+	restingPct   = 95
 )
 
 func main() {
@@ -77,6 +137,24 @@ func main() {
 		}
 		allow = append(allow, m)
 	}
+	// The board's own parts, where it has any, before the radio rather than
+	// after it. Nil on a board with none, and then the reading configured
+	// below is what the node reports.
+	//
+	// Before, because this is slow: a quarter second of rail cycling, three
+	// rail settles and a second spent listening to the GNSS receiver to see
+	// whether it is there. Done after startRadio, all of that ran with
+	// ESP-NOW already delivering into a sixteen-slot ring that nothing pops
+	// until the main loop — so a pairing broadcast arriving in that window
+	// was dropped. Nothing in the bring-up needs the radio.
+	//
+	// Moving it out of the emulator.Config literal was not enough on its
+	// own, and the first attempt at this claimed otherwise: the literal is
+	// evaluated in the same place relative to startRadio and the loop, so
+	// the window was exactly as wide as before.
+	sensors := newSensorSource(log, emulator.Sensors{
+		Battery: emulator.Battery{Volts: restingVolts, Percent: restingPct},
+	})
 	mac, err := startRadio()
 	if err != nil {
 		fail(log, err)
@@ -118,8 +196,17 @@ func main() {
 	if len(boot0.Name) != 0 && name == "" {
 		name = boot0.Name
 	}
+	// A separate instant for the node, because boot is what the console's
+	// timestamps count from: rebasing it made every line logged during the
+	// bring-up print an `up` of up to 1.5 s and then the next line print
+	// 0.00s, so the board's only diagnostic channel ran backwards across
+	// exactly the window that had just been made slow.
+	nodeBoot := time.Now()
 	node := emulator.New(emulator.Config{
-		MAC: mac, Owned: allow, Name: name, AutoPair: true, BattVolts: 4.1, BattPct: 95,
+		MAC: mac, Owned: allow, Name: name, AutoPair: true,
+		BondingRSSI: bondingLimit(log),
+		BattVolts:   restingVolts, BattPct: restingPct,
+		Sensors: sensors,
 		ColorID: boot0.ColorID, RelayUnowned: relayUnowned == "1",
 		// The update client runs the firmware's exchange against a
 		// transport that answers from memory: this board has no
@@ -127,12 +214,18 @@ func main() {
 		// having one.
 		OTATransport: newLocalOTA(),
 		Logger:       log, Rand: rand.New(rand.NewPCG(hwRandom(), hwRandom())),
-	}, boot)
-	saved.Restore(node, boot)
+	}, nodeBoot)
+	// The compass needs to know when the node is reading a simulation rather
+	// than this source, because a calibration turn would then collect
+	// nothing. Set after New, which is when there is a node to ask.
+	if w, ok := sensors.(simWatcher); ok {
+		w.watchSim(node.Simulating)
+	}
+	saved.Restore(node, nodeBoot)
 	saved.Save(node) // records this boot, and writes nothing if nothing changed
 	log.Info("totem emulator ready", "mac", mac, "name", node.Config().Name, "owned", owned,
-		"relay_unowned", relayUnowned == "1",
-		"channel", mesh.Channel, "phy", "LR 250K", "boots", boot0.BootCount)
+		"relay_unowned", relayUnowned == "1", "bonding_rssi", node.Config().BondingRSSI,
+		"channel", mesh.Channel, "phy", "LR 250K", "tx_dbm", TxPowerDBm(), "boots", boot0.BootCount)
 	log.Info("hold your Totem's button for 1.2 s next to this board to pair, or type help")
 
 	front := newPanel(log)
@@ -178,7 +271,7 @@ func main() {
 		timer.Reset(wait)
 		select {
 		case line := <-cmds:
-			radio.send(command(log, node, saved, line))
+			radio.send(command(log, node, saved, sensors, line))
 			// A command is the usual way a setting changes — the colour,
 			// the brightness, the name — so look for something to save
 			// right after one. save writes nothing when nothing changed.
@@ -267,7 +360,13 @@ func (r *radio) report() {
 }
 
 // command runs one console line.
-func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line string) []emulator.Packet {
+// sensors is the board's own source, passed in rather than taken from the
+// node: the node's source is whatever is being read right now, which a
+// running simulation replaces, while the compass belongs to the board
+// whatever the node is reading.
+func command(log *slog.Logger, n *emulator.Node, saved *settings.Store,
+	sensors emulator.SensorSource, line string,
+) []emulator.Packet {
 	if strings.TrimSpace(line) == "" {
 		return nil
 	}
@@ -307,6 +406,15 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		self := []any{"mac", cfg.MAC, "name", cfg.Name, "pairing", n.Pairing(), "sos", cfg.SOS,
 			"heading", sense.Azimuth, "color", cfg.ColorID, "flat", sense.Orientation == mesh.OrientationHorizontal,
 			"batt", sense.Battery.Percent, "volts", sense.Battery.Volts, "charging", sense.Battery.Charging}
+		// Why those are zero, when they are. A board on USB with no cell
+		// fitted reports nought percent at nought volts, which is exactly
+		// what a flat pack reports, and the difference decides whether the
+		// device is about to power itself down. Said only when it applies,
+		// so an ordinary status line does not carry it — the same trap
+		// has_position is spelled out for below.
+		if sense.Battery.NoBattery {
+			self = append(self, "no_battery", true)
+		}
 		// n.Fix(), not sense.Fix: the reading is whatever a receiver
 		// reported, and a driver may report a NaN. This handler writes
 		// JSON, which cannot hold one — a single such reading turns the
@@ -321,6 +429,11 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		if p := n.Fix(); p != nil {
 			self = append(self, "lat", p.Lat, "lon", p.Lon, "acc", p.AccuracyM,
 				"speed", p.SpeedKPH, "sats", p.SatCount, "odometer_m", p.OdometerM)
+		}
+		if t, ok := sensors.(talkerSource); ok {
+			if id := t.Talker(); id != "" {
+				self = append(self, "talker", id)
+			}
 		}
 		log.Info("self", self...)
 		for _, p := range n.Peers() {
@@ -357,6 +470,21 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store, line str
 		log.Info("ota", "state", o.State(), "detail", o.Describe())
 	case emulator.OpFlash:
 		flashSelfTest(log)
+	case emulator.OpI2C:
+		i2cScan(log)
+	case emulator.OpMag:
+		// The sensor source owns the compass, so the command goes to it.
+		// A board without one — or a host build — finds nothing here and
+		// says so rather than pretending.
+		m, ok := sensors.(magConsole)
+		switch {
+		case !ok:
+			log.Warn("no magnetometer on this build")
+		case c.Sub == "calibrate":
+			m.calibrateMag(time.Now)
+		default:
+			m.magReport()
+		}
 	case emulator.OpStore:
 		switch c.Sub {
 		case "forget":
@@ -380,9 +508,11 @@ func readLines(log *slog.Logger, out chan<- string) {
 	for {
 		b, ok := consoleByte()
 		if !ok {
-			// The UART FIFO holds 128 bytes, which is 11 ms of traffic at
-			// 115200 baud. Sleeping longer than that loses the middle of a
-			// long line — an injected frame is 200-odd characters.
+			// The smaller of the two receive FIFOs behind consoleByte holds
+			// 64 bytes: the ESP32's UART holds 128, the S3's USB endpoint
+			// 64, which is 5.5 ms of traffic at 115200 baud. Sleeping
+			// longer than that loses the middle of a long line — an
+			// injected frame is 200-odd characters.
 			time.Sleep(2 * time.Millisecond)
 			continue
 		}
@@ -395,27 +525,9 @@ func readLines(log *slog.Logger, out chan<- string) {
 	}
 }
 
-// consoleByte returns the next byte typed on the console. The UART receive
-// interrupt stops firing once the WiFi blob runs, so the RX FIFO is polled
-// as well, through its AHB address (UART0 base + 0x200C0000) as TinyGo's
-// driver reads it to avoid an ESP32 silicon erratum.
-func consoleByte() (byte, bool) {
-	if b, err := machine.Serial.ReadByte(); err == nil {
-		return b, true
-	}
-	if esp.UART0.GetSTATUS_RXFIFO_CNT() == 0 {
-		return 0, false
-	}
-	return (*volatile.Register8)(unsafe.Add(unsafe.Pointer(esp.UART0), 0x200C0000)).Get(), true
-}
-
-// hwRandom reads RNG_DATA_REG, which gives true random numbers while the
-// radio runs (ESP32 Technical Reference Manual, Random Number Generator
-// chapter, register RNG_DATA_REG at 0x3FF75144).
-func hwRandom() uint64 {
-	reg := (*volatile.Register32)(unsafe.Pointer(uintptr(0x3ff75144)))
-	return uint64(reg.Get())<<32 | uint64(reg.Get())
-}
+// consoleByte and hwRandom live in chip_esp32.go and chip_esp32s3.go: the
+// console reaches a different peripheral on each chip, and only one of the
+// two has a random number generator TinyGo will drive for us.
 
 func fail(log *slog.Logger, err error) {
 	for {

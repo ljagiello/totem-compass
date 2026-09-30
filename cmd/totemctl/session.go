@@ -63,11 +63,16 @@ func isHandoff(m protocol.Message) bool {
 	return ok && h.ToApp
 }
 
+// describeMatch names what a scan is looking for. It says "your", because
+// every command here reaches the user's own Totem, and several of them act
+// on peers that are Totems too: "scanning for a Totem" while deleting a
+// peer reads as though the offline peer had to be found first, which it
+// does not — the friend list lives on the device we connect to.
 func describeMatch(m string) string {
 	if m == "" {
-		return "a Totem"
+		return "your Totem"
 	}
-	return fmt.Sprintf("a Totem matching %q", m)
+	return fmt.Sprintf("your Totem, matching %q", m)
 }
 
 func orUnnamed(s string) string {

@@ -586,13 +586,25 @@ func newPeerCmd(g *globals) *cobra.Command {
 	}
 	sel.Flags().BoolVar(&stop, "stop", false, "close the peer-management UI")
 
-	return group("peer", "Manage a bonded peer",
+	peer := group("peer", "Manage a bonded peer",
 		color,
 		byMAC("hide", "Hide the peer from the ring", func(u *protocol.PeerUpdate) { u.Hidden = true }),
 		byMAC("show", "Show a hidden peer on the ring again", func(u *protocol.PeerUpdate) { u.Hidden = false }),
 		byMAC("delete", "Forget the peer", func(u *protocol.PeerUpdate) { u.Delete = true }),
 		sel,
 	)
+	// Which device has to be connectable is not obvious when the peer is a
+	// Totem as well: the scan that these commands start looks for the
+	// user's own Totem, and the peer is never contacted at all. Saying so
+	// here, because a stale entry left by a peer that is switched off for
+	// good is the usual reason to reach for delete.
+	peer.Long = peer.Short + `.
+
+The friend list lives on your own Totem, so that is the only device which
+has to be connectable: double-press its power button when the scan starts.
+The peer itself is never contacted and need not be switched on or in range,
+which is what lets delete clear out a stale entry.`
+	return peer
 }
 
 // updatePeer applies change to the peer's current ring entry and confirms

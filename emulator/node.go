@@ -201,8 +201,12 @@ type Node struct {
 	gnssClock   bool
 	clockOffset time.Duration
 
-	source  SensorSource
-	sensors Sensors
+	source SensorSource
+	// replaced is a hardware source that StartSim set aside, kept so
+	// StopSim can give it back. Nil when nothing was set aside, which is
+	// every case where the source was a held reading rather than a driver.
+	replaced SensorSource
+	sensors  Sensors
 	// sensorsAt is when the sensors were last read: the node's idea of
 	// now for the parts that no frame or timer drives.
 	sensorsAt time.Time
@@ -639,6 +643,11 @@ func (n *Node) read(now time.Time) {
 	// no way to know, and one that claimed there was no chip would turn
 	// the OTA battery gate off on a board with a flat cell. An
 	// assignment, not a set: clearing is the half that keeps the gate on.
+	//
+	// Battery.NoBattery is deliberately not treated this way. Whether a
+	// cell is plugged into the chip is the one thing only the driver can
+	// see, and it changes while the board runs, so the reading has the
+	// last word there and this must not reach over and clear it.
 	n.sensors.Battery.NoPowerChip = n.cfg.NoPowerChip
 	// An orientation the frame has a meaning for. New settles this for
 	// what it is given and a source set later never passed through it,
@@ -747,7 +756,7 @@ func (n *Node) read(now time.Time) {
 	// percentage from the cell voltage, so a Totem holding 3.8 V says
 	// half full whatever a gauge beside it thinks. A source that means
 	// a flat pack says so with the voltage.
-	if !b.NoPowerChip && b.Volts > 0 && b.Percent == 0 {
+	if !b.NoPowerChip && !b.NoBattery && b.Volts > 0 && b.Percent == 0 {
 		b.Percent = battPctFor(b.Volts, n.power.LearnedMaxVolts())
 	}
 	// n.fix(), not the raw reading: a receiver whose position this node
@@ -1520,7 +1529,7 @@ func (n *Node) relay(now time.Time, frame []byte, m mesh.Locate) bool {
 	// worth trusting. An unusable one is no last hop at all, and a hop
 	// whose distance cannot be known cannot be too close.
 	if m.RelayMinDistM > 0 && usablePosition(m.LastHopLat, m.LastHopLon) &&
-		distance(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
+		DistanceM(pos.Lat, pos.Lon, m.LastHopLat, m.LastHopLon) < float64(m.RelayMinDistM) {
 		return false
 	}
 	b := slices.Clone(frame)
@@ -1749,7 +1758,7 @@ func (n *Node) peerDistance(p *peer) float64 {
 	if f == nil || !p.hasCoords {
 		return -1
 	}
-	return distance(f.Lat, f.Lon, p.lat, p.lon)
+	return DistanceM(f.Lat, f.Lon, p.lat, p.lon)
 }
 
 func (n *Node) furthestPeer() float64 {
@@ -1765,16 +1774,20 @@ func (n *Node) furthestPeer() float64 {
 	far := 0.0
 	for _, p := range n.peers {
 		if p.hasCoords {
-			far = max(far, distance(f.Lat, f.Lon, p.lat, p.lon))
+			far = max(far, DistanceM(f.Lat, f.Lon, p.lat, p.lon))
 		}
 	}
 	return far
 }
 
-// distance is the great-circle distance in meters. The firmware's
+// DistanceM is the great-circle distance in meters. The firmware's
 // get_distance lives in the native c_stats module; a haversine is
 // assumed.
-func distance(lat1, lon1, lat2, lon2 float32) float64 {
+//
+// Exported because a board's GNSS driver needs it too, to add up an
+// odometer from the fixes its receiver gives it, and because the clamp
+// below is the sort of thing nobody should write a second time.
+func DistanceM(lat1, lon1, lat2, lon2 float32) float64 {
 	const r = 6371000
 	φ1, φ2 := float64(lat1)*math.Pi/180, float64(lat2)*math.Pi/180
 	dφ, dλ := φ2-φ1, float64(lon2-lon1)*math.Pi/180
@@ -1999,6 +2012,12 @@ func (n *Node) SetClock(wall, now time.Time) error {
 // SetSensors replaces the sensor source, such as a simulated Totem or a
 // board's own drivers.
 func (n *Node) SetSensors(src SensorSource, now time.Time) {
+	// Any source set from outside settles what StopSim would restore: the
+	// stash is only meaningful for the source StartSim itself pushed aside,
+	// and a later StopSim reinstating a driver that something else had
+	// already replaced would discard both that source and the simulation's
+	// last reading. StartSim sets the stash again after calling this.
+	n.replaced = nil
 	n.source = src
 	n.cfg.Sensors = src
 	n.read(now)
@@ -2061,22 +2080,70 @@ func (n *Node) StartSim(m Motion, bearing int16, now time.Time) {
 		Motion: m, Bearing: bearing, NoFix: n.fix() == nil,
 		// The battery carries over as it reads, 0% included: a simulation
 		// started on a flat device must not report a full one.
-		Percent: n.sensors.Battery.Percent, Charging: n.sensors.Battery.Charging,
+		//
+		// Unless there is no cell to carry over. A board whose power chip
+		// says nothing is fitted reads 0% because that is the absence of a
+		// reading, not a flat pack, and starting a simulation from it put
+		// the board straight into power mode low — watched happen on the
+		// bench. A negative percentage is how SimConfig is asked for its
+		// own default, which is the honest answer here: a simulation on a
+		// board with no cell is simulating the cell too.
+		Percent: simPercent(n.sensors.Battery), Charging: n.sensors.Battery.Charging,
 		Flat: n.sensors.Orientation == mesh.OrientationHorizontal, Rand: n.rng,
 	}
 	if f := n.fix(); f != nil {
 		cfg.Lat, cfg.Lon = f.Lat, f.Lon
 	}
+	// Remember a source that reads hardware, so stopping gives it back.
+	// A held reading is not worth keeping — StopSim freezes the
+	// simulation's own last reading into a new one, which is the point of
+	// it — but a driver owns a power chip, a receiver and an IMU that were
+	// opened once at startup and cannot be rebuilt from a struct. Dropping
+	// one on the floor left a board reporting invented readings from parts
+	// sitting powered and unread until it was rebooted.
+	aside, hardware := n.source, false
+	if _, held := n.source.(*staticSensors); !held {
+		hardware = true
+		n.log.Warn("the board's own sensors are set aside while the simulation runs; " +
+			"sim off gives them back")
+	}
 	n.SetSensors(NewSim(cfg, now), now)
+	if hardware {
+		// After, not before: SetSensors clears the stash, because a source
+		// arriving by any other route settles the question of what there is
+		// to go back to.
+		n.replaced = aside
+	}
 	n.log.Info("simulation started", "motion", m, "bearing", bearing)
 	if cfg.NoFix {
 		n.log.Warn("the simulation has no position to walk from: set one with pos <lat> <lon>")
 	}
 }
 
+// simPercent is the charge a simulation starts from, given the reading it
+// replaces. It is the reading itself, or a request for SimConfig's default
+// when that reading is the absence of a cell rather than an empty one.
+func simPercent(b Battery) int8 {
+	if b.NoBattery || b.NoPowerChip {
+		return -1
+	}
+	return b.Percent
+}
+
+// Simulating says whether the readings currently come from a simulation
+// rather than from whatever source was given. A board's drivers ask, because
+// while it is true they are not being read at all.
+func (n *Node) Simulating() bool { return n.sim() != nil }
+
 // StopSim freezes the readings where the simulation left them.
 func (n *Node) StopSim(now time.Time) {
 	if n.sim() == nil {
+		return
+	}
+	if src := n.replaced; src != nil {
+		n.replaced = nil
+		n.SetSensors(src, now)
+		n.log.Info("simulation stopped; the board's own sensors are read again")
 		return
 	}
 	held := n.sensors
