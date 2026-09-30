@@ -102,6 +102,11 @@ type magConsole interface {
 // accurate every position the board sends can be. See gnss.Reader.Talker.
 type talkerSource interface{ Talker() string }
 
+// receiverSource is a sensor source that asked its GNSS module what it is.
+// On the status line for the same reason as the talker, and because the
+// module's name was once assumed, got wrong, and reasoned from.
+type receiverSource interface{ Receiver() string }
+
 // The battery a board reports when nothing measures one: a healthy cell,
 // not a flat one. It is both what the node is configured with and what the
 // board's sensor source falls back to, so the two cannot drift apart.
@@ -433,6 +438,11 @@ func command(log *slog.Logger, n *emulator.Node, saved *settings.Store,
 		if t, ok := sensors.(talkerSource); ok {
 			if id := t.Talker(); id != "" {
 				self = append(self, "talker", id)
+			}
+		}
+		if r, ok := sensors.(receiverSource); ok {
+			if name := r.Receiver(); name != "" {
+				self = append(self, "gnss", name)
 			}
 		}
 		log.Info("self", self...)

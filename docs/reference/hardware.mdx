@@ -193,8 +193,9 @@ board with different parts:
 | Microphone | yes, GPIO 36 | none |
 | LEDs | 60 + 7 addressable | none |
 
-The T-Beam SUPREME is sold with either a u-blox MAX-M10S or a Quectel L76K. The bench board's
-receiver was identified by asking it: its UBX-MON-VER reply reads `MOD=MAX-M10S`,
+The T-Beam SUPREME is sold with either a u-blox MAX-M10S or a Quectel L76K, so the emulator
+asks its receiver at boot and logs the answer (`gnss receiver`, and `gnss=` on the status
+line). The bench board's receiver was identified that way: its UBX-MON-VER reply reads `MOD=MAX-M10S`,
 `FWVER=SPG 5.10`, and it rejects Quectel's `PCAS` commands. Left unconfigured it solves from
 GPS, Galileo, BeiDou and QZSS at once (its GSA sentences carry system IDs 1, 3, 4 and 5), with
 GLONASS off.

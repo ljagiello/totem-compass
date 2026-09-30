@@ -104,7 +104,7 @@ same read returned the boot log and every line after it.
 
 | Reading | Where it comes from |
 | --- | --- |
-| Position, speed, course, clock | GNSS receiver on UART1, NMEA parsed by the `gnss` package |
+| Position, speed, course, clock | GNSS receiver on UART1, NMEA parsed by the `gnss` package. Which receiver (the board ships with a MAX-M10S or an L76K) is asked at boot, not assumed: see [Hardware](/reference/hardware) |
 | Battery, and whether a cell is fitted at all | AXP2101 power chip on the second I2C bus |
 | Orientation | QMI8658 IMU on the SPI bus, through `OrientationTracker` |
 | Heading | the console until `mag calibrate` is run, then the QMC6310 magnetometer (below) |

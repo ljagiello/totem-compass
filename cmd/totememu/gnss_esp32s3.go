@@ -16,6 +16,10 @@ package main
 // module awake and GPIO6 carrying its pulse per second. The receiver has no
 // power until the PMU's ALDO4 is on, which is why this runs after that.
 //
+// Which receiver is on the other end is not assumed. The board is sold with
+// a u-blox MAX-M10S or a Quectel L76K, so the driver asks at boot (ask,
+// gnss.Identify) and logs the answer. The bench board's says MAX-M10S.
+//
 // Signal numbers are from ESP-IDF's
 // components/soc/esp32s3/include/soc/gpio_sig_map.h. They are not the
 // ESP32's: U1RXD is signal 15 on this chip. The file is the same one
@@ -30,13 +34,15 @@ import (
 	"unsafe"
 
 	"device/esp"
+
+	"github.com/ljagiello/totem-compass/gnss"
 )
 
 const (
 	// The receiver's pins.
 	pinGNSSRX   = machine.GPIO9 // the board listens here
 	pinGNSSTX   = machine.GPIO8 // ... and answers here
-	pinGNSSWake = machine.GPIO7 // held high to keep an L76K awake
+	pinGNSSWake = machine.GPIO7 // held high: an L76K sleeps without it; a MAX-M10S ignores it
 	pinGNSSPPS  = machine.GPIO6 // one pulse a second, unused so far
 
 	// U1RXD_IN_IDX and U1TXD_OUT_IDX.
@@ -168,6 +174,44 @@ func (g *gnssPort) sample() []byte {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return buf
+}
+
+// write puts p on the wire to the receiver, waiting whenever the transmit
+// FIFO is nearly full. Used only for the few bytes of a query.
+func (g *gnssPort) write(p []byte) {
+	for _, c := range p {
+		for esp.UART1.GetSTATUS_TXFIFO_CNT() >= 120 {
+			time.Sleep(time.Millisecond)
+		}
+		esp.UART1.FIFO.Set(uint32(c))
+	}
+}
+
+// identify asks the receiver what it is: UBX-MON-VER first, which a u-blox
+// answers with its module and firmware, then PCAS06 for a receiver that
+// did not. Each question gets up to a second, and the wait stops as soon
+// as the answer names the part. The regular output keeps flowing while it
+// waits and comes back mixed with the answer; gnss.Identify looks past it.
+func (g *gnssPort) identify() gnss.Ident {
+	var id gnss.Ident
+	for _, q := range [][]byte{gnss.UBXMonVerPoll, gnss.PCASVersionQuery} {
+		g.write(q)
+		var buf []byte
+		block := make([]byte, 64)
+		for end := time.Now().Add(time.Second); time.Now().Before(end); {
+			if n := g.read(block); n > 0 {
+				buf = append(buf, block[:n]...)
+				if id = gnss.Identify(buf); id.Model != "" || id.Vendor == "quectel" {
+					return id
+				}
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		if id.Known() {
+			return id
+		}
+	}
+	return id
 }
 
 // inSel is the FUNCy_IN_SEL_CFG register for a signal, which names the pin

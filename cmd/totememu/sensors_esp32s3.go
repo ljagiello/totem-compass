@@ -80,8 +80,10 @@ type boardSensors struct {
 	log  *slog.Logger
 	pmu  *pmu
 	port *gnssPort
-	imu  *imu
-	mag  *mag
+	// receiver is what the GNSS module said it is when asked at boot.
+	receiver gnss.Ident
+	imu      *imu
+	mag      *mag
 
 	// heading is the last bearing the compass gave, in degrees.
 	heading int16
@@ -288,6 +290,16 @@ func (b *boardSensors) report() {
 			}
 		}
 	}
+	// Ask the receiver what it is rather than assume it: this board ships
+	// with either of two, and the wrong one was once written into the
+	// docs and reasoned from.
+	if b.receiver = b.port.identify(); b.receiver.Known() {
+		b.log.Info("gnss receiver", "vendor", b.receiver.Vendor,
+			"model", b.receiver.Model, "firmware", b.receiver.Firmware)
+	} else {
+		b.log.Warn("the gnss receiver did not say what it is",
+			"asked", "UBX-MON-VER and PCAS06")
+	}
 	sample := b.port.sample()
 	if len(sample) == 0 {
 		b.log.Warn("the gnss receiver said nothing in a second; " +
@@ -419,6 +431,15 @@ func (b *boardSensors) drain(now time.Time) {
 // Talker is which constellations the receiver is solving from, for the
 // status line. See gnss.Reader.Talker.
 func (b *boardSensors) Talker() string { return b.nmea.Talker() }
+
+// Receiver is the GNSS module's own name for itself, for the status line:
+// the model when it gave one, else the vendor, else "".
+func (b *boardSensors) Receiver() string {
+	if b.receiver.Model != "" {
+		return b.receiver.Model
+	}
+	return b.receiver.Vendor
+}
 
 // consume feeds bytes to the parser and keeps the fix that comes out.
 func (b *boardSensors) consume(p []byte, now time.Time) {
