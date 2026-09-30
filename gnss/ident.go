@@ -70,6 +70,12 @@ func Identify(p []byte) Ident {
 // field returns the value after the first occurrence of key: printable
 // bytes up to a NUL, a control byte, a NMEA checksum's '*' or a field's
 // ','. "" when the key is absent or has no value.
+//
+// A value that runs to the end of p is not taken: its terminator has not
+// arrived, so neither may the rest of it. The board reads the answer as it
+// comes in, and on the bench a read that ended mid-word gave "MAX" for
+// "MAX-M10S". A value maxField long is taken without one, which is what
+// bounds it.
 func field(p []byte, key string) string {
 	_, v, ok := bytes.Cut(p, []byte(key))
 	if !ok {
@@ -78,6 +84,9 @@ func field(p []byte, key string) string {
 	n := 0
 	for n < len(v) && n < maxField && v[n] >= 0x20 && v[n] < 0x7f && v[n] != '*' && v[n] != ',' {
 		n++
+	}
+	if n == len(v) && n < maxField {
+		return ""
 	}
 	return string(bytes.TrimSpace(v[:n]))
 }

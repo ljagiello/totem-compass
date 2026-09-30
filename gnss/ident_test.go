@@ -53,6 +53,22 @@ func TestIdentifyMonVerReply(t *testing.T) {
 	}
 }
 
+func TestIdentifyWaitsForTheWholeValue(t *testing.T) {
+	// The answer as the board reads it, a few bytes at a time. On the bench
+	// a read that ended mid-word was taken whole and logged model=MAX.
+	reply := monVer("ROM SPG 5.10 (7b202e)", "000A0000",
+		"FWVER=SPG 5.10", "PROTVER=34.10", "MOD=MAX-M10S")
+	for n := range len(reply) + 1 {
+		id := Identify(reply[:n])
+		if id.Model != "" && id.Model != "MAX-M10S" {
+			t.Fatalf("after %d bytes the model is %q, want MAX-M10S or nothing yet", n, id.Model)
+		}
+		if id.Firmware != "" && id.Firmware != "SPG 5.10" {
+			t.Fatalf("after %d bytes the firmware is %q, want SPG 5.10 or nothing yet", n, id.Firmware)
+		}
+	}
+}
+
 func TestIdentifyPCASRejection(t *testing.T) {
 	// A u-blox receiver's answer to PCASVersionQuery names nothing, and
 	// must not be read as a CASIC receiver answering.
