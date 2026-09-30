@@ -1,0 +1,114 @@
+* Behavioural models for the parts on the Totem reference design.
+*
+* None of these are vendor models. No vendor publishes a SPICE model for an
+* ESP32 module, a GNSS receiver or an addressable LED, and what those parts
+* do is firmware rather than circuit behaviour. What they present to the
+* circuit that surrounds them, though, is a supply current — and that is
+* what has to be right for the power design to be checked. So each one is
+* modelled as the load it is, at its datasheet figure, and every figure is
+* named below.
+*
+* The parts that are genuinely passive to this circuit — connectors, a
+* touch pad, switches, a test point — get the high-resistance stub that is
+* the conventional way to keep a netlist solvable without pretending the
+* part does something. 1e12 ohms is an open circuit as far as any result
+* here is concerned.
+*
+* Kept in the project rather than referenced from elsewhere on this
+* machine, so the simulation runs for anyone who has the repository.
+
+* --------------------------------------------------------------- charger
+* TP4056: a linear cell charger. Constant-current to 4.2 V, then constant
+* voltage. The current is set by the PROG resistor as I = 1200 / R_PROG,
+* so the 1k2 fitted here asks for 1 A. Modelled as a 4.2 V source behind
+* the resistance that produces that current limit, which reproduces both
+* phases without claiming to model the silicon's loop.
+.subckt TP4056 TEMP PROG GND VCC BAT STDBY CHRG CE EPAD
+BCHG BAT GND I = (v(CE) > 1.5 && v(VCC) > v(BAT) + 0.2) ? min(1.0, (4.2 - v(BAT)) * 20) : 0
+RLEAK BAT GND 1e7
+RTEMP TEMP GND 1e12
+RSTBY STDBY GND 1e12
+RCHRG CHRG GND 1e12
+REPAD EPAD GND 1e12
+.ends TP4056
+
+* ------------------------------------------------------------- regulator
+* AP2127K-3.3, or whatever the SOT-23-5 marked ACH turns out to be: a
+* 3.3 V LDO. Output follows the input down once the drop across the pass
+* element exceeds the headroom, which is the behaviour the rail has to be
+* checked against at the bottom of the discharge. Rpass 0.2 ohm is a
+* competent 500 mA part, 100 mV of dropout at full load.
+.subckt LDO_3V3 VIN GND EN NC VOUT
+BOUT VOUT GND V = (v(EN) > 1.0) ? min(3.3, v(VIN) - 0.2 * abs(i(VSENSE))) : 0
+VSENSE VOUT VOUTX 0
+RL VOUTX GND 1e9
+RNC NC GND 1e12
+.ends LDO_3V3
+
+* ------------------------------------------------------------------ MCU
+* ESP32-WROOM-32E. Datasheet: 500 mA peak during an RF transmit burst,
+* around 95 mA average with the radio active, 3.0 to 3.6 V supply. The
+* peak is what the rail must survive; it is a burst with a low duty cycle,
+* which is why the pass element's dissipation at that current is transient.
+.subckt ESP32 VDD GND
+IPEAK VDD GND 500m
+.ends ESP32
+
+* ----------------------------------------------------------------- GNSS
+* MAX-M10S: about 31 mA while acquiring, less once it has a fix.
+.subckt MAXM10S VCC GND
+IACQ VCC GND 31m
+.ends MAXM10S
+
+* ------------------------------------------------------------------ IMU
+* ICM-20948, gyro and accelerometer and magnetometer all running.
+.subckt ICM20948 VDD GND REGOUT
+IRUN VDD GND 3m
+* REGOUT is the part's own internal regulator, brought out only so its
+* decoupling capacitor has something to sit on. About 1.8 V.
+VREG REGOUT GND 1.8
+.ends ICM20948
+
+* ---------------------------------------------------------------- pixels
+* One WS2812B stands for a chain. 60 mA is a pixel at full white; the
+* current here is the chain's, at the firmware's default brightness of
+* 0.6, which is what the cell actually has to deliver.
+.subckt WS2812B_RING VDD GND DIN
+IRING VDD GND 2.16
+.ends WS2812B_RING
+
+.subckt WS2812B_CRYSTAL VDD GND DIN
+ICRY VDD GND 252m
+.ends WS2812B_CRYSTAL
+
+* ------------------------------------------------------- passive to this
+* Connectors, switches, a capacitive pad, a test point. Open circuits.
+.subckt STUB2 A B
+R1 A B 1e12
+.ends STUB2
+
+.subckt STUB1 A
+R1 A 0 1e12
+.ends STUB1
+
+.subckt STUB3 A B C
+R1 A B 1e12
+R2 B C 1e12
+.ends STUB3
+
+* A p-channel switch passing the cell to the LED rail. Gate low turns it
+* on, which is how GPIO 19 drives it.
+.subckt PMOS_SW G S D
+BSW S D I = (v(G) < v(S) - 1.0) ? (v(S) - v(D)) / 0.05 : (v(S) - v(D)) / 1e9
+.ends PMOS_SW
+
+* An indicator LED and its forward drop.
+.subckt LED_IND A K
+D1 A K DLED
+.model DLED D (IS=1e-14 N=2.0 RS=5)
+.ends LED_IND
+
+* The microphone, as the bias network sees it: a high impedance.
+.subckt MIC_MEMS M P
+R1 P M 2e3
+.ends MIC_MEMS
