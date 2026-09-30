@@ -1,0 +1,175 @@
+---
+title: "Totem hardware"
+description: "The parts on a Totem v3.5 board and the nets between them, read off the PCB and matched to the pins the firmware drives."
+---
+
+Every other page here was derived from the firmware image. This one starts at the other end:
+a **Totem v3.5** opened up and photographed, then matched against the pins the firmware
+actually drives. Each net below has a part at one end and a cited line of bytecode at the
+other.
+
+<Warning>
+  **This is a net-level schematic, not a reverse-engineered one.** It says which parts exist
+  and what each MCU pin is connected to. It does not give passive values, series resistors,
+  divider ratios or trace routing: those live under the components and on inner layers, and
+  no photograph of an assembled board can recover them. Nothing here is guessed to fill a
+  gap — where the answer is not known, the page says so.
+</Warning>
+
+Confidence markers mean what they do elsewhere in these docs. **Confirmed** additionally
+means a part number legible on the silkscreen, or a count taken from the photograph and
+matched independently in the bytecode. **Inferred** means the photograph is consistent and
+nothing contradicts it.
+
+## Bill of materials
+
+| # | Part | Marking | Role |
+| --- | --- | --- | --- |
+| U1 | **Espressif ESP32-WROOM-32E** | `ESP32-WROOM-32E`, FCC ID `2AC7Z-ESP32WROOM32E`, IC `21098-ESPWROOM32E`, CMIIT ID `2020DP2713` | Application CPU, WiFi, BLE and ESP-NOW, with its own PCB meander antenna |
+| U2 | **u-blox MAX-M10S** | `MAX-M10S`, `u-blox`, silkscreen `GNSS` | GNSS receiver: GPS, Galileo, BeiDou and GLONASS concurrently |
+| U3 | **Power-path / charger IC** | *not legible* | QFN beside the USB-C receptacle. Role **inferred** from position |
+| U4 | **IMU** | *not legible* | Accelerometer and gyroscope on I²C bus 0. Existence **confirmed** by the firmware, part unknown |
+| U5 | **Magnetometer** | *not legible* | On I²C bus 0. Existence **confirmed** by the firmware, part unknown |
+| MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
+| DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**) |
+| DS61…DS67 | **Touch Crystal cluster** | — | 7 more of the same under the moulded light pipe (**confirmed**). Six in a hexagon around a central post |
+| DS68 | **SOS indicator** | — | A discrete LED on its own pin, not part of either strip |
+| SW1 | **Power button** | black cap | Tactile switch. Also the power latch — see below |
+| SW2 | **SOS button** | red cap | Tactile switch |
+| TP1 | **Touch Crystal pad** | — | Capacitive pad under the light pipe |
+| J1 | **USB-C receptacle** | — | Charging and the serial console the updater uses |
+| J2 | **JST battery connector** | — | Two-pin, red and black |
+| J3 | **u.FL / IPEX connector** | — | One coaxial pigtail. **Inferred** to be the GNSS antenna: U1 has its own PCB antenna and the connector sits on the GNSS side |
+| BT1 | **LiPo cell** | `805080`, `1000mAh`, `3.7Wh`, `3.7V`, dated `2023.05.18` | Single cell in the housing |
+| — | **PCB** | `Totem v3.5`, `hs-pcba.com` | Board revision and contract manufacturer |
+
+## Schematic
+
+```mermaid
+flowchart TB
+    USB["J1 USB-C"] --> PWR["U3 power path / charger"]
+    BT["BT1 LiPo 1000mAh 3.7V"] <--> J2["J2 JST"]
+    J2 <--> PWR
+    PWR -->|3V3| U1
+
+    U1["U1 ESP32-WROOM-32E<br/>CPU + WiFi + BLE + ESP-NOW"]
+
+    PWR -.->|divider| A34["GPIO 34 ADC<br/>battery volts"]
+    PWR -.->|charger present| A39["GPIO 39 in<br/>is_charging"]
+    A34 --> U1
+    A39 --> U1
+
+    U1 ---|"UART 115200, UBX"| U2["U2 u-blox MAX-M10S<br/>GPS+GAL+BDS+GLO"]
+    U2 --- J3["J3 u.FL antenna"]
+
+    U1 ---|"I2C0 SDA 25 / SCL 26"| U4["U4 IMU"]
+    U1 ---|"I2C0 SDA 25 / SCL 26"| U5["U5 magnetometer"]
+
+    MK1["MK1 MEMS microphone"] -->|"GPIO 36 ADC"| U1
+    SW2["SW2 SOS button"] -->|"GPIO 0, pull-up"| U1
+    TP1["TP1 touch pad"] -->|"GPIO 27 cap touch"| U1
+    SW1["SW1 power button"] <-->|"GPIO 4 in/out"| U1
+    U1 -->|"GPIO 4 driven low"| GATE["external power gate"]
+    GATE -.->|releases| PWR
+
+    U1 -->|"GPIO 18 data"| RING["DS1-DS60 halo ring"]
+    U1 -->|"GPIO 19 enable"| RING
+    U1 -->|"GPIO 21 data"| CRY["DS61-DS67 crystal"]
+    U1 -->|"GPIO 14"| SOSLED["DS68 SOS LED"]
+```
+
+## Net list
+
+Every row's pin comes from the firmware and is cited; the destination is what the
+photographs show at the other end.
+
+| Net | Pin | Direction | Destination | Source |
+| --- | --- | --- | --- | --- |
+| `RING_DATA` | **GPIO 18** | out | DS1…DS60 | [LEDs](/subsystems/leds) |
+| `RING_EN` | **GPIO 19** | out, pull-up | Halo ring | [LEDs](/subsystems/leds) |
+| `CRYSTAL_DATA` | **GPIO 21** | out | DS61…DS67 | [LEDs](/subsystems/leds) |
+| `TOUCH` | **GPIO 27** | cap touch | TP1 | [Power](/subsystems/power) — literal confirmed, role inferred |
+| `BTN_PWR` / `PWR_LATCH` | **GPIO 4** | in, pull-up; re-opened as out | SW1 and the power gate | [Power](/subsystems/power) |
+| `BTN_SOS` | **GPIO 0** | in, pull-up | SW2 | [Power](/subsystems/power) |
+| `SOS_LED` | **GPIO 14** | out, pull-down | DS68 | [Power](/subsystems/power) |
+| `VBAT_SENSE` | **GPIO 34** | ADC, `ATTN_11DB` | Divider off BT1 | [Power](/subsystems/power) |
+| `CHG_PRESENT` | **GPIO 39** | in | U3 | [Power](/subsystems/power) |
+| `MIC` | **GPIO 36** | ADC, `ATTN_11DB` | MK1 | [Power](/subsystems/power) |
+| `I2C0_SDA` | **GPIO 25** | bidirectional | U4, U5 | [Navigation](/subsystems/navigation) |
+| `I2C0_SCL` | **GPIO 26** | out | U4, U5 | [Navigation](/subsystems/navigation) |
+| `GNSS_TX` / `GNSS_RX` | **not recovered** | UART | U2 | [Navigation](/subsystems/navigation) |
+
+The pull-ups named above are the ESP32's **internal** ones, since that is what the firmware
+asks for (`Pin.PULL_UP`). Whether external pull-ups are also fitted — on I²C they normally
+must be — is not visible.
+
+## Notes on the interesting nets
+
+### GPIO 4 is the power button and the power latch
+
+While the Totem runs, GPIO 4 is an input with a pull-up and reads SW1. To switch off, the
+firmware re-opens the *same pin* as an output and drives it low, releasing an external
+hardware gate:
+
+```python
+Pin(4, Pin.OUT, Pin.PULL_UP).off()
+```
+
+That is the real "off" ([Power](/subsystems/power)). Button and latch share one net, so the
+board cannot read the button while it is asserting the latch — which is exactly what powering
+down means.
+
+### The microphone is a loudness sensor
+
+`mic.read_u16` on GPIO 36 feeds Vibe Mode, which drives the halo from sound level
+(`new_vibe.dis:478`). Nothing in the image decodes audio, and there is no I²S peripheral in
+play: the MEMS part is sampled as an analogue level.
+
+### The GNSS link is binary, and the firmware configures it
+
+The receiver is driven over **UBX** at 115200 with `CFG-UART1OUTPROT-NMEA` **off** and
+`CFG-MSGOUT-UBX_NAV_PVT_UART1` on, so it emits NAV-PVT every epoch and no `$G…` text at all
+([Navigation](/subsystems/navigation)). The Totem does not merely read its receiver, it tells
+it what to be.
+
+### Both LED strips are one peripheral
+
+Ring and crystal are separate data pins but the same driver, timing and wire order: WS2812
+timings of 400/850/800/450 ns through `machine.bitstream`, three bytes per pixel, **GRB**,
+no white channel ([LEDs](/subsystems/leds)).
+
+## What is not known
+
+These are gaps, not omissions, and each one names the photograph that would close it:
+
+| Unknown | What would resolve it |
+| --- | --- |
+| U3, U4, U5 part numbers | Macro shots of each package **with the LEDs off** — the halo's glare washes out laser marking at every exposure in the current set |
+| GNSS UART pin numbers | Either a higher-resolution shot of the traces leaving U2, or a deeper decode of the UART init |
+| Passive values, divider ratios, series resistors | A bare board, or the manufacturer's files. Not recoverable from an assembled one |
+| External pull-ups on I²C | Same |
+
+The current photographs are a 360×480 thumbnail of the radio side and two 4032×3024 shots of
+the LED side and the housing. At full resolution the QFN and the I²C parts are sharp but
+unmarked under the light.
+
+## How this differs from the emulator board
+
+The [ESP32 emulator](/reference/esp32-emulator) runs on a LILYGO T-Beam SUPREME — a different
+board with different parts:
+
+| | Totem v3.5 | T-Beam SUPREME |
+| --- | --- | --- |
+| MCU | ESP32-WROOM-32E | ESP32-S3 |
+| GNSS | u-blox MAX-M10S, 4 constellations | Quectel L76K, 3 at most |
+| GNSS protocol | UBX binary, NMEA off, firmware-configured | NMEA text, **no configuration sent at all** |
+| Power | integrated path, GPIO 4 latch | AXP2101 PMU on I²C |
+| IMU | I²C bus 0, part unknown | QMI8658 on SPI |
+| Magnetometer | I²C bus 0, part unknown | QMC6310 at 0x3c |
+| Microphone | yes, GPIO 36 | none |
+| LEDs | 60 + 7 addressable | none |
+
+Measured side by side on one desk, in the same minute: **the Totem reported 18 satellites and
+±2.2 m, the T-Beam 5–8 satellites and 3–13 m.** A four-constellation receiver that the
+firmware configures, against a three-constellation one that is sent nothing. Everything the
+emulator derives from its own position — a peer's bearing most of all — inherits that gap.
