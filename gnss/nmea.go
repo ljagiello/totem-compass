@@ -87,8 +87,9 @@ type Reader struct {
 //
 // It is worth reporting because it says which satellites a receiver is
 // allowed to use, which is the ceiling on the accuracy of everything built
-// on its fixes. A module left in its GPS-only default solves from a handful
-// of satellites where the same hardware would have had three times as many.
+// on its fixes. What a module solves from by default depends on the module
+// and is read here rather than assumed: the bench T-Beam's MAX-M10S, sent
+// nothing, reports GN from GPS, Galileo, BeiDou and QZSS.
 func (r *Reader) Talker() string { return r.talker }
 
 // ggaStaleAfter is how many sentences of interest a GGA's satellite count,
