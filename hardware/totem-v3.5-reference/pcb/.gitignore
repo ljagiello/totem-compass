@@ -4,3 +4,4 @@ board.json
 routes.json
 __pycache__/
 route.png
+*.log

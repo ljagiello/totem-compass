@@ -1,3 +1,0 @@
-./src/common/stdpbase.cpp(59): assert ""traits"" failed in Get(): create wxApp before calling this
-rules set: {'min_clearance': 0.13, 'min_track_width': 0.13, 'min_via_diameter': 0.45, 'min_via_annular_width': 0.1, 'min_through_hole_diameter': 0.2, 'min_hole_clearance': 0.2, 'min_hole_to_hole': 0.25, 'min_copper_edge_clearance': 0.3, 'min_connection': 0.13}
-3115 tracks, 434 vias; zones filled; unrouted: []; pour-only GND pads: []
