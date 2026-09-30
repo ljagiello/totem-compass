@@ -1200,6 +1200,28 @@ func TestSimKeepsAFlatBattery(t *testing.T) {
 	}
 }
 
+// TestSimOnABoardWithNoCell: the other side of the rule above. Zero
+// percent from a power chip that says nothing is fitted is the absence of a
+// reading, not an empty pack, and carrying it into a simulation put a
+// development board straight into its low power mode — watched happen on
+// the bench, where the board has no cell and is on USB.
+func TestSimOnABoardWithNoCell(t *testing.T) {
+	h := newHarness(t, func(c *Config) {
+		c.Sensors = NewStatic(Sensors{Battery: Battery{NoBattery: true}})
+	})
+	h.collect(h.n.Poll(h.now))
+	h.n.StartSim(Walk, 90, h.now)
+	if got := h.n.Sensors().Battery.Percent; got == 0 {
+		t.Error("a simulation on a board with no cell started flat")
+	}
+	if h.n.Power().Describe() == "" {
+		t.Error("no power mode after starting the simulation")
+	}
+	if got := h.n.Power(); got.Off() {
+		t.Error("a simulation on a board with no cell powered the device down")
+	}
+}
+
 // TestAPoweredDownDeviceSendsNothing: a device that has switched itself
 // off has no radio, and Receive already refuses to answer while it is
 // off. The console can still reach Pair and Unbond, though, and without

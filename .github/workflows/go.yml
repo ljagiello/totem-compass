@@ -94,6 +94,7 @@ jobs:
           - { package: ./emulator, target: FuzzInput }
           - { package: ./emulator, target: FuzzRestore }
           - { package: ./cmd/totememu/settings, target: FuzzSettings }
+          - { package: ./gnss, target: FuzzReader }
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -115,9 +116,18 @@ jobs:
           path: ${{ matrix.package }}/testdata/fuzz/${{ matrix.target }}/
 
   firmware:
-    name: ESP32 emulator firmware
-    # cmd/totememu only builds with TinyGo (build tag tinygo && esp32), so
-    # the jobs above skip it.
+    name: Emulator firmware (${{ matrix.target }})
+    # cmd/totememu only builds with TinyGo (build tag tinygo && (esp32 ||
+    # esp32s3)), so the jobs above skip it.
+    #
+    # Both chips, because most of the firmware is now shared between them
+    # and each has files the other never compiles — its own flash driver,
+    # its own console and random number source. A change that builds for
+    # one can fail to build for the other, and did while this was written.
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32-generic, esp32s3-generic]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -135,7 +145,7 @@ jobs:
           install-binaryen: false
 
       - name: Build
-        run: tinygo build -target esp32-generic -size short -o totememu.bin ./cmd/totememu
+        run: tinygo build -target ${{ matrix.target }} -size short -o totememu.bin ./cmd/totememu
 
   lint:
     name: golangci-lint

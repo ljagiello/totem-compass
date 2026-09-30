@@ -88,9 +88,15 @@ func (g *globals) phase(name string) {
 }
 
 const wakeHelp = `The Totem keeps Bluetooth off to save power and switches it off again
-after every session. To make it connectable, double-press the power button:
-the crystal breathes blue while it advertises, for 60 seconds. The
-double-press toggles, so if it doesn't breathe blue, press again.
+after every session, so every command needs its own press: to make it
+connectable, double-press the power button. The crystal breathes blue while it
+advertises, for 60 seconds. A second double-press only re-arms those 60
+seconds, it does not turn Bluetooth off again, so press again if the crystal
+isn't breathing.
+
+Start the command first and press while it is scanning. The advertising window
+and the default scan timeout are both 60 s, so pressing first spends the window
+on your typing.
 
 A Totem connected to another device, such as the Totem phone app, stops
 advertising and can't be found. Close the app (or turn off the phone's
@@ -120,10 +126,12 @@ func realMain() int {
 	g := &globals{start: time.Now(), configPath: defaultConfigPath()}
 	g.connect = g.connectBLE
 	g.scan = client.Scan
-	g.openPort = openSerial
 	// Wrapped, not assigned: GetDetailedPortsList is variadic, so its type
 	// is func(...func(string, string) bool) and does not match this field.
 	g.ports = func() ([]*enumerator.PortDetails, error) { return enumerator.GetDetailedPortsList() }
+	// openSerial reads the list too, to tell a chip's own USB port from a
+	// bridge and leave the modem lines where that board wants them.
+	g.openPort = func(name string) (io.ReadWriteCloser, error) { return openSerial(name, g.ports) }
 	cmd, err := newRootCmd(g).ExecuteContextC(ctx)
 	if err != nil {
 		msg := err.Error()
@@ -265,12 +273,50 @@ func (g *globals) configure(cmd *cobra.Command, v *viper.Viper) error {
 	return nil
 }
 
+// scanHintAfter is how long a scan runs before the wake hint appears. A
+// Totem that is already advertising is found in well under a second, so
+// the hint stays out of the way until the wait is itself the evidence
+// that nobody has pressed the button. A variable so the tests need not
+// wait it out.
+var scanHintAfter = 2 * time.Second
+
+// hintWhileScanning prints the wake hint if the scan outlasts
+// scanHintAfter, and returns the function that ends it.
+//
+// The double-press is the one step only the user can do, and it used to
+// appear solely in --help and in the error after a minute of silence,
+// which is too late to act on: the advertising window and the default
+// scan timeout are both 60 s, so a user who learns of the press from the
+// error has already missed the window they were being told about.
+//
+// stop waits for the goroutine, so nothing prints after it returns. The
+// caller is blocked in Find until then and prints nothing itself, so the
+// two never write to the printer at once.
+func (g *globals) hintWhileScanning(ctx context.Context) (stop func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTimer(scanHintAfter)
+		defer t.Stop()
+		select {
+		case <-ctx.Done():
+		case <-t.C:
+			g.out.status("still looking: double-press your Totem's power button " +
+				"and watch for its crystal to breathe blue")
+		}
+	}()
+	return func() { cancel(); <-done }
+}
+
 // connectBLE finds the Totem over Bluetooth and connects to it.
 func (g *globals) connectBLE(ctx context.Context, opts client.Options) (*client.Client, error) {
 	scanCtx, cancel := context.WithTimeout(ctx, g.scanTimeout)
 	defer cancel()
 	g.out.status("scanning for %s…", describeMatch(g.device))
+	stop := g.hintWhileScanning(scanCtx)
 	dev, err := client.Find(scanCtx, g.device)
+	stop()
 	if errors.Is(err, client.ErrNotFound) {
 		hint := ""
 		if g.device != "" {
@@ -278,7 +324,9 @@ func (g *globals) connectBLE(ctx context.Context, opts client.Options) (*client.
 				"pick one by the address `totemctl scan` shows"
 		}
 		return nil, fmt.Errorf("%w%s. A Totem is only visible for 60 s after a double-press of the power button, "+
-			"while its crystal breathes blue (the double-press toggles, so press again if it doesn't). "+
+			"while its crystal breathes blue; it goes off again after every session, so each command needs "+
+			"its own press. Start the command first and press while it scans: a second double-press only "+
+			"re-arms the 60 s, it will not turn Bluetooth off. "+
 			"If the Totem phone app is open nearby, close it: a connected Totem stops advertising", err, hint)
 	}
 	if err != nil {

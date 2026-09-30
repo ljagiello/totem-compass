@@ -16,7 +16,7 @@
 // it must stay that way: no literal pool in flash, no call to a function
 // that lives in flash, no memcpy, no table.
 
-#include "flash.h"
+#include "flash_esp32.h"
 
 // load copies the address table onto the stack while the cache is still
 // on. The caller's copy may sit in flash — a Go global the compiler

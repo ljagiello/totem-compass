@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,13 @@ const (
 	// firmware answers them. On the host the node leaves them unhandled.
 	OpFlash Op = "flash"
 	OpStore Op = "store"
+	// OpI2C scans the board's I2C buses and names what answers. Board
+	// only, for the same reason: there is no bus on a host.
+	OpI2C Op = "i2c"
+	// OpMag reads the magnetometer, and with "calibrate" measures the hard
+	// iron around it by watching a turn. Board only, and the one command
+	// here that asks a person to do something with their hands.
+	OpMag Op = "mag"
 	// OpRX feeds the node a frame as though the radio had heard it. It is
 	// how the mesh paths that need a second Totem — a locate relay, a
 	// Smart Group invitation — get exercised on the board itself.
@@ -54,7 +62,24 @@ const Help = "commands: pair | unbond <mac> | pos <lat> <lon> [accuracy m] | pos
 	"sos on|off | sim still|walk|drive [bearing] | sim off | flat on|off | batt <0-100> [charging] | " +
 	"clock <unix ms> | " +
 	"touch crystal|power|sos tap|double|triple|hold [ms] | leds | color <name> | power [on|off] | ota [update] | " +
-	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | log debug|info|warn|error | format text|json | selftest"
+	"rx <src mac> self|all <rssi> <hex frame> | status | store [forget|open] | flash | i2c | mag [calibrate] | log debug|info|warn|error | format text|json | selftest"
+
+// parseSub reads a command's optional single word, which must be one of
+// allowed. Shared because three commands now have this shape and the copies
+// had begun to differ: one of them assigned the word even while rejecting it.
+func parseSub(op Op, args, allowed []string) (string, error) {
+	switch len(args) {
+	case 0:
+		return "", nil
+	case 1:
+		if slices.Contains(allowed, args[0]) {
+			return args[0], nil
+		}
+		return "", fmt.Errorf("%s takes nothing or %s, got %q",
+			op, strings.Join(allowed, " or "), args[0])
+	}
+	return "", fmt.Errorf("%s takes at most one argument, got %d", op, len(args))
+}
 
 // ErrUnknownCommand is returned for a line that names no command.
 var ErrUnknownCommand = errors.New("unknown command")
@@ -100,20 +125,17 @@ func ParseCommand(line string) (Command, error) {
 	}
 	var err error
 	switch c.Op {
-	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash:
+	case OpPair, OpStatus, OpSelfTest, OpHelp, OpFlash, OpI2C:
 		err = want(0)
+	case OpMag:
+		// mag prints the field; mag calibrate watches a turn and works out
+		// the hard iron from it.
+		c.Sub, err = parseSub(OpMag, args, []string{"calibrate"})
 	case OpStore:
 		// store prints the saved settings; store forget wipes them, as a
 		// factory reset does; store open reads the sector on a board that
 		// did not read it while starting.
-		if len(args) == 1 {
-			if args[0] != "forget" && args[0] != "open" {
-				err = fmt.Errorf("store takes nothing, forget or open, got %q", args[0])
-			}
-			c.Sub = args[0]
-		} else {
-			err = want(0)
-		}
+		c.Sub, err = parseSub(OpStore, args, []string{"forget", "open"})
 	case OpUnbond:
 		if err = want(1); err == nil {
 			c.MAC, err = mesh.ParseMAC(args[0])
@@ -365,7 +387,7 @@ func parsePosition(args []string) (*Position, error) {
 		}
 		p.AccuracyM = int8(acc)
 	}
-	p.SolutionID = solutionFor(p.AccuracyM)
+	p.SolutionID = SolutionFor(p.AccuracyM)
 	return p, nil
 }
 
@@ -442,6 +464,11 @@ func (c Command) String() string {
 			return "store " + c.Sub
 		}
 		return "store"
+	case OpMag:
+		if c.Sub != "" {
+			return "mag " + c.Sub
+		}
+		return "mag"
 	}
 	return string(c.Op)
 }

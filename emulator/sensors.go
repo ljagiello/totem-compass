@@ -57,6 +57,22 @@ type Battery struct {
 	// is a power chip", which is the answer that keeps the gate on. A
 	// driver that has never heard of this field fails closed.
 	NoPowerChip bool
+	// NoBattery says a power chip is present and reports that no cell is
+	// connected to it, as a development board running from USB with no
+	// pack fitted does. Its zeroes mean the same thing NoPowerChip's do —
+	// the absence of a reading rather than a reading of zero — so
+	// everything that must not mistake them for a flat cell checks both.
+	//
+	// It is a separate field because it is a different fact, and the
+	// difference is visible: NoPowerChip is how the board is wired and is
+	// settled before it runs, while this is what the chip says today and
+	// changes the moment a pack is plugged in. Saying "no power chip" of a
+	// board that has one would also be false in every log line that
+	// printed it.
+	//
+	// Zero value again the cautious way: a driver that says nothing is
+	// taken to have a cell, and the gate stays on.
+	NoBattery bool
 }
 
 // SensorSource reads the sensors. Both the simulator and a real board's
@@ -273,7 +289,7 @@ func (s *Sim) Read(now time.Time) Sensors {
 	}
 	out.Fix = &Fix{
 		Lat: float32(s.lat), Lon: float32(s.lon), AccuracyM: acc, AltitudeM: 12,
-		SpeedKPH: int8(min(speed, 127)), SatCount: 11, SolutionID: solutionFor(acc),
+		SpeedKPH: int8(min(speed, 127)), SatCount: 11, SolutionID: SolutionFor(acc),
 		HeadingOfMotion: s.heading, OdometerM: int32(s.odometerM),
 	}
 	if !s.cfg.Clock.IsZero() {
@@ -379,8 +395,11 @@ func voltsFor(percent int8) float32 {
 	return mv(last)
 }
 
-// solutionFor is gnss_data.solution_id from the position accuracy.
-func solutionFor(accuracyM int8) int8 {
+// SolutionFor is gnss_data.solution_id from the position accuracy. It is
+// exported because a board's own GNSS driver has to fill this field too,
+// and there should be one answer to what an accuracy means rather than a
+// driver's copy of it drifting from the console's.
+func SolutionFor(accuracyM int8) int8 {
 	switch {
 	case accuracyM < 0:
 		return 0
@@ -479,6 +498,15 @@ func (f *staticSensors) SetBattery(percent int8, charging bool, _ time.Time) {
 	f.s.Battery.Percent = percent
 	f.s.Battery.Charging = charging
 	f.s.Battery.Low = percent <= 10
+	// NoBattery is the exception to the rule above, and for the reason its
+	// own documentation gives: it is what the chip says today, not what
+	// kind of board this is. Carrying it through meant an operator could
+	// set a percentage, watch it appear in the status, and have nothing act
+	// on it — the power mode stayed normal and the OTA gate stayed open,
+	// because both read this field and both were still being told there was
+	// no cell. Someone who has just said what the battery is has asserted
+	// that there is one.
+	f.s.Battery.NoBattery = false
 }
 
 // SetClock hands the fixed receiver the wall time, which then runs on.

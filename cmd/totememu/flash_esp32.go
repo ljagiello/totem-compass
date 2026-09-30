@@ -7,7 +7,7 @@ package main
 // gets one erase block near the end of the 4 MB flash, far past the image.
 
 /*
-#include "flash.h"
+#include "flash_esp32.h"
 */
 import "C"
 
@@ -36,6 +36,18 @@ const (
 	romCacheReadDis        = 0x40009ab8 // Cache_Read_Disable_rom
 	romCacheReadEnabl      = 0x40009a84 // Cache_Read_Enable_rom
 )
+
+// storeReady says the flash driver here has been proven on this chip: it
+// has erased, written and read back thousands of records on the board.
+//
+// It is true in every build today — the esp32s3 file next door has its own
+// copy, and that driver is proven too now — so the branch it guards in
+// settingsSector cannot currently be taken. It is kept because it is what
+// makes bringing up the next chip's driver safe: the settings sector is
+// read during boot, before there is a console, so a wrong address there
+// produces a board that will not start with nothing to say why. Setting
+// this false is how that driver gets tested from the console first.
+const storeReady = true
 
 const (
 	// flashSectorSize is the ESP32's erase unit.
