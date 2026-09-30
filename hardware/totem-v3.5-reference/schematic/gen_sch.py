@@ -25,6 +25,7 @@ Writes: totem.kicad_sch (upgraded to the current format by kicad-cli)
 """
 
 import datetime
+import json
 import math
 import subprocess
 import uuid as uuidlib
@@ -324,6 +325,26 @@ def main():
                 bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
                 sheet.wire(ax, ay, bx, by)
                 sheet.label(net.name, bx, by, label_angle(dx, dy))
+
+    # The project file goes first, and it matters that it does. A loose
+    # .kicad_sch opens in standalone mode, where KiCad disables design
+    # synchronisation between the schematic and the board — so without this
+    # there is no route from here to a layout at all. It also has to exist
+    # before the upgrade below runs, or that step has no project in scope
+    # and blanks the project name on all 85 symbol instances.
+    #
+    # `sheets` keys the root sheet by its own uuid, which is why this is
+    # written here rather than kept as a static file: the two cannot drift.
+    project = {
+        "meta": {"filename": "totem.kicad_pro", "version": 3},
+        "sheets": [[sheet.uuid, "Root"]],
+        "libraries": {"pinned_footprint_libs": [], "pinned_symbol_libs": []},
+        "erc": {}, "net_settings": {}, "schematic": {}, "text_variables": {},
+        "board": {}, "boards": [], "cvpcb": {}, "pcbnew": {},
+    }
+    with open("totem.kicad_pro", "w") as fh:
+        json.dump(project, fh, indent=2)
+        fh.write("\n")
 
     with open("totem.kicad_sch", "w") as fh:
         fh.write(sheet.render() + "\n")

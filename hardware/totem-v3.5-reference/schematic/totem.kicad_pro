@@ -1,0 +1,24 @@
+{
+  "meta": {
+    "filename": "totem.kicad_pro",
+    "version": 3
+  },
+  "sheets": [
+    [
+      "0bf9302f-32fc-463b-95d7-2ce61198b216",
+      "Root"
+    ]
+  ],
+  "libraries": {
+    "pinned_footprint_libs": [],
+    "pinned_symbol_libs": []
+  },
+  "erc": {},
+  "net_settings": {},
+  "schematic": {},
+  "text_variables": {},
+  "board": {},
+  "boards": [],
+  "cvpcb": {},
+  "pcbnew": {}
+}
