@@ -1,14 +1,30 @@
 """Manufacturing outputs from the routed board, all with kicad-cli.
 
   fab/gerbers/        copper (4 layers), mask, paste, silk, outline; drill
-                      files with a map; zipped as fab/totem-v3.5-gerbers.zip
+                      files with a map; the IPC-D-356 netlist for the fab's
+                      electrical test; zipped as fab/totem-v3.5-gerbers.zip
+  fab/totem-v3.5-odb.zip, -ipc2581.zip
+                      the same board as ODB++ and IPC-2581, for fabs that
+                      take one file instead of gerbers
   fab/totem-cpl.csv   pick-and-place in the column names assembly houses
                       (JLCPCB) read: Designator, Mid X, Mid Y, Layer, Rotation
   fab/totem-bom.csv   one line per part type: Comment, Designator, Footprint,
-                      Quantity, plus the value and datasheet fields
+                      Quantity, Side, Manufacturer, MPN, Note
+  fab/totem-offboard.csv
+                      what is bought but not placed by the assembler
+  fab/totem-v3.5-assembly-top.pdf, -bottom.pdf
+                      assembly drawings (assembly_drawings.py)
+  fab/totem-v3.5-schematic.pdf
+  fab/totem-v3.5.step the assembled board, for fitting a case (models.py
+                      supplies the parts KiCad has no model for)
+  fab/totem-v3.5-board-stats.txt
   fab/render-*.png    3D renders of both sides, to compare with the photos
+  fab/views/          copper, mask and silk of each side as SVG
+  fab/totem-v3.5-assembly-package.zip
+                      all of the above with ASSEMBLY.md: the one file to
+                      hand to a fab and assembler
 
-Run: python3 fab.py   (after build.py, route.py and apply.py)
+Run: python3 fab.py   (after build.py, route.py, apply.py and models.py)
 """
 import csv
 import os
@@ -39,6 +55,7 @@ cli("pcb", "export", "gerbers", "--output", GER + "/", "--layers", layers, "--su
     "--no-protel-ext", PCB)
 cli("pcb", "export", "drill", "--output", GER + "/", "--format", "excellon", "--excellon-separate-th",
     "--generate-map", "--map-format", "gerberx2", PCB)
+cli("pcb", "export", "ipcd356", "--output", os.path.join(GER, "totem-netlist.ipc"), PCB)
 with zipfile.ZipFile(os.path.join(OUT, "totem-v3.5-gerbers.zip"), "w", zipfile.ZIP_DEFLATED) as z:
     for f in sorted(os.listdir(GER)):
         z.write(os.path.join(GER, f), f)
@@ -51,9 +68,11 @@ with open(raw) as fi, open(os.path.join(OUT, "totem-cpl.csv"), "w", newline="") 
     w = csv.writer(fo)
     w.writerow(["Designator", "Mid X", "Mid Y", "Layer", "Rotation"])
     n = 0
+    side_of = {}
     for row in csv.DictReader(fi):
+        side_of[row["Ref"]] = "Top" if row["Side"] == "top" else "Bottom"
         w.writerow([row["Ref"], f"{float(row['PosX']):.4f}mm", f"{float(row['PosY']):.4f}mm",
-                    "Top" if row["Side"] == "top" else "Bottom", f"{float(row['Rot']):.2f}"])
+                    side_of[row["Ref"]], f"{float(row['Rot']):.2f}"])
         n += 1
 os.remove(raw)
 
@@ -77,46 +96,104 @@ def yageo(v):
 
 
 MPN = {
-    "100n": ("Samsung CL10B104KB8NNNC", "0603 X7R 50 V"),
+    "100n": ("Samsung", "CL10B104KB8NNNC", "0603 X7R 50 V"),
     # the cell-sense divider's ratio is what the firmware's ADC calibration
     # expects (see ../README.md); 108k is an E192 value, and 0.1% keeps the
     # ratio within 0.2% so the firmware's 3.15 / 3.45 / 3.65 V steps hold
-    "120k": ("Yageo RT0603BRD07120KL", "0603 0.1% thin film: cell-sense divider"),
-    "108k": ("Yageo RT0603BRD07108KL", "0603 0.1% thin film: cell-sense divider"),
-    "1u": ("Samsung CL10A105KB8NNNC", "0603 X5R 50 V"),
-    "10u": ("Samsung CL21A106KAYNNNE", "0805 X5R 25 V"),
-    "1N4148W": ("Diodes 1N4148W-7-F", ""),
-    "XL-1515RGBC-WS2812B": ("XINGLIGHT XL-1515RGBC-WS2812B", "1.5 x 1.5 mm addressable RGB"),
-    "BAT54W": ("Diodes BAT54W-7-F", ""),
-    "red": ("Everlight 19-217/R6C-AL1M2VY/3T", "0603 red"),
-    "USB4135-GF-A": ("GCT USB4135-GF-A", "power-only USB-C, 6 pin"),
-    "LiPo 1000mAh": ("JST S2B-PH-SM4-TB(LF)(SN)", "battery connector; the cell is 1000 mAh 3.7 V"),
-    "u.FL": ("Hirose U.FL-R-SMT-1(10)", "GNSS antenna"),
-    "electret": ("CUI CMC-4013-SMT-TR", ""),
-    "AO3401A": ("AOS AO3401A", ""),
-    "2N7002": ("Nexperia 2N7002,215", ""),
-    "power": ("C&K PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
-    "SOS": ("C&K PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
-    "touch spring": ("-", "conical contact spring on a 2.5 mm pad, height to suit the crystal; see README"),
-    "ESP32-WROOM-32E": ("Espressif ESP32-WROOM-32E-N4", "4 MB flash, as the firmware image"),
-    "MAX-M10S": ("u-blox MAX-M10S-00B", ""),
-    "TP4056-42-ESOP8": ("NanJing Top Power TP4056-42-ESOP8", ""),
-    "AP2112K-3.3": ("Diodes AP2112K-3.3TRG1", ""),
-    "ICM-20948": ("TDK InvenSense ICM-20948", ""),
+    "120k": ("Yageo", "RT0603BRD07120KL", "0603 0.1% thin film: cell-sense divider"),
+    "108k": ("Yageo", "RT0603BRD07108KL", "0603 0.1% thin film: cell-sense divider"),
+    "1u": ("Samsung", "CL10A105KB8NNNC", "0603 X5R 50 V"),
+    "10u": ("Samsung", "CL21A106KAYNNNE", "0805 X5R 25 V"),
+    "1N4148W": ("Diodes Inc.", "1N4148W-7-F", ""),
+    "XL-1515RGBC-WS2812B": ("XINGLIGHT", "XL-1515RGBC-WS2812B", "1.5 x 1.5 mm addressable RGB; moisture sensitive, bake per datasheet"),
+    "BAT54W": ("Diodes Inc.", "BAT54W-7-F", ""),
+    "red": ("Everlight", "19-217/R6C-AL1M2VY/3T", "0603 red"),
+    "USB4135-GF-A": ("GCT", "USB4135-GF-A", "power-only USB-C, 6 pin"),
+    "LiPo 1000mAh": ("JST", "S2B-PH-SM4-TB(LF)(SN)", "battery connector; the cell is off-board (totem-offboard.csv)"),
+    "u.FL": ("Hirose", "U.FL-R-SMT-1(10)", "GNSS antenna connector"),
+    "electret": ("CUI Devices", "CMC-4013-SMT-TR", ""),
+    "AO3401A": ("Alpha & Omega", "AO3401A", ""),
+    "2N7002": ("Nexperia", "2N7002,215", ""),
+    "power": ("C&K", "PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
+    "SOS": ("C&K", "PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
+    "touch spring": ("-", "-", "conical contact spring on a 2.5 mm pad, height to suit the crystal; hand-fitted, see ASSEMBLY.md"),
+    "ESP32-WROOM-32E": ("Espressif", "ESP32-WROOM-32E-N4", "4 MB flash, as the firmware image"),
+    "MAX-M10S": ("u-blox", "MAX-M10S-00B", "moisture sensitive, bake per u-blox before reflow"),
+    "TP4056-42-ESOP8": ("NanJing Top Power", "TP4056-42-ESOP8", ""),
+    "AP2112K-3.3": ("Diodes Inc.", "AP2112K-3.3TRG1", ""),
+    "ICM-20948": ("TDK InvenSense", "ICM-20948", ""),
 }
+
+
+def natural(ref):
+    """'R10' after 'R9', not before 'R2'."""
+    head = ref.rstrip("0123456789")
+    return head, int(ref[len(head):] or 0)
+
+
 with open(os.path.join(OUT, "totem-bom.csv"), "w", newline="") as fo:
     w = csv.writer(fo)
-    w.writerow(["Comment", "Designator", "Footprint", "Quantity", "MPN", "Note"])
-    for (val, fp, ds), refs in sorted(groups.items(), key=lambda kv: kv[1][0]):
+    w.writerow(["Comment", "Designator", "Footprint", "Quantity", "Side", "Manufacturer", "MPN", "Note"])
+    # one line per value and side: an assembler runs each side as its own job
+    lines = []
+    for (val, fp, ds), refs in groups.items():
+        missing = [r for r in refs if r not in side_of]
+        if missing:
+            raise SystemExit(f"{val}: {missing} not in the placement file")
+        for side in ("Bottom", "Top"):
+            here = sorted((r for r in refs if side_of[r] == side), key=natural)
+            if here:
+                lines.append((side, val, fp, here))
+    for side, val, fp, refs in sorted(lines, key=lambda l: (l[0], natural(l[3][0]))):
         if val in MPN:
-            mpn, note = MPN[val]
+            mfr, mpn, note = MPN[val]
         elif fp.split(":")[-1].startswith("R_0603"):
-            mpn, note = "Yageo RC0603FR-07" + yageo(val) + "L", "0603 1% 100 mW"
+            mfr, mpn, note = "Yageo", "RC0603FR-07" + yageo(val) + "L", "0603 1% 100 mW"
         else:
             raise SystemExit(f"no part number for {val} ({fp})")
-        w.writerow([val, ",".join(refs), fp.split(":")[-1], len(refs), mpn, note])
+        w.writerow([val, ",".join(refs), fp.split(":")[-1], len(refs), side, mfr, mpn, note])
+
+# Bought, but not placed by the assembler.
+with open(os.path.join(OUT, "totem-offboard.csv"), "w", newline="") as fo:
+    w = csv.writer(fo)
+    w.writerow(["Item", "Quantity", "Specification", "Note"])
+    w.writerows([
+        ["Li-Po cell", 1, "3.7 V 1000 mAh, 1S, with protection, JST PH 2.0 mm 2-pin plug",
+         "Check the plug's polarity against J2 before connecting: PH leads are not standardised"],
+        ["GNSS antenna", 1, "L1 1575.42 MHz, U.FL (IPEX MHF1) plug, passive patch or flex",
+         "The reference unit's antenna was not identified; its cable is visible in the photos"],
+        ["Programming adapter", 1, "3.3 V USB-to-UART with DTR/RTS, pogo pins or wires to TP2-TP7",
+         "The board has no USB data: see ASSEMBLY.md, Programming"],
+        ["Enclosure, crystal, rear cover", 1, "from the reference unit", "Not part of this design"],
+    ])
+
+# The board in single-file formats, the 3D model, the documents.
+cli("pcb", "export", "odb", "--output", os.path.join(OUT, "totem-v3.5-odb.zip"), PCB)
+cli("pcb", "export", "ipc2581", "--output", os.path.join(OUT, "totem-v3.5-ipc2581.zip"), "--compress", PCB)
+cli("pcb", "export", "step", "--output", os.path.join(OUT, "totem-v3.5.step"), "--subst-models", "--force", PCB)
+cli("sch", "export", "pdf", "--output", os.path.join(OUT, "totem-v3.5-schematic.pdf"), SCH)
+cli("pcb", "export", "stats", "--output", os.path.join(OUT, "totem-v3.5-board-stats.txt"), PCB)
+KP = "/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3"
+subprocess.run([KP, os.path.join(HERE, "assembly_drawings.py"), OUT], check=True, capture_output=True)
 
 for side in ("top", "bottom"):
     cli("pcb", "render", "--output", os.path.join(OUT, f"render-{side}.png"), "--side", side,
         "--width", "1600", "--height", "1600", "--quality", "high", PCB)
-print(f"gerbers: {len(os.listdir(GER))} files; placements: {n}; BOM lines: {len(groups)}; renders: 2")
+VIEWS = os.path.join(OUT, "views")
+os.makedirs(VIEWS)
+for name, layers, extra in (("radio-side", "F.Cu,F.Silkscreen,F.Mask,Edge.Cuts", []),
+                            ("led-side", "B.Cu,B.Silkscreen,B.Mask,Edge.Cuts", ["--mirror"])):
+    cli("pcb", "export", "svg", "--output", os.path.join(VIEWS, name + ".svg"), "--layers", layers,
+        "--page-size-mode", "2", "--exclude-drawing-sheet", *extra, PCB)
+
+# One file to hand over: everything above, with the instructions.
+PACKAGE = os.path.join(OUT, "totem-v3.5-assembly-package.zip")
+with zipfile.ZipFile(PACKAGE, "w", zipfile.ZIP_DEFLATED) as z:
+    z.write(os.path.join(HERE, "ASSEMBLY.md"), "ASSEMBLY.md")
+    for f in sorted(os.listdir(OUT)):
+        if f.endswith((".zip", ".xml", ".csv", ".pdf", ".step", ".txt", ".png")) and f != os.path.basename(PACKAGE):
+            z.write(os.path.join(OUT, f), f)
+    for f in sorted(os.listdir(VIEWS)):
+        z.write(os.path.join(VIEWS, f), "views/" + f)
+print(f"gerbers: {len(os.listdir(GER))} files; placements: {n}; BOM lines: {len(lines)}; "
+      f"package: {os.path.getsize(PACKAGE) // 1024} KB")

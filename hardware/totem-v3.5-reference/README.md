@@ -116,8 +116,15 @@ KP=/Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/C
 $KP build.py      # outline, parts where the photos put them, nets, planes, rules
 python route.py   # the router (numpy, scipy, opencv)
 $KP apply.py      # tracks and vias into the board, zones filled
-python3 fab.py    # gerbers, drill, placement, BOM, renders -> pcb/fab/
+$KP models.py     # 3D models for the parts KiCad's library has none for
+python3 fab.py    # everything for the fab and the assembler -> pcb/fab/
 ```
+
+**To have boards made, hand over `pcb/fab/totem-v3.5-assembly-package.zip`.** It
+holds gerbers and drills (and ODB++ and IPC-2581), the BOM and placement file,
+assembly drawings, the schematic, a STEP model, and
+[`pcb/ASSEMBLY.md`](pcb/ASSEMBLY.md): what to order, how to assemble, bring up
+and program the board, and what to measure before ordering.
 
 Four layers, 1.6 mm: signals on both outer layers, In1 solid GND, In2 3V3.
 Tracks 0.13 mm and 0.13 mm apart, power nets 0.4 mm with 0.2 mm; vias

@@ -1293,7 +1293,7 @@
 			(uuid "2823b193-931c-4959-bbbd-834e9ecddeda")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/RF_GPS.3dshapes/ublox_MAX.step"
+		(model "${KIPRJMOD}/totem.3dshapes/ublox_MAX.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -3824,7 +3824,7 @@
 			(uuid "f3d7f8e5-3101-46ac-966f-32bb449eefeb")
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Connector_JST.3dshapes/JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal.step"
+		(model "${KIPRJMOD}/totem.3dshapes/JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -9156,6 +9156,17 @@
 			(uuid "ca742737-f819-4699-b7bd-18dfe712b836")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -9290,6 +9301,17 @@
 			(uuid "f65c20c7-edd3-456a-a692-4ef4107d8591")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "B.Cu")
@@ -9714,6 +9736,17 @@
 			(uuid "ef3af933-4f0f-4c5e-9720-210d747071c4")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -10158,6 +10191,17 @@
 			(uuid "e554ebd1-4a6c-4da2-b583-45b8e7cc31cf")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Package_TO_SOT_SMD:SOT-323_SC-70"
 		(layer "B.Cu")
@@ -10646,6 +10690,17 @@
 			(uuid "69720e83-2c96-453f-8b04-6ab3a5857ee8")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -10780,6 +10835,17 @@
 			(uuid "66c6154a-23aa-4bfa-9141-f5f7e0c3ec34")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Package_TO_SOT_SMD:SOT-23"
 		(layer "B.Cu")
@@ -11288,6 +11354,17 @@
 			(uuid "d731a58d-e9fd-4fd1-89c2-80c4e49e9ee4")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -11422,6 +11499,17 @@
 			(uuid "5f438c92-ca16-4a2d-b072-94f2c8bfea91")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -11556,6 +11644,17 @@
 			(uuid "2f926c5a-ba12-4c12-8c90-4638c3daf7dd")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -11690,6 +11789,17 @@
 			(uuid "bd3a8ec4-1a55-44ba-a516-642cb7b2b04c")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Package_TO_SOT_SMD:SOT-23"
 		(layer "B.Cu")
@@ -12198,6 +12308,17 @@
 			(uuid "1ec47d09-5b3c-4184-9b49-4ff304fc15ed")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -12332,6 +12453,17 @@
 			(uuid "8edbb50c-b14b-4bb3-ae1b-8c48d4e51206")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -12466,6 +12598,17 @@
 			(uuid "14447eeb-6ad0-48e5-93ad-b56d516c95db")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -12600,6 +12743,17 @@
 			(uuid "2d399376-f1c4-4512-a94f-fbba0e5e7bf5")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -12734,6 +12888,17 @@
 			(uuid "2e2759b8-f56b-41f9-b5b1-c842d8c4eca7")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -12868,6 +13033,17 @@
 			(uuid "fb5e6af9-96a9-4461-b631-5ce33d1a4d5e")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "B.Cu")
@@ -13156,6 +13332,17 @@
 			(uuid "9d91628c-faf6-421b-ae13-ba78f5336bad")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -13290,6 +13477,17 @@
 			(uuid "7326f574-64d6-4467-8b24-924b0e9fe7e2")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -13424,6 +13622,17 @@
 			(uuid "dcc02ca9-57ef-4219-b513-7e485286110e")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Package_TO_SOT_SMD:SOT-23"
 		(layer "B.Cu")
@@ -13932,6 +14141,17 @@
 			(uuid "33e0c062-f6a7-4128-99b6-8da748ff702b")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14066,6 +14286,17 @@
 			(uuid "c9f995d1-f312-4247-a20c-bdcc1d64dbf5")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14200,6 +14431,17 @@
 			(uuid "e04cbbe9-ee69-4504-91a2-a6e344b19354")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14271,7 +14513,7 @@
 		)
 		(fp_poly
 			(pts
-				(xy 0.949999 0.85) (xy -0.949997 0.849998) (xy -0.949999 -0.85) (xy 0.949997 -0.849998)
+				(xy 0.949997 0.85) (xy -0.949997 0.849998) (xy -0.949997 -0.85) (xy 0.949997 -0.849998)
 			)
 			(stroke
 				(width 0.05)
@@ -14334,6 +14576,17 @@
 			(uuid "9a371f16-1f0b-4ecb-868e-cf2e75d41ff8")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14468,6 +14721,17 @@
 			(uuid "6de004d4-fa1c-49f8-8bb8-792e611d6875")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14602,6 +14866,17 @@
 			(uuid "12cc6387-4b57-4ffa-8b14-76b836c2a495")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -14736,6 +15011,17 @@
 			(uuid "85144131-2cea-4990-b167-0983c7e11c19")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -15394,7 +15680,7 @@
 			)
 		)
 		(embedded_fonts no)
-		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/QFN-24_3x3mm_P0.4mm_EP1.7x1.54mm.step"
+		(model "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/QFN-24_3x3mm_P0.4mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -15539,6 +15825,17 @@
 			(uuid "f920edab-c598-41bd-8d00-ab10fe4854a2")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -15673,6 +15970,17 @@
 			(uuid "3f683091-5e4e-4235-a9fd-98abdf0ff512")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -15807,6 +16115,17 @@
 			(uuid "49814957-b78e-4c43-8023-ff527e75b7e4")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -15878,7 +16197,7 @@
 		)
 		(fp_poly
 			(pts
-				(xy 0.949999 0.85) (xy -0.949997 0.849998) (xy -0.949999 -0.85) (xy 0.949997 -0.849998)
+				(xy 0.949997 0.85) (xy -0.949997 0.849998) (xy -0.949997 -0.85) (xy 0.949997 -0.849998)
 			)
 			(stroke
 				(width 0.05)
@@ -15941,6 +16260,17 @@
 			(uuid "b10cf211-cb84-4ccc-9cec-f6f0117cece9")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -16075,6 +16405,17 @@
 			(uuid "141e6f1d-e82a-46d2-ac8a-8739470794f2")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -16209,6 +16550,17 @@
 			(uuid "3e7c2783-5504-4040-a828-57a05c51a7e1")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -16343,6 +16695,17 @@
 			(uuid "31602344-8d4a-44d3-ab87-dc9df07a504e")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -16631,6 +16994,17 @@
 			(uuid "d14315f8-463a-40fd-b626-50e9e3a2afb6")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -16765,6 +17139,17 @@
 			(uuid "7c54e4a5-1f08-4c76-a00c-af86ff50b7a0")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -16899,6 +17284,17 @@
 			(uuid "23be85c5-aa6b-47ef-a867-ca4d76e09c70")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -17341,6 +17737,17 @@
 			(uuid "bb3b8b79-543a-4d8d-92f1-3fa5ad2dd1b3")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0805_2012Metric"
 		(layer "B.Cu")
@@ -17783,6 +18190,17 @@
 			(uuid "dbfd3443-bf3d-42d5-8445-94d0a7d11aab")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -17917,6 +18335,17 @@
 			(uuid "693d01b3-74b3-4fa6-bbb5-4b156df7d5da")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18051,6 +18480,17 @@
 			(uuid "c2902ab0-773a-471a-b715-ca0328b5d820")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18185,6 +18625,17 @@
 			(uuid "0e41b632-d561-4a88-8466-fbb52aa0587b")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18319,6 +18770,17 @@
 			(uuid "a56afcb3-33f7-4d6d-a03e-c1802ef79862")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18453,6 +18915,17 @@
 			(uuid "81ef31a5-dfd3-4c3c-ac88-6a4b8e661894")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18587,6 +19060,17 @@
 			(uuid "77e239e7-a770-4bd7-92af-6eabed743c17")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18721,6 +19205,17 @@
 			(uuid "55c1418d-60f9-43df-a695-020f11b030d9")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18855,6 +19350,17 @@
 			(uuid "e2f9f197-bf92-4fef-927d-c0af3f5eee1d")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -18989,6 +19495,17 @@
 			(uuid "be6e52c5-7902-4220-b235-b2d84bac333c")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19123,6 +19640,17 @@
 			(uuid "36ec0328-2bc4-40d7-a604-b32a04927f21")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19257,6 +19785,17 @@
 			(uuid "94cf6236-50ff-47de-b23e-3977a08f5126")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19391,6 +19930,17 @@
 			(uuid "e5ec2037-5fc8-44b5-90ed-3bdd24eb4fb7")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19462,7 +20012,7 @@
 		)
 		(fp_poly
 			(pts
-				(xy 0.949999 0.85) (xy -0.949997 0.849998) (xy -0.949999 -0.85) (xy 0.949997 -0.849998)
+				(xy 0.949997 0.85) (xy -0.949997 0.849998) (xy -0.949997 -0.85) (xy 0.949997 -0.849998)
 			)
 			(stroke
 				(width 0.05)
@@ -19525,6 +20075,17 @@
 			(uuid "bfa6ffbe-b446-4e3f-b6bf-d5dc7406386b")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19659,6 +20220,17 @@
 			(uuid "d7b7808e-148e-4faa-afb4-9313ec126564")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -19793,6 +20365,17 @@
 			(uuid "52b867fc-a5c4-4620-884b-04beb6a025b3")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -20081,6 +20664,17 @@
 			(uuid "2a4c97a5-9662-4b19-80fe-10bbbe85b6be")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20215,6 +20809,17 @@
 			(uuid "08b6eecc-aa2d-44ab-a225-feca0d997f6c")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20349,6 +20954,17 @@
 			(uuid "d6fccb23-c790-40fb-a122-2db5a8e22389")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20483,6 +21099,17 @@
 			(uuid "2fe75f34-bd11-42a5-aca1-5b598a9e252b")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20617,6 +21244,17 @@
 			(uuid "9b1e1c20-4afc-4d87-a08a-3006869bba8e")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20751,6 +21389,17 @@
 			(uuid "5ae02c14-b159-4185-924f-1133f25cc792")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -20822,7 +21471,7 @@
 		)
 		(fp_poly
 			(pts
-				(xy 0.949999 0.85) (xy -0.949997 0.849998) (xy -0.949999 -0.85) (xy 0.949997 -0.849998)
+				(xy 0.949997 0.85) (xy -0.949997 0.849998) (xy -0.949997 -0.85) (xy 0.949997 -0.849998)
 			)
 			(stroke
 				(width 0.05)
@@ -20885,6 +21534,17 @@
 			(uuid "074ff532-1faf-4cbc-8af1-da82a8521516")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Resistor_SMD:R_0603_1608Metric"
 		(layer "B.Cu")
@@ -21456,6 +22116,17 @@
 			(uuid "b364c3c0-5889-4b25-acb6-bdc7f2256add")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -21590,6 +22261,17 @@
 			(uuid "e4f1ca64-2291-4f32-9a88-241584fbe9a5")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -21724,6 +22406,17 @@
 			(uuid "2fcd6322-e460-4c30-897b-cfde79478c29")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -21858,6 +22551,17 @@
 			(uuid "0086a710-a854-415c-9e79-ebac5abc0461")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -21992,6 +22696,17 @@
 			(uuid "3d1ad315-4566-4945-832d-1a9a73299ae6")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "Capacitor_SMD:C_0603_1608Metric"
 		(layer "B.Cu")
@@ -22434,6 +23149,17 @@
 			(uuid "fbcaac37-4357-4228-8b6f-151fa331811c")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "totem:LED_XL-1515RGBC-WS2812B"
 		(layer "B.Cu")
@@ -22568,6 +23294,17 @@
 			(uuid "c305ec83-f2f6-4213-8722-715fe77a8c04")
 		)
 		(embedded_fonts no)
+		(model "${KIPRJMOD}/totem.3dshapes/LED_XL-1515RGBC-WS2812B.step"
+			(offset
+				(xyz 0 0 0)
+			)
+			(scale
+				(xyz 1 1 1)
+			)
+			(rotate
+				(xyz 0 0 0)
+			)
+		)
 	)
 	(footprint "TestPoint:TestPoint_Pad_D2.5mm"
 		(layer "B.Cu")

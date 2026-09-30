@@ -1,0 +1,5 @@
+Item,Quantity,Specification,Note
+Li-Po cell,1,"3.7 V 1000 mAh, 1S, with protection, JST PH 2.0 mm 2-pin plug",Check the plug's polarity against J2 before connecting: PH leads are not standardised
+GNSS antenna,1,"L1 1575.42 MHz, U.FL (IPEX MHF1) plug, passive patch or flex",The reference unit's antenna was not identified; its cable is visible in the photos
+Programming adapter,1,"3.3 V USB-to-UART with DTR/RTS, pogo pins or wires to TP2-TP7","The board has no USB data: see ASSEMBLY.md, Programming"
+"Enclosure, crystal, rear cover",1,from the reference unit,Not part of this design
