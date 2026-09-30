@@ -162,10 +162,27 @@ the ERC checks, so the drawing cannot drift away from the netlist, and it
 embeds KiCad's own symbol definitions — the drawing of a resistor is KiCad's
 drawing of a resistor.
 
-Connections are made with labels at every pin rather than routed wires. That
-is a real schematic style and the honest one for a generated sheet: automatic
-routing produces a tangle that looks like a drawing but explains nothing,
-while a label says exactly what a pin is connected to.
+It is drawn the way a schematic is drawn. **Rails carry KiCad's power
+symbols** at each pin, which is how every real sheet does it and which took
+about 150 labels off the drawing. **Short point-to-point runs are wired**, so
+a divider or an RC is a line you can follow. **Signals with several
+destinations keep a label**, which is also what a real sheet does.
+
+A first version put a label on every pin instead. It passed ERC and was
+unreadable — nothing on it *looked* connected, which fails the only job a
+schematic has.
+
+Long routes are deliberately not drawn, and ERC is the reason. Routing every
+two-ended net with an automatic corner produced this:
+
+```
+[multiple_net_names]: Both ESP_EN and POWER_EN are attached to the same items
+```
+
+A wire endpoint had landed on another net's wire and shorted two separate
+nets together — a drawing that looked right and was electrically wrong. Runs
+longer than 45 mm are labelled rather than routed for that reason. Laying
+those out properly is hand work in KiCad, on top of this file.
 
 **KiCad's own ERC: 0 errors, 2 warnings.** Both are explainable and left
 reported. `SDO/AD0` is the ICM-20948's address-select pin strapped low, which

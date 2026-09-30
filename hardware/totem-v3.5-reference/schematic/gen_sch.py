@@ -1,39 +1,71 @@
 #!/usr/bin/env python3
-"""Write a KiCad sheet from the circuit, so KiCad can check and draw it.
+"""Write a KiCad sheet from the circuit, drawn the way a schematic is drawn.
 
-SKiDL 2.3.0 cannot draw this circuit — both of its drawing backends crash on
-real multi-unit symbols — so the sheet is built here instead. KiCad's own
-symbol definitions are copied into it verbatim, which means the drawing of a
-resistor is KiCad's drawing of a resistor rather than anything invented here.
+An earlier version of this put a label on every pin. That is technically a
+schematic and it passed ERC, but nothing on the sheet *looked* connected,
+which fails the only job a schematic has. This draws it properly:
 
-Connections are made with labels rather than routed wires. That is a real
-schematic style and an honest one for a generated sheet: automatic routing
-would produce a tangle that looks like a drawing but explains nothing, while
-a label at every pin says exactly what it is connected to and stays readable.
+  - **Rails** (GND, +3V3, VBUS, VBAT) get KiCad's power symbols at each pin,
+    the way every real schematic does it. That alone takes about 150 labels
+    off the sheet.
+  - **Point-to-point signals** — the 12 nets with exactly two ends — are
+    wired, so the connection is a line you can follow.
+  - **Nets with more than two ends** keep a label, which is also what a real
+    schematic does once a signal has several destinations.
 
-The sheet comes from the same `totem.py` the ERC checks, so it cannot drift
-away from the netlist.
+Parts are placed by hand below, grouped by what they do, because automatic
+placement is what made the first attempt unreadable.
+
+Symbols are copied out of KiCad's own libraries by kicad_sexp.py, so the
+drawing of a resistor is KiCad's drawing of a resistor. The sheet comes from
+the same totem.py the ERC checks, so it cannot drift from the netlist.
 
 Run: python3 gen_sch.py
-Writes: totem.kicad_sch  (then: kicad-cli sch erc / sch export svg)
+Writes: totem.kicad_sch (upgraded to the current format by kicad-cli)
 """
 
 import math
+import subprocess
 import uuid as uuidlib
 
 import builtins
 import totem  # noqa: F401  (builds the circuit as a side effect)
-from kicad_sexp import dump, head, pin_positions, sval, symbol
+from kicad_sexp import dump, pin_positions, symbol
 
-# Everything here is a whole multiple of KiCad's 1.27 mm grid. It has to be:
-# a wire endpoint off the grid is a violation, and with a label on every pin
-# that is one violation per pin. The first run produced 124 of them from
-# nothing worse than a 40 mm margin.
 GRID = 1.27
-STUB = 3 * GRID      # wire between a pin and its label
-COL_W, ROW_H = 75 * GRID, 82 * GRID
-COLS = 6
-MARGIN = 30 * GRID
+STUB = 3 * GRID
+
+# Rails drawn as power symbols rather than labels.
+RAILS = {"GND": "GND", "+3V3": "+3V3", "VBUS": "VBUS", "VBAT": "+BATT"}
+
+# Placed by function: power down the left, the MCU in the middle, the
+# things it talks to on the right, the things a person presses at the
+# bottom. Coordinates are millimetres and get snapped to the grid.
+FLOORPLAN = {
+    # power in
+    "J1": (55, 55), "U4": (185, 60), "J2": (55, 165), "R5": (120, 120),
+    "R3": (300, 40), "R4": (300, 85), "R1": (300, 150), "R2": (300, 195),
+    # the MCU
+    "U1": (470, 190),
+    # reset
+    "R13": (370, 95), "C2": (405, 130),
+    # GNSS
+    "U2": (680, 80), "J3": (790, 80),
+    # the 9-axis part
+    "U5": (680, 245), "R7": (605, 195), "R8": (640, 195), "C1": (770, 265),
+    # the strips
+    "R9": (600, 345), "Q1": (660, 345), "DS1": (760, 330), "DS61": (760, 400),
+    # what a person touches
+    "SW1": (130, 300), "R10": (75, 345), "R11": (240, 300),
+    "SW2": (130, 370), "TP1": (130, 425),
+    "MK1": (245, 420), "R12": (245, 370),
+    # the SOS indicator
+    "R6": (600, 450), "DS68": (665, 450),
+}
+
+
+def snap(v):
+    return round(v / GRID) * GRID
 
 
 def uid():
@@ -41,7 +73,6 @@ def uid():
 
 
 def rename(sym, lib_id):
-    """A copy of a symbol definition carrying its full LIB:NAME id."""
     out = list(sym)
     for i, child in enumerate(out):
         if isinstance(child, tuple) and child[0] == "str":
@@ -51,10 +82,8 @@ def rename(sym, lib_id):
 
 
 def outward(rot):
-    """Where a pin's wire should run, away from the body, in sheet coords."""
-    dx = -math.cos(math.radians(rot))
-    dy = math.sin(math.radians(rot))
-    return dx, dy
+    """Where a pin's wire runs, away from the body, in sheet coordinates."""
+    return -math.cos(math.radians(rot)), math.sin(math.radians(rot))
 
 
 def label_angle(dx, dy):
@@ -63,179 +92,205 @@ def label_angle(dx, dy):
     return 270 if dy > 0 else 90
 
 
-def main():
-    circuit = builtins.default_circuit
-    parts = sorted(circuit.parts, key=lambda p: (p.ref[0], len(p.ref), p.ref))
+class Sheet:
+    def __init__(self):
+        self.items = []
+        self.libs = {}
+        self.uuid = uid()
 
-    lib_symbols, placements, items = {}, [], []
+    def need(self, lib, name):
+        lib_id = f"{lib}:{name}"
+        if lib_id not in self.libs:
+            self.libs[lib_id] = rename(symbol(lib, name), lib_id)
+        return lib_id
 
-    for i, part in enumerate(parts):
-        # SKiDL raises rather than returning a default from getattr, and a
-        # part declared inline has no library at all.
-        try:
-            lib = str(part.lib.filename).replace(".kicad_sym", "")
-        except AttributeError:
-            lib = None
-        lib_id = f"{lib}:{part.name}" if lib else None
-        if lib_id is None:
-            placements.append((part, None, None, None))
-            continue
-        if lib_id not in lib_symbols:
-            try:
-                lib_symbols[lib_id] = rename(symbol(lib, part.name), lib_id)
-            except (KeyError, FileNotFoundError, OSError):
-                # The TP4056 has no KiCad symbol; it is declared inline in
-                # totem.py and so cannot be drawn here. Skipped rather than
-                # faked, and reported at the end.
-                placements.append((part, None, None, None))
-                continue
-        col, row = i % COLS, i // COLS
-        x = MARGIN + col * COL_W
-        y = MARGIN + row * ROW_H
-        placements.append((part, lib_id, x, y))
-
-    undrawn = []
-    for part, lib_id, x, y in placements:
-        if lib_id is None:
-            undrawn.append(part)
-            continue
-        pins = pin_positions(lib_symbols[lib_id])
-        items.append(
-            [
-                "symbol",
-                ["lib_id", ("str", lib_id)],
-                ["at", f"{x:.2f}", f"{y:.2f}", "0"],
-                ["unit", "1"],
-                ["exclude_from_sim", "no"],
-                ["in_bom", "yes"],
-                ["on_board", "yes"],
-                ["dnp", "no"],
-                ["uuid", ("str", uid())],
-                [
-                    "property", ("str", "Reference"), ("str", part.ref),
-                    ["at", f"{x:.2f}", f"{y - 45:.2f}", "0"],
-                    ["effects", ["font", ["size", "1.6", "1.6"]]],
-                ],
-                [
-                    "property", ("str", "Value"), ("str", str(part.value or part.name)),
-                    ["at", f"{x:.2f}", f"{y - 41:.2f}", "0"],
-                    ["effects", ["font", ["size", "1.27", "1.27"]]],
-                ],
-                [
-                    "instances",
-                    [
-                        "project", ("str", "totem"),
-                        ["path", ("str", "/" + SHEET_UUID),
-                         ["reference", ("str", part.ref)], ["unit", "1"]],
-                    ],
-                ],
-            ]
-        )
-
-        for pin in part.pins:
-            if pin.net is None:
-                # A pin this design deliberately does not use gets a
-                # no-connect marker, which is how a schematic says "on
-                # purpose" rather than leaving the reader to guess.
-                nums = pin.num if isinstance(pin.num, list) else [pin.num]
-                for num in nums:
-                    geom = pins.get(str(num))
-                    if geom is None:
-                        continue
-                    px, py, _, _ = geom
-                    items.append(
-                        ["no_connect",
-                         ["at", f"{x + px:.2f}", f"{y - py:.2f}"],
-                         ["uuid", ("str", uid())]]
-                    )
-                continue
-            nums = pin.num if isinstance(pin.num, list) else [pin.num]
-            for num in nums:
-                geom = pins.get(str(num))
-                if geom is None:
-                    continue
-                px, py, rot, _ = geom
-                ax, ay = x + px, y - py
-                dx, dy = outward(rot)
-                bx, by = ax + dx * STUB, ay + dy * STUB
-                items.append(
-                    ["wire",
-                     ["pts", ["xy", f"{ax:.2f}", f"{ay:.2f}"], ["xy", f"{bx:.2f}", f"{by:.2f}"]],
-                     ["stroke", ["width", "0"], ["type", "default"]],
-                     ["uuid", ("str", uid())]]
-                )
-                items.append(
-                    ["global_label", ("str", pin.net.name),
-                     ["shape", "bidirectional"],
-                     ["at", f"{bx:.2f}", f"{by:.2f}", str(label_angle(dx, dy))],
-                     ["effects", ["font", ["size", "1.27", "1.27"]],
-                      ["justify", "left"]],
-                     ["uuid", ("str", uid())]]
-                )
-
-    # A power input pin wants a power *output* driving its net, and nothing
-    # in this design is one: the rails arrive as labels. PWR_FLAG is the
-    # symbol that says "this rail is fed, I know what I am doing", and it is
-    # what KiCad's power_pin_not_driven rule is asking for.
-    flag_id = "power:PWR_FLAG"
-    lib_symbols[flag_id] = rename(symbol("power", "PWR_FLAG"), flag_id)
-    flag_pin = pin_positions(lib_symbols[flag_id])
-    for n, rail in enumerate(("VBAT", "VLED", "GND")):
-        fx = MARGIN + n * (12 * GRID)
-        fy = MARGIN + (len(placements) // COLS + 1) * ROW_H
-        items.append(
+    def place(self, lib_id, x, y, ref, value, hide=False, on_board=True):
+        eff = ["effects", ["font", ["size", "1.27", "1.27"]]]
+        if hide:
+            eff.append(["hide", "yes"])
+        self.items.append(
             ["symbol",
-             ["lib_id", ("str", flag_id)],
-             ["at", f"{fx:.2f}", f"{fy:.2f}", "0"],
+             ["lib_id", ("str", lib_id)],
+             ["at", f"{x:.2f}", f"{y:.2f}", "0"],
              ["unit", "1"],
-             ["exclude_from_sim", "no"], ["in_bom", "no"], ["on_board", "no"],
-             ["dnp", "no"], ["uuid", ("str", uid())],
-             ["property", ("str", "Reference"), ("str", f"#FLG{n}"),
-              ["at", f"{fx:.2f}", f"{fy - 5:.2f}", "0"],
-              ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]],
-             ["property", ("str", "Value"), ("str", "PWR_FLAG"),
-              ["at", f"{fx:.2f}", f"{fy - 2:.2f}", "0"],
-              ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]],
+             ["exclude_from_sim", "no"],
+             ["in_bom", "yes" if on_board else "no"],
+             ["on_board", "yes" if on_board else "no"],
+             ["dnp", "no"],
+             ["uuid", ("str", uid())],
+             ["property", ("str", "Reference"), ("str", ref),
+              ["at", f"{x:.2f}", f"{y - 12:.2f}", "0"], list(eff)],
+             ["property", ("str", "Value"), ("str", value),
+              ["at", f"{x:.2f}", f"{y - 8:.2f}", "0"], list(eff)],
              ["instances",
               ["project", ("str", "totem"),
-               ["path", ("str", "/" + SHEET_UUID),
-                ["reference", ("str", f"#FLG{n}")], ["unit", "1"]]]]]
+               ["path", ("str", "/" + self.uuid),
+                ["reference", ("str", ref)], ["unit", "1"]]]]]
         )
-        px, py, rot, _ = next(iter(flag_pin.values()))
-        ax, ay = fx + px, fy - py
-        dx, dy = outward(rot)
-        bx, by = ax + dx * STUB, ay + dy * STUB
-        items.append(
-            ["wire", ["pts", ["xy", f"{ax:.2f}", f"{ay:.2f}"], ["xy", f"{bx:.2f}", f"{by:.2f}"]],
-             ["stroke", ["width", "0"], ["type", "default"]], ["uuid", ("str", uid())]]
+
+    def wire(self, x1, y1, x2, y2):
+        if (x1, y1) == (x2, y2):
+            return
+        self.items.append(
+            ["wire",
+             ["pts", ["xy", f"{x1:.2f}", f"{y1:.2f}"], ["xy", f"{x2:.2f}", f"{y2:.2f}"]],
+             ["stroke", ["width", "0"], ["type", "default"]],
+             ["uuid", ("str", uid())]]
         )
-        items.append(
-            ["global_label", ("str", rail), ["shape", "bidirectional"],
-             ["at", f"{bx:.2f}", f"{by:.2f}", str(label_angle(dx, dy))],
+
+    def label(self, name, x, y, angle):
+        self.items.append(
+            ["global_label", ("str", name), ["shape", "bidirectional"],
+             ["at", f"{x:.2f}", f"{y:.2f}", str(angle)],
              ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", "left"]],
              ["uuid", ("str", uid())]]
         )
 
-    sheet = [
-        "kicad_sch",
-        ["version", "20250114"],
-        ["generator", ("str", "gen_sch.py")],
-        ["generator_version", ("str", "10.0")],
-        ["uuid", ("str", SHEET_UUID)],
-        ["paper", ("str", "A0")],
-        ["lib_symbols", *lib_symbols.values()],
-        *items,
-    ]
+    def no_connect(self, x, y):
+        self.items.append(
+            ["no_connect", ["at", f"{x:.2f}", f"{y:.2f}"], ["uuid", ("str", uid())]]
+        )
+
+    def render(self, paper="A1"):
+        return dump(
+            ["kicad_sch",
+             ["version", "20250114"],
+             ["generator", ("str", "gen_sch.py")],
+             ["generator_version", ("str", "10.0")],
+             ["uuid", ("str", self.uuid)],
+             ["paper", ("str", paper)],
+             ["lib_symbols", *self.libs.values()],
+             *self.items]
+        )
+
+
+def main():
+    circuit = builtins.default_circuit
+    sheet = Sheet()
+    where = {}          # ref -> (lib_id, x, y)
+    pin_at = {}         # (ref, pin num) -> (x, y, outward dx, dy)
+    undrawn = []
+
+    spare_x, spare_y = 55, 500
+    for part in sorted(circuit.parts, key=lambda p: p.ref):
+        try:
+            lib = str(part.lib.filename).replace(".kicad_sym", "")
+        except AttributeError:
+            undrawn.append(part)
+            continue
+        try:
+            lib_id = sheet.need(lib, part.name)
+        except (KeyError, FileNotFoundError, OSError):
+            undrawn.append(part)
+            continue
+        x, y = FLOORPLAN.get(part.ref, (spare_x, spare_y))
+        if part.ref not in FLOORPLAN:
+            spare_x += 45
+        where[part.ref] = (lib_id, snap(x), snap(y))
+
+    for part in circuit.parts:
+        if part.ref not in where:
+            continue
+        lib_id, x, y = where[part.ref]
+        sheet.place(lib_id, x, y, part.ref, str(part.value or part.name))
+        geom = pin_positions(sheet.libs[lib_id])
+        for pin in part.pins:
+            nums = pin.num if isinstance(pin.num, list) else [pin.num]
+            for num in nums:
+                g = geom.get(str(num))
+                if g is None:
+                    continue
+                px, py, rot, _ = g
+                ax, ay = x + px, y - py
+                dx, dy = outward(rot)
+                if pin.net is None:
+                    sheet.no_connect(ax, ay)
+                else:
+                    pin_at[(part.ref, str(num))] = (ax, ay, dx, dy)
+
+    # Rails become power symbols, one per pin, which is how a schematic says
+    # "this is ground" without drawing a line to every other ground.
+    for net in circuit.nets:
+        if net.name not in RAILS:
+            continue
+        lib_id = sheet.need("power", RAILS[net.name])
+        for pin in net.pins:
+            nums = pin.num if isinstance(pin.num, list) else [pin.num]
+            for num in nums:
+                spot = pin_at.get((pin.part.ref, str(num)))
+                if spot is None:
+                    continue
+                ax, ay, dx, dy = spot
+                bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
+                sheet.wire(ax, ay, bx, by)
+                sheet.place(lib_id, bx, by, f"#PWR{uid()[:4]}", net.name,
+                            hide=True, on_board=False)
+
+    # PWR_FLAG says a rail is fed by something off-sheet or by a part that
+    # is not a power output, which is what KiCad's power_pin_not_driven rule
+    # asks for. VBAT comes from a cell, VBUS from a connector, VLED through
+    # a switch, and none of those is a power-output pin.
+    flag_id = sheet.need("power", "PWR_FLAG")
+    for n, rail in enumerate(("VBAT", "VBUS", "VLED", "GND")):
+        fx, fy = snap(60 + n * 60), snap(530)
+        sheet.place(flag_id, fx, fy, f"#FLG{n}", "PWR_FLAG", hide=True, on_board=False)
+        fg = pin_positions(sheet.libs[flag_id])
+        px, py, rot, _ = next(iter(fg.values()))
+        ax, ay = fx + px, fy - py
+        dx, dy = outward(rot)
+        bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
+        sheet.wire(ax, ay, bx, by)
+        if rail in RAILS:
+            sheet.place(sheet.need("power", RAILS[rail]), bx, by,
+                        f"#PWR{uid()[:4]}", rail, hide=True, on_board=False)
+        else:
+            sheet.label(rail, bx, by, label_angle(dx, dy))
+
+    # Two-ended signals are wired, so the connection is a line to follow.
+    # Everything else keeps a label, as a real sheet does once a signal has
+    # more than one destination.
+    for net in circuit.nets:
+        if net.name in RAILS:
+            continue
+        ends = []
+        for pin in net.pins:
+            nums = pin.num if isinstance(pin.num, list) else [pin.num]
+            for num in nums:
+                spot = pin_at.get((pin.part.ref, str(num)))
+                if spot:
+                    ends.append(spot)
+        near = False
+        if len(ends) == 2:
+            (ax, ay, adx, ady), (bx, by, bdx, bdy) = ends
+            near = math.dist((ax, ay), (bx, by)) <= 45
+        if near:
+            a2 = (snap(ax + adx * STUB), snap(ay + ady * STUB))
+            b2 = (snap(bx + bdx * STUB), snap(by + bdy * STUB))
+            sheet.wire(ax, ay, *a2)
+            sheet.wire(bx, by, *b2)
+            # One corner between them, which keeps the run orthogonal.
+            sheet.wire(a2[0], a2[1], b2[0], a2[1])
+            sheet.wire(b2[0], a2[1], b2[0], b2[1])
+        else:
+            for ax, ay, dx, dy in ends:
+                bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
+                sheet.wire(ax, ay, bx, by)
+                sheet.label(net.name, bx, by, label_angle(dx, dy))
 
     with open("totem.kicad_sch", "w") as fh:
-        fh.write(dump(sheet) + "\n")
+        fh.write(sheet.render() + "\n")
 
-    print(f"totem.kicad_sch: {len(placements) - len(undrawn)} symbols placed")
+    # KiCad writes a newer format than anything that can be hand-built here,
+    # and says so in a banner when it opens an older one. Let it do the
+    # conversion rather than guessing the version number.
+    subprocess.run(["kicad-cli", "sch", "upgrade", "totem.kicad_sch"],
+                   capture_output=True, check=False)
+
+    print(f"totem.kicad_sch: {len(where)} symbols, "
+          f"{sum(1 for i in sheet.items if i[0] == 'wire')} wires")
     for part in undrawn:
         print(f"  not drawn (no KiCad symbol): {part.ref} {part.name}")
 
-
-SHEET_UUID = uid()
 
 if __name__ == "__main__":
     main()
