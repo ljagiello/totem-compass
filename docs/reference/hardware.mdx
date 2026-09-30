@@ -27,9 +27,12 @@ nothing contradicts it.
 | --- | --- | --- | --- |
 | U1 | **Espressif ESP32-WROOM-32E** | `ESP32-WROOM-32E`, FCC ID `2AC7Z-ESP32WROOM32E`, IC `21098-ESPWROOM32E`, CMIIT ID `2020DP2713` | Application CPU, WiFi, BLE and ESP-NOW, with its own PCB meander antenna |
 | U2 | **u-blox MAX-M10S** | `MAX-M10S`, `u-blox`, silkscreen `GNSS` | GNSS receiver: GPS, Galileo, BeiDou and GLONASS concurrently |
-| U3 | **Power-path / charger IC** | *not legible* | QFN beside the USB-C receptacle. Role **inferred** from position |
-| U4 | **IMU** | *not legible* | Accelerometer and gyroscope on I²C bus 0. Existence **confirmed** by the firmware, part unknown |
-| U5 | **Magnetometer** | *not legible* | On I²C bus 0. Existence **confirmed** by the firmware, part unknown |
+| U3 | **TP4056 LiPo charger** | `4056`, lot `L30B`, SOP-8 | Single-cell linear charger, between J1 and J2, with its programming resistors alongside. The marking is a bare `4056`, so a marking-compatible clone is not excluded |
+| U4 | **Regulator (probable)** | `ACH`, SOT-23-5 | Sits in a group of capacitors on the radio side. Package, position and decoupling are those of a 3V3 LDO; a three-letter code is shared across manufacturers, so **no part is claimed** |
+| U5 | **IMU** | *not legible* | Accelerometer and gyroscope on I²C bus 0. Existence **confirmed** by the firmware, part unknown. Not on the radio side, so on the LED side |
+| U6 | **Magnetometer** | *not legible* | On I²C bus 0. Existence **confirmed** by the firmware, part unknown. Likewise on the LED side |
+| U7 | **Unidentified QFN** | *unmarked* | On the LED side among the power passives. No marking survives the halo's glare. One of U5/U6, or a second regulator |
+| R? | **Chip resistor** | `124` | 120 kΩ. The one passive value legible anywhere in the set |
 | MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
 | DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**) |
 | DS61…DS67 | **Touch Crystal cluster** | — | 7 more of the same under the moulded light pipe (**confirmed**). Six in a hexagon around a central post |
@@ -39,7 +42,7 @@ nothing contradicts it.
 | TP1 | **Touch Crystal pad** | — | Capacitive pad under the light pipe |
 | J1 | **USB-C receptacle** | — | Charging and the serial console the updater uses |
 | J2 | **JST battery connector** | — | Two-pin, red and black |
-| J3 | **u.FL / IPEX connector** | — | One coaxial pigtail. **Inferred** to be the GNSS antenna: U1 has its own PCB antenna and the connector sits on the GNSS side |
+| J3 | **u.FL / IPEX connector** | — | One coaxial pigtail, sitting **directly below U2** with U1 carrying its own PCB antenna. The GNSS antenna |
 | BT1 | **LiPo cell** | `805080`, `1000mAh`, `3.7Wh`, `3.7V`, dated `2023.05.18` | Single cell in the housing |
 | — | **PCB** | `Totem v3.5`, `hs-pcba.com` | Board revision and contract manufacturer |
 
@@ -47,30 +50,31 @@ nothing contradicts it.
 
 ```mermaid
 flowchart TB
-    USB["J1 USB-C"] --> PWR["U3 power path / charger"]
-    BT["BT1 LiPo 1000mAh 3.7V"] <--> J2["J2 JST"]
-    J2 <--> PWR
-    PWR -->|3V3| U1
+    USB["J1 USB-C"] -->|VBUS| CHG["U3 TP4056<br/>single-cell charger"]
+    CHG <-->|BAT| J2["J2 JST"]
+    J2 <--> BT["BT1 LiPo 1000mAh 3.7V"]
+    J2 -->|VBAT| LDO["U4 regulator<br/>SOT-23-5 'ACH'"]
+    LDO -->|3V3| U1
 
     U1["U1 ESP32-WROOM-32E<br/>CPU + WiFi + BLE + ESP-NOW"]
 
-    PWR -.->|divider| A34["GPIO 34 ADC<br/>battery volts"]
-    PWR -.->|charger present| A39["GPIO 39 in<br/>is_charging"]
+    J2 -.->|divider| A34["GPIO 34 ADC<br/>battery volts"]
+    CHG -.->|"CHRG, open drain"| A39["GPIO 39 in<br/>is_charging"]
     A34 --> U1
     A39 --> U1
 
     U1 ---|"UART 115200, UBX"| U2["U2 u-blox MAX-M10S<br/>GPS+GAL+BDS+GLO"]
     U2 --- J3["J3 u.FL antenna"]
 
-    U1 ---|"I2C0 SDA 25 / SCL 26"| U4["U4 IMU"]
-    U1 ---|"I2C0 SDA 25 / SCL 26"| U5["U5 magnetometer"]
+    U1 ---|"I2C0 SDA 25 / SCL 26"| U5["U5 IMU"]
+    U1 ---|"I2C0 SDA 25 / SCL 26"| U6["U6 magnetometer"]
 
     MK1["MK1 MEMS microphone"] -->|"GPIO 36 ADC"| U1
     SW2["SW2 SOS button"] -->|"GPIO 0, pull-up"| U1
     TP1["TP1 touch pad"] -->|"GPIO 27 cap touch"| U1
     SW1["SW1 power button"] <-->|"GPIO 4 in/out"| U1
     U1 -->|"GPIO 4 driven low"| GATE["external power gate"]
-    GATE -.->|releases| PWR
+    GATE -.->|releases| LDO
 
     U1 -->|"GPIO 18 data"| RING["DS1-DS60 halo ring"]
     U1 -->|"GPIO 19 enable"| RING
@@ -93,10 +97,10 @@ photographs show at the other end.
 | `BTN_SOS` | **GPIO 0** | in, pull-up | SW2 | [Power](/subsystems/power) |
 | `SOS_LED` | **GPIO 14** | out, pull-down | DS68 | [Power](/subsystems/power) |
 | `VBAT_SENSE` | **GPIO 34** | ADC, `ATTN_11DB` | Divider off BT1 | [Power](/subsystems/power) |
-| `CHG_PRESENT` | **GPIO 39** | in | U3 | [Power](/subsystems/power) |
+| `CHG_PRESENT` | **GPIO 39** | in | U3's status output (`CHRG`, open drain — **inferred**) | [Power](/subsystems/power) |
 | `MIC` | **GPIO 36** | ADC, `ATTN_11DB` | MK1 | [Power](/subsystems/power) |
-| `I2C0_SDA` | **GPIO 25** | bidirectional | U4, U5 | [Navigation](/subsystems/navigation) |
-| `I2C0_SCL` | **GPIO 26** | out | U4, U5 | [Navigation](/subsystems/navigation) |
+| `I2C0_SDA` | **GPIO 25** | bidirectional | U5, U6 | [Navigation](/subsystems/navigation) |
+| `I2C0_SCL` | **GPIO 26** | out | U5, U6 | [Navigation](/subsystems/navigation) |
 | `GNSS_TX` / `GNSS_RX` | **not recovered** | UART | U2 | [Navigation](/subsystems/navigation) |
 
 The pull-ups named above are the ESP32's **internal** ones, since that is what the firmware
@@ -118,6 +122,18 @@ Pin(4, Pin.OUT, Pin.PULL_UP).off()
 That is the real "off" ([Power](/subsystems/power)). Button and latch share one net, so the
 board cannot read the button while it is asserting the latch — which is exactly what powering
 down means.
+
+### Charging and regulation are separate parts
+
+U3 is a **charger only**: a TP4056 takes VBUS from the USB-C receptacle and charges the cell,
+and that is all it does. It does not supply the board. The 3V3 the ESP32 runs on comes from
+U4, the SOT-23-5 sitting in its own group of capacitors, fed from the battery rather than
+from USB — which is why the Totem runs identically on and off the cable, and why `GPIO 34`
+reads the cell rather than the supply.
+
+`GPIO 39` reading as `modes.is_charging` fits the TP4056's open-drain `CHRG` pin, which pulls
+low while charging. That connection is **inferred** from the part and the firmware's use of
+the pin, not traced.
 
 ### The microphone is a loudness sensor
 
@@ -144,14 +160,14 @@ These are gaps, not omissions, and each one names the photograph that would clos
 
 | Unknown | What would resolve it |
 | --- | --- |
-| U3, U4, U5 part numbers | Macro shots of each package **with the LEDs off** — the halo's glare washes out laser marking at every exposure in the current set |
-| GNSS UART pin numbers | Either a higher-resolution shot of the traces leaving U2, or a deeper decode of the UART init |
-| Passive values, divider ratios, series resistors | A bare board, or the manufacturer's files. Not recoverable from an assembled one |
+| U5, U6, U7 part numbers | Macro shots of the LED side **with the halo off**. Its glare washes the laser marking off every package there at every exposure in the current set, while the radio side, lit only by the ring's spill, gave up all of its markings |
+| U4's actual part | A clearer shot of the SOT-23-5. `ACH` alone does not identify it |
+| GNSS UART pin numbers | The traces leaving U2 are visible but not followable past the module's own pads; a deeper decode of the UART init is the better route |
+| Passive values, divider ratios, series resistors | A bare board, or the manufacturer's files. Not recoverable from an assembled one — the single `124` above is the exception that shows the rule |
 | External pull-ups on I²C | Same |
 
-The current photographs are a 360×480 thumbnail of the radio side and two 4032×3024 shots of
-the LED side and the housing. At full resolution the QFN and the I²C parts are sharp but
-unmarked under the light.
+All three photographs are 4032×3024. The radio side yielded every marking it carries; the
+LED side is sharp and unmarked, because the thing being photographed is also a lamp.
 
 ## How this differs from the emulator board
 
