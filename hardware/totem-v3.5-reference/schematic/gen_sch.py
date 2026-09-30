@@ -38,33 +38,54 @@ GRID = 1.27
 STUB = 3 * GRID
 TODAY = datetime.date.today().isoformat()
 
-# Rails drawn as power symbols rather than labels.
-RAILS = {"GND": "GND", "+3V3": "+3V3", "VBUS": "VBUS", "VBAT": "+BATT"}
+# Rails drawn as power symbols rather than labels. A power symbol's Value is
+# the net it names, so VSYS and VLED can ride on the generic VCC symbol.
+RAILS = {"GND": "GND", "+3V3": "+3V3", "VBUS": "VBUS", "VBAT": "+BATT",
+         "VSYS": "VCC", "VLED": "VCC"}
 
-# Placed by function: power down the left, the MCU in the middle, the
-# things it talks to on the right, the things a person presses at the
-# bottom. Coordinates are millimetres and get snapped to the grid.
+# Placed by function on an A0 sheet: power path along the top, the latch and
+# the MCU through the middle, the two LED chains as grids along the bottom.
+# Coordinates are millimetres and get snapped to the grid.
 FLOORPLAN = {
-    # power in
-    "J1": (55, 55), "U4": (185, 60), "J2": (55, 165), "R5": (120, 120),
-    "R3": (300, 40), "R4": (300, 85), "R1": (300, 150), "R2": (300, 195),
-    # the MCU
-    "U1": (470, 190),
-    # reset
-    "R13": (370, 95), "C2": (405, 130),
+    # USB-C and its CC resistors
+    "J1": (60, 75), "R20": (150, 45), "R21": (150, 90), "C10": (185, 70),
+    # charger and cell
+    "U3": (265, 75), "R5": (335, 60), "C11": (365, 60), "J2": (410, 75),
+    # regulator
+    "U4": (490, 65), "C13": (455, 115), "C14": (535, 115),
+    # sense dividers
+    "R1": (600, 45), "R2": (600, 95), "R3": (645, 45), "R4": (645, 95),
     # GNSS
-    "U2": (680, 80), "J3": (790, 80),
+    "U2": (770, 95), "C5": (705, 170), "C6": (735, 170), "J3": (860, 80),
     # the 9-axis part
-    "U5": (680, 245), "R7": (605, 195), "R8": (640, 195), "C1": (770, 265),
-    # the strips
-    "R9": (600, 345), "Q1": (660, 345), "DS1": (760, 330), "DS61": (760, 400),
-    # what a person touches
-    "SW1": (130, 300), "R10": (75, 345), "R11": (240, 300),
-    "SW2": (130, 370), "TP1": (130, 425),
-    "MK1": (245, 420), "R12": (245, 370),
-    # the SOS indicator
-    "R6": (600, 450), "DS68": (665, 450),
+    "U5": (965, 95), "C7": (905, 175), "C8": (935, 175), "C1": (1005, 175),
+    "R7": (1050, 60), "R8": (1085, 60), "R26": (1045, 175),
+    # the power latch
+    "SW1": (60, 290), "R18": (100, 335), "D1": (150, 290), "Q3": (165, 365),
+    "R19": (215, 330), "D2": (255, 300), "R17": (295, 300), "Q2": (245, 415),
+    "R15": (195, 440), "C12": (225, 460), "R16": (305, 385), "Q1": (335, 445),
+    "R14": (385, 425),
+    # the MCU, its reset, its strap and its programming pads
+    "U1": (565, 375), "C3": (470, 300), "C4": (500, 300),
+    "R13": (665, 265), "C2": (695, 295), "R22": (470, 455), "SW2": (470, 505),
+    "TP2": (760, 265), "TP3": (760, 300), "TP4": (760, 335),
+    "TP5": (760, 370), "TP6": (760, 405), "TP7": (760, 440),
+    # SOS indicator, touch, microphone
+    "R6": (850, 300), "D3": (900, 300), "TP1": (850, 380),
+    "R23": (1000, 255), "MK1": (1000, 305), "C18": (1050, 305),
+    "R24": (1095, 265), "R25": (1095, 345),
+    # ring power switch and data resistors
+    "R9": (840, 445), "Q4": (875, 475), "Q5": (935, 475), "R10": (965, 505),
+    "R11": (1005, 475), "C15": (1065, 455), "C16": (1095, 455),
+    "R12": (1005, 525), "C17": (1065, 525),
 }
+# The ring: 60 pixels, 20 to a row, close enough that each pixel's DOUT
+# wires straight to the next one's DIN.
+for _i in range(60):
+    FLOORPLAN[f"D{100 + _i}"] = (60 + (_i % 20) * 40, 600 + (_i // 20) * 65)
+# The crystal: 7 more, one row.
+for _i in range(7):
+    FLOORPLAN[f"D{200 + _i}"] = (60 + _i * 40, 800)
 
 
 def snap(v):
@@ -148,7 +169,7 @@ class Sheet:
         return f"{prefix}{self.power_n[prefix]:02d}"
 
     def place(self, lib_id, x, y, ref, value, hide=False, on_board=True,
-              hide_ref=False, value_below=False):
+              hide_ref=False, value_below=False, footprint=None):
         """Place a symbol.
 
         `hide_ref` hides the reference but leaves the value showing, which
@@ -167,7 +188,7 @@ class Sheet:
         # it, so the name goes on the far side in each case rather than on
         # top of the stub wire.
         val_y = y + 5 if value_below else y - 8
-        footprint = self.footprints.get(lib_id, "")
+        footprint = footprint or self.footprints.get(lib_id, "")
         self.items.append(
             ["symbol",
              ["lib_id", ("str", lib_id)],
@@ -222,7 +243,7 @@ class Sheet:
              ["uuid", ("str", uid(f"nc:{x},{y}"))]]
         )
 
-    def render(self, paper="A1"):
+    def render(self, paper="A0"):
         return dump(
             ["kicad_sch",
              ["version", "20250114"],
@@ -282,7 +303,7 @@ def main():
         if part.ref not in where:
             continue
         lib_id, x, y = where[part.ref]
-        sheet.place(lib_id, x, y, part.ref, str(part.value or part.name))
+        sheet.place(lib_id, x, y, part.ref, str(part.value or part.name), footprint=getattr(part, "footprint", None) or None)
         geom = pin_positions(sheet.libs[lib_id])
         for pin in part.pins:
             nums = pin.num if isinstance(pin.num, list) else [pin.num]
@@ -338,8 +359,8 @@ def main():
     # part, which is exactly the kind of quiet compensation that hides a
     # hole rather than showing it.
     flag_id = sheet.need("power", "PWR_FLAG")
-    for n, rail in enumerate(("VBUS", "VLED", "GND")):
-        fx, fy = snap(60 + n * 60), snap(530)
+    for n, rail in enumerate(("VBUS", "VSYS", "VLED", "GND")):
+        fx, fy = snap(420 + n * 60), snap(820)
         sheet.place(flag_id, fx, fy, sheet.power_ref("#FLG"), "PWR_FLAG",
                     hide=True, on_board=False)
         fg = pin_positions(sheet.libs[flag_id])

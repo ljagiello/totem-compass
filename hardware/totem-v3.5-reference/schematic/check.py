@@ -56,6 +56,14 @@ def kicad_checks():
       sheet, which has happened once already and was invisible to both ERCs.
     """
     problems = []
+    # Regenerate the sheet from the circuit first. Comparing against whatever
+    # sheet happens to be on disk made the result depend on whether someone
+    # remembered to run gen_sch.py — it caught a stale sheet once, correctly,
+    # but a check should not rely on the order commands were typed in.
+    gen = subprocess.run([sys.executable, "gen_sch.py"], cwd=HERE,
+                         capture_output=True, text=True, timeout=600)
+    if gen.returncode != 0:
+        return ["gen_sch.py did not complete: " + (gen.stdout + gen.stderr).strip()[-400:]]
     if not SHEET.exists():
         return ["totem.kicad_sch was not written"]
 

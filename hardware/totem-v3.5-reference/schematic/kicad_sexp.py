@@ -129,6 +129,17 @@ def symbol(lib, name):
         for keep in ("pin_numbers", "pin_names", "exclude_from_sim", "in_bom", "on_board"):
             if not children(sym, keep):
                 merged.extend(children(base, keep))
+        # Properties the child does not override are inherited too. Leaving
+        # them out cost the SPICE model: 1N4148W extends 1N4001 and gets its
+        # Sim.Device and Sim.Pins only from the parent, so an embedded copy
+        # without them could not be simulated, and KiCad flagged the copy as
+        # not matching its library.
+        own = {p[1][1] for p in children(sym, "property") if isinstance(p[1], tuple)}
+        at = next((i for i, c in enumerate(merged)
+                   if isinstance(c, list) and head(c) == "symbol"), len(merged))
+        inherited = [p for p in children(base, "property")
+                     if isinstance(p[1], tuple) and p[1][1] not in own]
+        merged[at:at] = inherited
         return merged
     raise KeyError(f"{lib}:{name}")
 

@@ -6,6 +6,67 @@ from skidl.pin import pin_types
 SKIDL_lib_version = '0.0.1'
 
 totem = SchLib(tool=SKIDL).add_parts(*[
+        Part(**{ 'name':'USB_C_Receptacle_USB2.0_16P', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'USB_C_Receptacle_USB2.0_16P'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12', 'keywords':'usb universal serial bus type-C USB2.0', 'description':'USB 2.0-only 16P Type-C Receptacle connector', 'datasheet':'https://www.usb.org/sites/default/files/documents/usb_type-c.zip', 'pins':[
+            Pin(num='A1',name='GND',func=pin_types.PASSIVE,unit=1),
+            Pin(num='A4',name='VBUS',func=pin_types.PASSIVE,unit=1),
+            Pin(num='A5',name='CC1',func=pin_types.BIDIR,unit=1),
+            Pin(num='A6',name='D+',func=pin_types.BIDIR,unit=1),
+            Pin(num='A7',name='D-',func=pin_types.BIDIR,unit=1),
+            Pin(num='A8',name='SBU1',func=pin_types.BIDIR,unit=1),
+            Pin(num='A9',name='VBUS',func=pin_types.PASSIVE,unit=1),
+            Pin(num='A12',name='GND',func=pin_types.PASSIVE,unit=1),
+            Pin(num='B1',name='GND',func=pin_types.PASSIVE,unit=1),
+            Pin(num='B4',name='VBUS',func=pin_types.PASSIVE,unit=1),
+            Pin(num='B5',name='CC2',func=pin_types.BIDIR,unit=1),
+            Pin(num='B6',name='D+',func=pin_types.BIDIR,unit=1),
+            Pin(num='B7',name='D-',func=pin_types.BIDIR,unit=1),
+            Pin(num='B8',name='SBU2',func=pin_types.BIDIR,unit=1),
+            Pin(num='B9',name='VBUS',func=pin_types.PASSIVE,unit=1),
+            Pin(num='B12',name='GND',func=pin_types.PASSIVE,unit=1),
+            Pin(num='SH',name='SHIELD',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'R', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'R'}), 'ref_prefix':'R', 'fplist':[''], 'footprint':'Resistor_SMD:R_0402_1005Metric', 'keywords':'R res resistor', 'description':'Resistor', 'datasheet':'', 'pins':[
+            Pin(num='1',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'C', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'C'}), 'ref_prefix':'C', 'fplist':[''], 'footprint':'Capacitor_SMD:C_0603_1608Metric', 'keywords':'cap capacitor', 'description':'Unpolarized capacitor', 'datasheet':'', 'pins':[
+            Pin(num='1',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'TP4056-42-ESOP8', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'TP4056-42-ESOP8'}), 'ref_prefix':'U', 'fplist':['Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm_ThermalVias'], 'footprint':'Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.29x3mm', 'keywords':'lithium-ion lithium-polymer Li-Poly', 'description':'1A Standalone Linear Li-ion/LiPo single-cell battery charger, 4.2V Â±1% charge voltage, VCC = 4.0..8.0V, SOIC-8 (SOP-8)', 'datasheet':'https://www.lcsc.com/datasheet/lcsc_datasheet_2410121619_TOPPOWER-Nanjing-Extension-Microelectronics-TP4056-42-ESOP8_C16581.pdf', 'pins':[
+            Pin(num='1',name='TEMP',func=pin_types.INPUT,unit=1),
+            Pin(num='2',name='PROG',func=pin_types.PASSIVE,unit=1),
+            Pin(num='3',name='GND',func=pin_types.PWRIN,unit=1),
+            Pin(num='4',name='V_{CC}',func=pin_types.PWRIN,unit=1),
+            Pin(num='5',name='BAT',func=pin_types.PWROUT,unit=1),
+            Pin(num='6',name='~{STDBY}',func=pin_types.OPENCOLL,unit=1),
+            Pin(num='7',name='~{CHRG}',func=pin_types.OPENCOLL,unit=1),
+            Pin(num='8',name='CE',func=pin_types.INPUT,unit=1),
+            Pin(num='9',name='EPAD',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'Conn_01x02', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Conn_01x02'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal', 'keywords':'connector', 'description':'Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)', 'datasheet':'', 'pins':[
+            Pin(num='1',name='Pin_1',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',name='Pin_2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'SW_Push', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'SW_Push'}), 'ref_prefix':'SW', 'fplist':[''], 'footprint':'totem:SW_Side_6x6', 'keywords':'switch normally-open pushbutton push-button', 'description':'Push button switch, generic, two pins', 'datasheet':'', 'pins':[
+            Pin(num='1',name='1',func=pin_types.PASSIVE),
+            Pin(num='2',name='2',func=pin_types.PASSIVE)], 'unit_defs':[] }),
+        Part(**{ 'name':'AO3401A', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'AO3401A'}), 'ref_prefix':'Q', 'fplist':['Package_TO_SOT_SMD:SOT-23', 'Package_TO_SOT_SMD:SOT-23'], 'footprint':'Package_TO_SOT_SMD:SOT-23', 'keywords':'P-Channel MOSFET', 'description':'-4.0A Id, -30V Vds, P-Channel MOSFET, SOT-23', 'datasheet':'http://www.aosmd.com/pdfs/datasheet/AO3401A.pdf', 'pins':[
+            Pin(num='1',name='G',func=pin_types.INPUT,unit=1),
+            Pin(num='2',name='S',func=pin_types.PASSIVE,unit=1),
+            Pin(num='3',name='D',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'2N7002', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'2N7002'}), 'ref_prefix':'Q', 'fplist':['', 'Package_TO_SOT_SMD:SOT-23'], 'footprint':'Package_TO_SOT_SMD:SOT-23', 'keywords':'N-Channel Switching MOSFET', 'description':'0.115A Id, 60V Vds, N-Channel MOSFET, SOT-23', 'datasheet':'https://www.onsemi.com/pub/Collateral/NDS7002A-D.PDF', 'pins':[
+            Pin(num='1',name='G',func=pin_types.INPUT,unit=1),
+            Pin(num='2',name='S',func=pin_types.PASSIVE,unit=1),
+            Pin(num='3',name='D',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'1N4148W', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'1N4148W'}), 'ref_prefix':'D', 'fplist':['Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal', 'Diode_SMD:D_SOD-123'], 'footprint':'Diode_SMD:D_SOD-123', 'keywords':'diode', 'description':'75V 0.15A Fast Switching Diode, SOD-123', 'datasheet':'https://www.vishay.com/docs/85748/1n4148w.pdf', 'pins':[
+            Pin(num='1',name='K',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',name='A',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'BAT54W', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'BAT54W'}), 'ref_prefix':'D', 'fplist':['Package_TO_SOT_SMD:SOT-323_SC-70'], 'footprint':'Package_TO_SOT_SMD:SOT-323_SC-70', 'keywords':'schottky diode', 'description':'Schottky barrier diode, SOT-323', 'datasheet':'https://assets.nexperia.com/documents/data-sheet/BAT54W_SER.pdf', 'pins':[
+            Pin(num='1',name='A',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',name='NC',func=pin_types.NOCONNECT,unit=1),
+            Pin(num='3',name='K',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'AP2112K-3.3', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'AP2112K-3.3'}), 'ref_prefix':'U', 'fplist':['Package_TO_SOT_SMD:SOT-23-5', 'Package_TO_SOT_SMD:SOT-23-5'], 'footprint':'Package_TO_SOT_SMD:SOT-23-5', 'keywords':'linear regulator ldo fixed positive', 'description':'600mA low dropout linear regulator, with enable pin, 3.8V-6V input voltage range, 3.3V fixed positive output, SOT-23-5', 'datasheet':'https://www.diodes.com/assets/Datasheets/AP2112.pdf', 'pins':[
+            Pin(num='1',name='VIN',func=pin_types.PWRIN,unit=1),
+            Pin(num='2',name='GND',func=pin_types.PWRIN,unit=1),
+            Pin(num='3',name='EN',func=pin_types.INPUT,unit=1),
+            Pin(num='4',name='NC',func=pin_types.NOCONNECT,unit=1),
+            Pin(num='5',name='VOUT',func=pin_types.PWROUT,unit=1)], 'unit_defs':[] }),
         Part(**{ 'name':'ESP32-WROOM-32E', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'ESP32-WROOM-32E'}), 'ref_prefix':'U', 'fplist':['RF_Module:ESP32-WROOM-32E'], 'footprint':'RF_Module:ESP32-WROOM-32E', 'keywords':'RF Radio BT ESP ESP32 Espressif onboard PCB antenna', 'description':'RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, onboard antenna, SMD', 'datasheet':'https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf', 'pins':[
             Pin(num='2',name='VDD',func=pin_types.PWRIN,unit=1),
             Pin(num='3',name='EN',func=pin_types.INPUT,unit=1),
@@ -43,6 +104,8 @@ totem = SchLib(tool=SKIDL).add_parts(*[
             Pin(num='36',name='IO22',func=pin_types.BIDIR,unit=1),
             Pin(num='37',name='IO23',func=pin_types.BIDIR,unit=1),
             Pin(num='[1,15,38,39]',name='GND',func=pin_types.PWRIN,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'TestPoint', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'TestPoint'}), 'ref_prefix':'TP', 'fplist':[''], 'footprint':'TestPoint:TestPoint_Pad_D1.0mm', 'keywords':'test point tp', 'description':'test point', 'datasheet':'', 'pins':[
+            Pin(num='1',name='1',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
         Part(**{ 'name':'MAX-M10S', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'MAX-M10S'}), 'ref_prefix':'U', 'fplist':['RF_GPS:ublox_MAX'], 'footprint':'RF_GPS:ublox_MAX', 'keywords':'ublox GPS GNSS module', 'description':'GNSS Module MAX M10, VCC 1.65V to 3.6V', 'datasheet':'https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf', 'pins':[
             Pin(num='1',name='GND',func=pin_types.PWRIN,unit=1),
             Pin(num='2',name='TXD',func=pin_types.OUTPUT,unit=1),
@@ -62,22 +125,9 @@ totem = SchLib(tool=SKIDL).add_parts(*[
             Pin(num='16',name='SDA',func=pin_types.BIDIR,unit=1),
             Pin(num='17',name='SCL',func=pin_types.INPUT,unit=1),
             Pin(num='18',name='~{SAFEBOOT}',func=pin_types.INPUT,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'TP4056-42-ESOP8', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'TP4056-42-ESOP8'}), 'ref_prefix':'U', 'fplist':['Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm_ThermalVias'], 'footprint':'Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm_ThermalVias', 'keywords':'lithium-ion lithium-polymer Li-Poly', 'description':'1A Standalone Linear Li-ion/LiPo single-cell battery charger, 4.2V Â±1% charge voltage, VCC = 4.0..8.0V, SOIC-8 (SOP-8)', 'datasheet':'https://www.lcsc.com/datasheet/lcsc_datasheet_2410121619_TOPPOWER-Nanjing-Extension-Microelectronics-TP4056-42-ESOP8_C16581.pdf', 'pins':[
-            Pin(num='1',name='TEMP',func=pin_types.INPUT,unit=1),
-            Pin(num='2',name='PROG',func=pin_types.PASSIVE,unit=1),
-            Pin(num='3',name='GND',func=pin_types.PWRIN,unit=1),
-            Pin(num='4',name='V_{CC}',func=pin_types.PWRIN,unit=1),
-            Pin(num='5',name='BAT',func=pin_types.PWROUT,unit=1),
-            Pin(num='6',name='~{STDBY}',func=pin_types.OPENCOLL,unit=1),
-            Pin(num='7',name='~{CHRG}',func=pin_types.OPENCOLL,unit=1),
-            Pin(num='8',name='CE',func=pin_types.INPUT,unit=1),
-            Pin(num='9',name='EPAD',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'AP2127K-3.3', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'AP2127K-3.3'}), 'ref_prefix':'U', 'fplist':['Package_TO_SOT_SMD:SOT-23-5', 'Package_TO_SOT_SMD:SOT-23-5'], 'footprint':'Package_TO_SOT_SMD:SOT-23-5', 'keywords':'linear regulator ldo fixed positive', 'description':'300mA low dropout linear regulator, shutdown pin, 2.5V-6V input voltage, 3.3V fixed positive output, SOT-23-5', 'datasheet':'https://www.diodes.com/assets/Datasheets/AP2127.pdf', 'pins':[
-            Pin(num='1',name='VIN',func=pin_types.PWRIN,unit=1),
-            Pin(num='2',name='GND',func=pin_types.PWRIN,unit=1),
-            Pin(num='3',name='EN',func=pin_types.INPUT,unit=1),
-            Pin(num='4',name='NC',func=pin_types.NOCONNECT,unit=1),
-            Pin(num='5',name='VOUT',func=pin_types.PWROUT,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'Conn_Coaxial', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Conn_Coaxial'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'Connector_Coaxial:U.FL_Hirose_U.FL-R-SMT-1_Vertical', 'keywords':'BNC SMA SMB SMC LEMO coaxial connector CINCH RCA MCX MMCX U.FL UMRF', 'description':'coaxial connector (BNC, SMA, SMB, SMC, Cinch/RCA, LEMO, ...)', 'datasheet':'', 'pins':[
+            Pin(num='1',name='In',func=pin_types.PASSIVE,unit=1),
+            Pin(num='2',name='Ext',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
         Part(**{ 'name':'ICM-20948', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'ICM-20948'}), 'ref_prefix':'U', 'fplist':['Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm'], 'footprint':'Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm', 'keywords':'mems magnetometer', 'description':'InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24', 'datasheet':'http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf', 'pins':[
             Pin(num='1',name='NC',func=pin_types.NOCONNECT,unit=1),
             Pin(num='2',name='NC',func=pin_types.NOCONNECT,unit=1),
@@ -103,50 +153,14 @@ totem = SchLib(tool=SKIDL).add_parts(*[
             Pin(num='22',name='~{CS}',func=pin_types.INPUT,unit=1),
             Pin(num='23',name='SCL/SCLK',func=pin_types.INPUT,unit=1),
             Pin(num='24',name='SDA/SDI',func=pin_types.BIDIR,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'WS2812B', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'WS2812B'}), 'ref_prefix':'D', 'fplist':['LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm'], 'footprint':'LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm', 'keywords':'RGB LED NeoPixel addressable', 'description':'RGB LED with integrated controller', 'datasheet':'https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf', 'pins':[
-            Pin(num='1',name='VDD',func=pin_types.PWRIN,unit=1),
-            Pin(num='2',name='DOUT',func=pin_types.OUTPUT,unit=1),
-            Pin(num='3',name='VSS',func=pin_types.PWRIN,unit=1),
-            Pin(num='4',name='DIN',func=pin_types.INPUT,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'LED', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'LED'}), 'ref_prefix':'D', 'fplist':[''], 'footprint':'', 'keywords':'LED diode', 'description':'Light emitting diode', 'datasheet':'', 'pins':[
+        Part(**{ 'name':'WS2812B-2020', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'WS2812B-2020'}), 'ref_prefix':'D', 'fplist':['LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm'], 'footprint':'LED_SMD:LED_WS2812B-2020_PLCC4_2.0x2.0mm', 'keywords':'RGB LED NeoPixel Nano addressable', 'description':'RGB LED with integrated controller, 2.0 x 2.0 mm, 12 mA', 'datasheet':'https://cdn-shop.adafruit.com/product-files/4684/4684_WS2812B-2020_V1.3_EN.pdf', 'pins':[
+            Pin(num='1',name='DOUT',func=pin_types.OUTPUT,unit=1),
+            Pin(num='2',name='VSS',func=pin_types.PWRIN,unit=1),
+            Pin(num='3',name='DIN',func=pin_types.INPUT,unit=1),
+            Pin(num='4',name='VDD',func=pin_types.PWRIN,unit=1)], 'unit_defs':[] }),
+        Part(**{ 'name':'LED', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'LED'}), 'ref_prefix':'D', 'fplist':[''], 'footprint':'LED_SMD:LED_0603_1608Metric', 'keywords':'LED diode', 'description':'Light emitting diode', 'datasheet':'', 'pins':[
             Pin(num='1',name='K',func=pin_types.PASSIVE,unit=1),
             Pin(num='2',name='A',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'Q_PMOS', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Q_PMOS'}), 'ref_prefix':'Q', 'fplist':[''], 'footprint':'', 'keywords':'PMOS P-MOS', 'description':'P-MOSFET transistor', 'datasheet':'', 'pins':[
-            Pin(num='D',name='D',func=pin_types.PASSIVE,unit=1),
-            Pin(num='G',name='G',func=pin_types.INPUT,unit=1),
-            Pin(num='S',name='S',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'USB_C_Receptacle_USB2.0_16P', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'USB_C_Receptacle_USB2.0_16P'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'', 'keywords':'usb universal serial bus type-C USB2.0', 'description':'USB 2.0-only 16P Type-C Receptacle connector', 'datasheet':'https://www.usb.org/sites/default/files/documents/usb_type-c.zip', 'pins':[
-            Pin(num='A1',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='A4',name='VBUS',func=pin_types.PASSIVE,unit=1),
-            Pin(num='A5',name='CC1',func=pin_types.BIDIR,unit=1),
-            Pin(num='A6',name='D+',func=pin_types.BIDIR,unit=1),
-            Pin(num='A7',name='D-',func=pin_types.BIDIR,unit=1),
-            Pin(num='A8',name='SBU1',func=pin_types.BIDIR,unit=1),
-            Pin(num='A9',name='VBUS',func=pin_types.PASSIVE,unit=1),
-            Pin(num='A12',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B1',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B4',name='VBUS',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B5',name='CC2',func=pin_types.BIDIR,unit=1),
-            Pin(num='B6',name='D+',func=pin_types.BIDIR,unit=1),
-            Pin(num='B7',name='D-',func=pin_types.BIDIR,unit=1),
-            Pin(num='B8',name='SBU2',func=pin_types.BIDIR,unit=1),
-            Pin(num='B9',name='VBUS',func=pin_types.PASSIVE,unit=1),
-            Pin(num='B12',name='GND',func=pin_types.PASSIVE,unit=1),
-            Pin(num='SH',name='SHIELD',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'Conn_01x02', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Conn_01x02'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'', 'keywords':'connector', 'description':'Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)', 'datasheet':'', 'pins':[
-            Pin(num='1',name='Pin_1',func=pin_types.PASSIVE,unit=1),
-            Pin(num='2',name='Pin_2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'Conn_01x01', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Conn_01x01'}), 'ref_prefix':'J', 'fplist':[''], 'footprint':'', 'keywords':'connector', 'description':'Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)', 'datasheet':'', 'pins':[
-            Pin(num='1',name='Pin_1',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'SW_Push', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'SW_Push'}), 'ref_prefix':'SW', 'fplist':[''], 'footprint':'', 'keywords':'switch normally-open pushbutton push-button', 'description':'Push button switch, generic, two pins', 'datasheet':'', 'pins':[
-            Pin(num='1',name='1',func=pin_types.PASSIVE),
-            Pin(num='2',name='2',func=pin_types.PASSIVE)], 'unit_defs':[] }),
-        Part(**{ 'name':'Microphone', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Microphone'}), 'ref_prefix':'MK', 'fplist':[''], 'footprint':'', 'keywords':'microphone', 'description':'Microphone', 'datasheet':'', 'pins':[
+        Part(**{ 'name':'Microphone_Condenser', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'Microphone_Condenser'}), 'ref_prefix':'MK', 'fplist':[''], 'footprint':'Sensor_Audio:CUI_CMC-4013-SMT', 'keywords':'capacitance condenser microphone', 'description':'Condenser microphone', 'datasheet':'', 'pins':[
             Pin(num='1',name='-',func=pin_types.PASSIVE,unit=1),
-            Pin(num='2',name='+',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'R', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'R'}), 'ref_prefix':'R', 'fplist':[''], 'footprint':'', 'keywords':'R res resistor', 'description':'Resistor', 'datasheet':'', 'pins':[
-            Pin(num='1',func=pin_types.PASSIVE,unit=1),
-            Pin(num='2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] }),
-        Part(**{ 'name':'C', 'dest':TEMPLATE, 'tool':SKIDL, 'aliases':Alias({'C'}), 'ref_prefix':'C', 'fplist':[''], 'footprint':'', 'keywords':'cap capacitor', 'description':'Unpolarized capacitor', 'datasheet':'', 'pins':[
-            Pin(num='1',func=pin_types.PASSIVE,unit=1),
-            Pin(num='2',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] })])
+            Pin(num='2',name='+',func=pin_types.PASSIVE,unit=1)], 'unit_defs':[] })])
