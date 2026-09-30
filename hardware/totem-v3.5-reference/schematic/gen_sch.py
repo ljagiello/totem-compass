@@ -71,8 +71,21 @@ def snap(v):
     return round(v / GRID) * GRID
 
 
-def uid():
-    return str(uuidlib.uuid4())
+# A fixed namespace, so the same circuit always produces the same file.
+NS = uuidlib.UUID("6ba7b811-9dad-11d1-80b4-00c04fd430c8")
+
+
+def uid(key=None):
+    """A uuid derived from `key`, or a random one when there is no key.
+
+    Symbols and footprints are linked by uuid, not by reference designator,
+    so a board updated from a schematic whose uuids changed sees no
+    matching footprints: it deletes every one and adds them again, losing
+    all placement and routing. Random uuids would make every regeneration
+    of this file destroy a layout built on the last one. They also key ERC
+    exclusions, which would evaporate the same way.
+    """
+    return str(uuidlib.uuid5(NS, key) if key else uuidlib.uuid4())
 
 
 def rename(sym, lib_id):
@@ -101,7 +114,7 @@ class Sheet:
         self.libs = {}
         self.footprints = {}
         self.power_n = {}
-        self.uuid = uid()
+        self.uuid = uid("sheet:totem")
 
     def need(self, lib, name):
         lib_id = f"{lib}:{name}"
@@ -164,7 +177,7 @@ class Sheet:
              ["in_bom", "yes" if on_board else "no"],
              ["on_board", "yes" if on_board else "no"],
              ["dnp", "no"],
-             ["uuid", ("str", uid())],
+             ["uuid", ("str", uid(f"sym:{ref}"))],
              ["property", ("str", "Reference"), ("str", ref),
               ["at", f"{x:.2f}", f"{y - 12:.2f}", "0"], ref_eff],
              ["property", ("str", "Value"), ("str", value),
@@ -184,7 +197,7 @@ class Sheet:
             ["wire",
              ["pts", ["xy", f"{x1:.2f}", f"{y1:.2f}"], ["xy", f"{x2:.2f}", f"{y2:.2f}"]],
              ["stroke", ["width", "0"], ["type", "default"]],
-             ["uuid", ("str", uid())]]
+             ["uuid", ("str", uid(f"wire:{x1},{y1}-{x2},{y2}"))]]
         )
 
     def label(self, name, x, y, angle):
@@ -200,12 +213,13 @@ class Sheet:
             ["label", ("str", name),
              ["at", f"{x:.2f}", f"{y:.2f}", str(angle)],
              ["effects", ["font", ["size", "1.27", "1.27"]], ["justify", "left"]],
-             ["uuid", ("str", uid())]]
+             ["uuid", ("str", uid(f"label:{name}@{x},{y}"))]]
         )
 
     def no_connect(self, x, y):
         self.items.append(
-            ["no_connect", ["at", f"{x:.2f}", f"{y:.2f}"], ["uuid", ("str", uid())]]
+            ["no_connect", ["at", f"{x:.2f}", f"{y:.2f}"],
+             ["uuid", ("str", uid(f"nc:{x},{y}"))]]
         )
 
     def render(self, paper="A1"):
@@ -388,7 +402,8 @@ def main():
         if n >= 3:
             sheet.items.append(
                 ["junction", ["at", x, y], ["diameter", "0"],
-                 ["color", "0", "0", "0", "0"], ["uuid", ("str", uid())]]
+                 ["color", "0", "0", "0", "0"],
+                 ["uuid", ("str", uid(f"junction:{x},{y}"))]]
             )
 
     # The project file goes first, and it matters that it does. A loose
