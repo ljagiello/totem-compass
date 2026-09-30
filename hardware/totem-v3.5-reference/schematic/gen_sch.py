@@ -100,6 +100,7 @@ class Sheet:
         self.items = []
         self.libs = {}
         self.footprints = {}
+        self.power_n = {}
         self.uuid = uid()
 
     def need(self, lib, name):
@@ -122,11 +123,37 @@ class Sheet:
                     break
         return lib_id
 
-    def place(self, lib_id, x, y, ref, value, hide=False, on_board=True):
+    def power_ref(self, prefix):
+        """Sequential #PWR01, #FLG01… rather than random hex.
+
+        References must be unique and ERC checks for duplicates. Four random
+        hex characters over 55 symbols is about a two percent chance of a
+        collision on any given run — it had not happened yet, which is not
+        the same as it being safe.
+        """
+        self.power_n[prefix] = self.power_n.get(prefix, 0) + 1
+        return f"{prefix}{self.power_n[prefix]:02d}"
+
+    def place(self, lib_id, x, y, ref, value, hide=False, on_board=True,
+              hide_ref=False, value_below=False):
+        """Place a symbol.
+
+        `hide_ref` hides the reference but leaves the value showing, which
+        is what a power symbol wants: its Value field *is* the net name, so
+        hiding it leaves a sheet full of unlabelled arrows where no rail can
+        be told from another. KiCad's own power library hides the reference
+        and shows the value, for that reason.
+        """
         eff = ["effects", ["font", ["size", "1.27", "1.27"]]]
         if hide:
             eff.append(["hide", "yes"])
         hidden = ["effects", ["font", ["size", "1.27", "1.27"]], ["hide", "yes"]]
+        ref_eff = list(hidden) if (hide or hide_ref) else list(eff)
+        val_eff = list(hidden) if hide else list(eff)
+        # Ground hangs below its connection point, the supplies rise above
+        # it, so the name goes on the far side in each case rather than on
+        # top of the stub wire.
+        val_y = y + 5 if value_below else y - 8
         footprint = self.footprints.get(lib_id, "")
         self.items.append(
             ["symbol",
@@ -139,9 +166,9 @@ class Sheet:
              ["dnp", "no"],
              ["uuid", ("str", uid())],
              ["property", ("str", "Reference"), ("str", ref),
-              ["at", f"{x:.2f}", f"{y - 12:.2f}", "0"], list(eff)],
+              ["at", f"{x:.2f}", f"{y - 12:.2f}", "0"], ref_eff],
              ["property", ("str", "Value"), ("str", value),
-              ["at", f"{x:.2f}", f"{y - 8:.2f}", "0"], list(eff)],
+              ["at", f"{x:.2f}", f"{val_y:.2f}", "0"], val_eff],
              ["property", ("str", "Footprint"), ("str", footprint),
               ["at", f"{x:.2f}", f"{y - 4:.2f}", "0"], list(hidden)],
              ["instances",
@@ -259,6 +286,13 @@ def main():
 
     # Rails become power symbols, one per pin, which is how a schematic says
     # "this is ground" without drawing a line to every other ground.
+    #
+    # Deduplicated by point, because a symbol's pins can be stacked: the
+    # USB-C receptacle has four GND contacts and four VBUS contacts at one
+    # place each, and drawing per pin put four wires and four ground symbols
+    # on top of each other. Stacked pins are one connection, so they get one
+    # symbol.
+    drawn = set()
     for net in circuit.nets:
         if net.name not in RAILS:
             continue
@@ -270,10 +304,14 @@ def main():
                 if spot is None:
                     continue
                 ax, ay, dx, dy = spot
+                if (ax, ay) in drawn:
+                    continue
+                drawn.add((ax, ay))
                 bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
                 sheet.wire(ax, ay, bx, by)
-                sheet.place(lib_id, bx, by, f"#PWR{uid()[:4]}", net.name,
-                            hide=True, on_board=False)
+                sheet.place(lib_id, bx, by, sheet.power_ref("#PWR"), net.name,
+                            hide_ref=True, on_board=False,
+                            value_below=(net.name == "GND"))
 
     # PWR_FLAG says a rail is fed by something off-sheet or by a part that
     # is not a power output, which is what KiCad's power_pin_not_driven rule
@@ -282,7 +320,8 @@ def main():
     flag_id = sheet.need("power", "PWR_FLAG")
     for n, rail in enumerate(("VBAT", "VBUS", "VLED", "GND")):
         fx, fy = snap(60 + n * 60), snap(530)
-        sheet.place(flag_id, fx, fy, f"#FLG{n}", "PWR_FLAG", hide=True, on_board=False)
+        sheet.place(flag_id, fx, fy, sheet.power_ref("#FLG"), "PWR_FLAG",
+                    hide=True, on_board=False)
         fg = pin_positions(sheet.libs[flag_id])
         px, py, rot, _ = next(iter(fg.values()))
         ax, ay = fx + px, fy - py
@@ -291,7 +330,8 @@ def main():
         sheet.wire(ax, ay, bx, by)
         if rail in RAILS:
             sheet.place(sheet.need("power", RAILS[rail]), bx, by,
-                        f"#PWR{uid()[:4]}", rail, hide=True, on_board=False)
+                        sheet.power_ref("#PWR"), rail, hide_ref=True,
+                        on_board=False, value_below=(rail == "GND"))
         else:
             sheet.label(rail, bx, by, label_angle(dx, dy))
 
@@ -325,6 +365,25 @@ def main():
                 bx, by = snap(ax + dx * STUB), snap(ay + dy * STUB)
                 sheet.wire(ax, ay, bx, by)
                 sheet.label(net.name, bx, by, label_angle(dx, dy))
+
+    # Junction dots. KiCad adds these itself in the editor — "junction dots
+    # will be automatically added to wires that start or end on top of an
+    # existing wire" — but a file written from outside gets none, and
+    # without them a reader cannot tell a join from a crossing. They are
+    # readability rather than connectivity here: nothing in this sheet ends
+    # mid-segment, so the netlist is the same either way.
+    ends = {}
+    for item in sheet.items:
+        if item[0] != "wire":
+            continue
+        for xy in item[1][1:]:
+            ends[(xy[1], xy[2])] = ends.get((xy[1], xy[2]), 0) + 1
+    for (x, y), n in sorted(ends.items()):
+        if n >= 3:
+            sheet.items.append(
+                ["junction", ["at", x, y], ["diameter", "0"],
+                 ["color", "0", "0", "0", "0"], ["uuid", ("str", uid())]]
+            )
 
     # The project file goes first, and it matters that it does. A loose
     # .kicad_sch opens in standalone mode, where KiCad disables design
