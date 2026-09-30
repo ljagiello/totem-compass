@@ -67,21 +67,12 @@ leave_unused(
 
 # No KiCad symbol exists for the TP4056, so it is declared here with the
 # datasheet's pin numbers.
-u3 = Part(
-    tool=SKIDL,
-    name="TP4056",
-    ref="U3",
-    ref_prefix="U",
-    pins=[
-        Pin(num="1", name="TEMP", func=INPUT),
-        Pin(num="2", name="PROG", func=PASSIVE),
-        Pin(num="3", name="GND", func=PWRIN),
-        Pin(num="4", name="VCC", func=PWRIN),
-        Pin(num="5", name="BAT", func=PWROUT),
-        Pin(num="6", name="BAT2", func=PASSIVE),  # same node on the die as 5
-        Pin(num="7", name="CHRG", func=OPENCOLL),
-        Pin(num="8", name="STDBY", func=OPENCOLL),
-    ],
+u3 = Part("Battery_Management", "TP4056-42-ESOP8", ref="U3")
+leave_unused(
+    u3,
+    {"1", "2", "3", "4", "5", "8", "9"},
+    "STDBY and CHRG are the charger's status outputs, left open on purpose "
+    "because charging is sensed from VBUS instead",
 )
 
 # The SOT-23-5 marked ACH was never identified, so a generic 3V3 regulator
@@ -170,7 +161,7 @@ gnd += (
 # datasheet, so it is left alone rather than tied to ground. SDO/AD0 low
 # selects the lower of the part's two I2C addresses.
 gnd += u1["GND"], u5["GND"], u5["SDO/AD0"]
-vbat += j2[1], u3["5"], u3["6"], u4["VIN"], r_bat_top[1], q_led["S"], r_gate[1], sw1[2]
+vbat += j2[1], u3["5"], u4["VIN"], r_bat_top[1], q_led["S"], r_gate[1], sw1[2]
 v3v3 += (
     u4["VOUT"], u1["VDD"], u2["VCC"], u2["VCC_IO"], u2["V_BCKP"],
     u5["VDD"], u5["VDDIO"], u5["~{CS}"], r_sda[1], r_scl[1],
@@ -241,6 +232,11 @@ v3v3 += r_mic[1]
 # fitted. CHRG and STDBY are left open on purpose — charging is sensed from
 # VBUS — and ERC is right to say so, so those two warnings stay.
 u3["1"] += gnd
+# CE enables charging and is active high; tied to the input supply, the
+# charger runs whenever the cable is in. Left floating the part does
+# nothing at all. Pin 9 is the exposed thermal pad and goes to ground.
+vbus += u3["CE"]
+gnd += u3["EPAD"]
 
 if __name__ == "__main__":
     ERC()

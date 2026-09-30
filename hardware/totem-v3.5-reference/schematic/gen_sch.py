@@ -315,10 +315,16 @@ def main():
 
     # PWR_FLAG says a rail is fed by something off-sheet or by a part that
     # is not a power output, which is what KiCad's power_pin_not_driven rule
-    # asks for. VBAT comes from a cell, VBUS from a connector, VLED through
-    # a switch, and none of those is a power-output pin.
+    # asks for. VBUS comes from a connector, VLED through a switch, and
+    # ground from nothing that drives it.
+    #
+    # VBAT is deliberately NOT flagged: the charger's BAT pin is a real
+    # power output, so the rail has a genuine driver. It needed a flag only
+    # while U3 was missing from the sheet — the flag was standing in for the
+    # part, which is exactly the kind of quiet compensation that hides a
+    # hole rather than showing it.
     flag_id = sheet.need("power", "PWR_FLAG")
-    for n, rail in enumerate(("VBAT", "VBUS", "VLED", "GND")):
+    for n, rail in enumerate(("VBUS", "VLED", "GND")):
         fx, fy = snap(60 + n * 60), snap(530)
         sheet.place(flag_id, fx, fy, sheet.power_ref("#FLG"), "PWR_FLAG",
                     hide=True, on_board=False)

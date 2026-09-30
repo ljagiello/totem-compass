@@ -23,11 +23,11 @@ HERE = Path(__file__).resolve().parent
 ERC = HERE / "totem.erc"
 NET = HERE / "totem.net"
 
-# Left open on purpose: charging is sensed from VBUS, not from these.
-EXPECTED_WARNINGS = {
-    "Unconnected pin: OPEN-COLLECTOR pin 7/CHRG of TP4056/U3.",
-    "Unconnected pin: OPEN-COLLECTOR pin 8/STDBY of TP4056/U3.",
-}
+# The charger's status outputs are left open on purpose — charging is
+# sensed from VBUS — but they are now declared unused on the part itself,
+# so ERC does not report them and there is nothing to allow here. An empty
+# set is the honest state: any warning at all is unexpected.
+EXPECTED_WARNINGS = set()
 
 
 def main() -> int:
@@ -51,11 +51,14 @@ def main() -> int:
 
     report = ERC.read_text()
     errors = re.search(r"(\d+) errors found while running ERC", report)
-    if not errors:
+    if errors:
+        n_errors = int(errors.group(1))
+    elif "No errors or warnings found" in report:
+        # SKiDL says this instead of a count when the run is spotless.
+        n_errors = 0
+    else:
         print("FAIL: the report does not say how many errors were found")
         return 1
-
-    n_errors = int(errors.group(1))
     warnings = [
         re.sub(r"\s*@ \[.*", "", line).replace("ERC WARNING: ", "").strip()
         for line in report.splitlines()
