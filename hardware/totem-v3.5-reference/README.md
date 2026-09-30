@@ -73,14 +73,14 @@ cd sim && python3 check.py
 
 Requires `ngspice` (`brew install ngspice`). Each deck computes; `check.py`
 decides whether the number is allowed, and prints a line per claim. Current
-state: **17 passed, 0 failed, 2 known limits recorded**.
+state: **18 passed, 0 failed, 1 known limit recorded**.
 
 | Block | Result |
 | --- | --- |
 | `batt_sense` | Pin at 1.989 V on a full cell, inside the ADC's 150–2450 mV window. Calibration true to 3.3 mV. Divider draws 18 µA |
 | `vbus_sense` | 2.64 V at 4.40 V in (165 mV over V<sub>IH</sub>), 3.15 V at 5.25 V (450 mV under absolute max). 21 µA |
 | `ldo_headroom` | Rail holds 3.293 V at a 3.4 V cell under a 534 mA peak — 293 mV over the ESP32's minimum. Fails only at 3.107 V, *below* the firmware's cutoff |
-| `led_budget` | Normal use is 0.58 C. The 1 C ceiling is 27.8 pixels |
+| `led_budget` | With the 1515's 15.5 mA per pixel: normal use is 0.15 C, all 67 pixels at full white at the firmware's brightness 0.62 C; 1 C would take 107. Known limit: the pixels want 3.5 V and the firmware runs the cell to 3.15 V |
 
 The digital parts are modelled as current sinks at their datasheet peaks, and
 the regulator and charger behaviourally, because no vendor models are to hand.

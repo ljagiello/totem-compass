@@ -31,7 +31,7 @@ nothing contradicts it.
 | U4 | **Regulator (probable)** | `ACH`, SOT-23-5 | Sits in a group of capacitors on the radio side. Package, position and decoupling are those of a 3V3 LDO; a three-letter code is shared across manufacturers, so **no part is claimed** |
 | U5 | **InvenSense ICM-20948** | `I2948`, `B23LA1`, `2602` | The 9-axis part: gyroscope, accelerometer **and** magnetometer in one 3x3 mm QFN-24 on the LED side, on I²C bus 0. The firmware names it — `c_icm20948_mag.Icm20948Mag` ([Navigation](/subsystems/navigation)) — and its on-die magnetometer is an AK09916 reached through `imu.mag()`. The marking agrees: `I2948` is TDK's top mark for the ICM-20948, `2602` a 2026 week-2 date code. It is legible only at a grazing angle under flash; head-on the lid looks blank, and an earlier version of this table listed the two views as two parts (`U5`, unmarked, and `U6`, a "SOIC-14" — the QFN's edge pads seen obliquely). **There is no separate magnetometer chip on this board** |
 | D? | **Diode** | `A7`, SOD-123 | The standard marking for a 1N4148W small-signal diode |
-| Q? | **SOT-23-3** | `J22B` | Near the LED strips |
+| Q? | **SOT-23-5** | `J22B` (also read `J2ZB`) | On the LED side beside the IMU; nets untraced |
 | — | **Chip resistor** | `124` | 120 kΩ |
 | MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
 | DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**). **1.5 x 1.5 mm packages**: measured 1.50 mm wide at a 1.91 mm pitch on an 18.24 mm radius (`hardware/totem-v3.5-reference/measure/`), which a 2 x 2 mm WS2812B-2020 could not fit; castellated pads on the ring's outer and inner edges, as the XL-1515RGBC-WS2812B's |

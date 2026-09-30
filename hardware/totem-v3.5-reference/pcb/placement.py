@@ -7,9 +7,11 @@ the measurement (hardware/totem-v3.5-reference/measure/); the rest are this
 design's own parts, placed next to what they serve.
 
 Rotation is KiCad's (degrees, counter-clockwise on screen) for side F. For
-side B parts whose pins matter (LEDs, IMU, transistors) build.py picks the
-rotation that satisfies the pin rule given in PIN_RULES rather than trusting
-an angle through the flip.
+side B parts whose pins matter build.py searches for the rotation that
+satisfies each one's pin rule rather than trusting an angle through the
+flip: the ring LEDs (DI and VDD out, DO toward the next LED), the crystal
+LEDs (DI toward the previous one), the IMU (pin 1 where its marking puts it)
+and the microphone (its ring's gap toward free board).
 """
 import json
 import math

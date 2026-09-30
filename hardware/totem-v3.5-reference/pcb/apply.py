@@ -33,11 +33,11 @@ for net, layer, x1, y1, x2, y2, w in R["tracks"]:
     t.SetLayer(LAYER[layer])
     t.SetNet(nets[net])
     B.Add(t)
-for net, x, y in R["vias"]:
+for net, x, y, d, drill in R["vias"]:
     v = pcbnew.PCB_VIA(B)
     v.SetPosition(pt(x, y))
-    v.SetWidth(pcbnew.FromMM(0.45))
-    v.SetDrill(pcbnew.FromMM(0.2))
+    v.SetWidth(pcbnew.FromMM(d))
+    v.SetDrill(pcbnew.FromMM(drill))
     v.SetViaType(pcbnew.VIATYPE_THROUGH)
     v.SetNet(nets[net])
     B.Add(v)

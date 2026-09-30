@@ -40,7 +40,7 @@ def main():
     default = ns["classes"][0]
     default.update({"clearance": 0.13, "track_width": 0.13, "via_diameter": 0.45, "via_drill": 0.2})
     power = dict(default)
-    power.update({"name": "Power", "clearance": 0.2, "track_width": 0.4, "via_diameter": 0.45, "via_drill": 0.2,
+    power.update({"name": "Power", "clearance": 0.2, "track_width": 0.4, "via_diameter": 0.6, "via_drill": 0.3,
                   "priority": 0})
     rf = dict(default)
     rf.update({"name": "RF50", "clearance": 0.3, "track_width": 0.38, "priority": 1})

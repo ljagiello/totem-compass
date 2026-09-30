@@ -45,6 +45,7 @@ LAYER = {"F.Cu": F, "B.Cu": B}
 MARGIN = 0.04
 EDGE_MARGIN = 0.07        # the outline is rasterised too; arcs lose a few um
 VIA_D = 0.45
+VIA_POWER = (0.6, 0.3)   # power nets: a 0.3 mm barrel carries more than their 0.4 mm track
 VIA_COST = 0.8            # mm-equivalent
 NEAR_PAD_COST = 0.6       # extra, as a fraction of a step, within 0.5 mm of a pad
 POWER = {"VBAT", "VSYS", "VBUS", "VLED"}
@@ -96,9 +97,8 @@ annulus = (_r >= RR + 0.95) & (_r <= RR + 2.0)       # just beyond the LEDs' out
 ANNULUS_OK = {"VLED", "/RING_D0"}
 # rule areas and the band forbid any overlap, not just a centre inside them
 d_keep_tr = [ndimage.distance_transform_edt(~keep_tr[L]) * G for L in (F, B)]
-keep_via_d = ndimage.distance_transform_edt(~keep_via) * G < VIA_D / 2 + MARGIN
+d_keep_via = ndimage.distance_transform_edt(~keep_via) * G
 d_annulus = ndimage.distance_transform_edt(~annulus) * G
-annulus_d = d_annulus < VIA_D / 2 + MARGIN
 gnd_pour_b = raster([z for z in g["zones"] if z["name"] == "GND inside ring"][0]["poly"])
 
 nets = sorted({p["net"] for p in g["pads"] if p["net"]} | set(g["nets"]))
@@ -157,12 +157,16 @@ POWER_IDS = np.array(sorted(NID[n] for n in POWER if n in NID))
 RF_IDS = np.array(sorted(NID[n] for n in RF if n in NID))
 
 
+def via_size(net):
+    return VIA_POWER if net in POWER else (VIA_D, 0.2)
+
+
 def free_maps(nid, w, c, pads_only=False, annulus_ok=False):
     """per layer: may a track centre of this net sit here? and may a via?
     Clearance to another net is the larger of the two classes': power copper
     keeps 0.2 mm from everything. pads_only: as if nothing were routed yet."""
     hw = w / 2
-    vr = VIA_D / 2
+    vr = via_size(nets[nid])[0] / 2
     fr, ok_v = [], []
     for L in (F, B):
         own = np.where(padmask[L], owner[L], -1) if pads_only else owner[L]
@@ -179,16 +183,16 @@ def free_maps(nid, w, c, pads_only=False, annulus_ok=False):
             m &= d_annulus >= hw + MARGIN       # no other net's track across the band
         fr.append(m)
         ok_v.append((d_o >= vr + max(c, 0.15) + MARGIN) & (d_p >= vr + 0.2 + MARGIN) & (d_r >= vr + 0.3 + MARGIN))
-    via = ok_v[F] & ok_v[B] & (dist_edge >= vr + 0.3 + EDGE_MARGIN) & ~keep_via_d & ~keep & \
+    via = ok_v[F] & ok_v[B] & (dist_edge >= vr + 0.3 + EDGE_MARGIN) & (d_keep_via >= vr + MARGIN) & ~keep & \
         (dist_pad[F] >= vr + 0.1) & (dist_pad[B] >= vr + 0.1)
     if not annulus_ok:
-        via &= ~annulus_d                            # nor via: a via plugs it as well
+        via &= d_annulus >= vr + MARGIN              # nor via: a via plugs it as well
     vm = np.zeros((NY, NX), bool)
     for x, y in ([] if pads_only else via_centres()):
         i, j = ij(x, y)
         vm[int(round(j)), int(round(i))] = True
     if vm.any():
-        via &= ndimage.distance_transform_edt(~vm) * G >= VIA_D + 0.15
+        via &= ndimage.distance_transform_edt(~vm) * G >= vr + VIA_POWER[0] / 2 + 0.15
     return fr, via
 
 
@@ -259,10 +263,11 @@ def mark(tid, nid, L, m):
 
 def add_via(tid, net, i, j):
     x, y = xy(i, j)
-    vias.append([net, x, y])
+    d, drill = via_size(net)
+    vias.append([net, x, y, d, drill])
     TASKS[tid]["items"].append(("v", len(vias) - 1))
     m = np.zeros((NY, NX), np.uint8)
-    cv2.circle(m, (i, j), int(round(VIA_D / 2 / G)), 1, -1)
+    cv2.circle(m, (i, j), int(round(d / 2 / G)), 1, -1)
     for L in (F, B):
         mark(tid, NID[net], L, m.astype(bool))
 
@@ -401,7 +406,7 @@ def run_fan(tid, log=True, dry=False):
         for v in vias:
             if v is not None and v[0] == net:
                 vi, vj = (int(round(u)) for u in ij(v[1], v[2]))
-                cv2.circle(joined.view(np.uint8), (vi, vj), int(VIA_D / 2 / G), 1, -1)
+                cv2.circle(joined.view(np.uint8), (vi, vj), int(v[3] / 2 / G), 1, -1)
     goal = lambda L, j, i: L == L0 and (via_ok[j, i] or joined[j, i])
     path, n = astar(cells_of(p, L0), goal, (p["x"], p["y"]), fr, np.zeros_like(via_ok), max_cost=5.0)
     if path is None:
@@ -426,7 +431,7 @@ def in_the_way(tid, paths):
     """tasks whose routed copper lies within clearance of these paths"""
     t = TASKS[tid]
     w, c = (0.2, 0.15) if t["kind"] == "fan" else cls(t["net"])
-    rad = int(math.ceil((max(w / 2, VIA_D / 2) + max(c, 0.2) + MARGIN) / G))
+    rad = int(math.ceil((max(w / 2, via_size(t['net'])[0] / 2) + max(c, 0.2) + MARGIN) / G))
     mask = np.zeros((2, NY, NX), np.uint8)
     for pth in paths:
         for a, b in zip(pth, pth[1:] + [pth[-1]]):
@@ -549,7 +554,7 @@ if best[0] < len(fails):
         owner[L][m.astype(bool) & (owner[L] < 0)] = NID[net]
     for v in vias:
         m = np.zeros((NY, NX), np.uint8)
-        cv2.circle(m, tuple(int(round(u)) for u in ij(v[1], v[2])), int(round(VIA_D / 2 / G)), 1, -1)
+        cv2.circle(m, tuple(int(round(u)) for u in ij(v[1], v[2])), int(round(v[3] / 2 / G)), 1, -1)
         for L in (F, B):
             owner[L][m.astype(bool) & (owner[L] < 0)] = NID[v[0]]
     fails = best[3]

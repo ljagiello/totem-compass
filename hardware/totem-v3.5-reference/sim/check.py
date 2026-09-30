@@ -50,19 +50,13 @@ CHECKS = {
     "led_budget.cir": [
         ("i_typ_crate", "<=", 1.0, "normal use, north plus peers plus crystal, must fit inside 1C"),
         ("n_at_1c", ">=", 20.0, "at least 20 pixels must be lightable at once at full white"),
-        (
-            "i_all_crate",
-            "<=",
-            1.0,
-            "XFAIL: every pixel at full white is 2.4C. The firmware never lights "
-            "the ring that way, and this records the ceiling rather than pretending it is met",
-        ),
+        ("i_all_crate", "<=", 1.0, "every pixel at full white at the firmware's brightness fits inside 1C"),
         (
             "vws_head",
             ">=",
             0.0,
-            "XFAIL: WS2812B want 3.5 V and the firmware runs the cell to 3.4 V, "
-            "so the pixels are 100 mV under-supplied at the bottom of the discharge",
+            "XFAIL: the 1515s want 3.5 V and the firmware runs the cell to 3.15 V, "
+            "so the pixels are under-supplied at the bottom of the discharge, as on the reference board",
         ),
     ],
 }
