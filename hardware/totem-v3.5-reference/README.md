@@ -119,9 +119,21 @@ $KP apply.py      # tracks and vias into the board, zones filled
 python3 fab.py    # gerbers, drill, placement, BOM, renders -> pcb/fab/
 ```
 
-Four layers: signals on both outer layers, In1 solid GND, In2 3V3. Tracks
-0.13 mm and 0.13 mm apart, power nets 0.4 mm with 0.2 mm; vias 0.45/0.2 mm;
-copper 0.3 mm from the edge — a mainstream 4-layer process with margin.
+Four layers, 1.6 mm: signals on both outer layers, In1 solid GND, In2 3V3.
+Tracks 0.13 mm and 0.13 mm apart, power nets 0.4 mm with 0.2 mm; vias
+0.45/0.2 mm; copper 0.3 mm from the edge — a mainstream 4-layer process with
+margin. The GNSS antenna feed is a straight, via-free 0.38 mm microstrip on
+F.Cu over In1: 50 Ω on a standard 1.6 mm 4-layer stack-up (about 0.21 mm of
+7628 prepreg under the top layer); order that stack-up, or re-size the line
+for another. The LED side's ring is powered through a VLED pour outside the
+ring, fed at C16 and, past the one place the ring's data has to cross it,
+at D159.
+
+Both sides carry parts (the LED side: ring, crystal, IMU, microphone, the
+power latch), so assembly is double-sided. The placement file is KiCad's;
+assembly houses differ in how they read rotations on the bottom side, so
+check their preview of the LED side — the ring's orientation rule is that
+each LED's DI and VDD pads face out.
 
 **`kicad-cli pcb drc --schematic-parity --severity-all`: 0 violations,
 0 unconnected pads, 0 footprint errors.** Three places where the reference
