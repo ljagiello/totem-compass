@@ -1,2 +1,4 @@
 totem.log
 totem.erc
+skidl_REPL.*
+__pycache__/

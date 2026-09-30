@@ -97,7 +97,16 @@ code rather than drawn, which makes the connectivity machine-checkable:
 SKiDL's ERC looks for pins left floating and for nets with two things driving
 them. It writes `totem.net`, a KiCad netlist, and `totem.erc`.
 
-**Current state: 0 errors, 0 warnings, across 22 nets.**
+**Current state: 0 ERC errors and 2 ERC warnings, across 22 nets.**
+
+Both warnings are the TP4056's `CHRG` and `STDBY` status outputs, left open
+on purpose because charging is sensed from VBUS instead. ERC is right to
+report them and they are left reported rather than silenced: a construct that
+hid these would hide the next real one too.
+
+Netlist generation separately reports 27 `No footprint for …` errors. Those
+are not design faults — no footprints are assigned because this is a
+schematic-level design with no board layout intended.
 
 Getting there took four real corrections, which is the argument for running it
 at all rather than drawing a diagram and trusting it:
@@ -110,6 +119,15 @@ at all rather than drawing a diagram and trusting it:
   fitted, which is easy to forget and silent when forgotten.
 - The regulator's `EN` left floating — which is where the GPIO 4 power gate
   has to live, so the warning was pointing at a missing part of the design.
+
+A fifth was mine rather than the design's, and is worth recording because of
+how it hid. Trying to silence the two status-pin warnings, I imported a name
+SKiDL 2.3.0 does not export. The script then died on the import — but the
+run before it had been `rm -f totem.erc` followed by the script with output
+sent to `/dev/null`, so an empty file was left behind and read back as a
+clean result. **An absent report is not a passing one.** `check.py` fails
+loudly on a missing measurement for the same reason; this checker now
+insists the ERC file exists before believing it.
 
 Parts are declared with explicit pins instead of pulled from KiCad's symbol
 libraries, so this runs without KiCad installed. KiCad's own installer needs

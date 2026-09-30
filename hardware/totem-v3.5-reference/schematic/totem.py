@@ -15,7 +15,7 @@ Run: python3 totem.py
 Writes: totem.net (KiCad netlist), and ERC findings to stdout.
 """
 
-from skidl import ERC, NC, Net, Part, Pin, generate_netlist, SKIDL
+from skidl import ERC, Net, Part, Pin, generate_netlist, SKIDL
 
 # ---------------------------------------------------------------- parts
 
@@ -247,11 +247,11 @@ net("GPIO4", u1["4"], r_g4[2])
 gnd += r_en[2]
 
 # The charger's thermistor input is tied off, as it must be when no NTC is
-# fitted, and its two status outputs are deliberately unused: charging is
-# sensed from VBUS, not from them.
+# fitted. Its two status outputs, CHRG and STDBY, are left open on purpose:
+# charging is sensed from VBUS, not from them. ERC reports both as
+# unconnected and that is the right answer — the warning is understood, not
+# silenced, because a part that hides it would also hide a real one.
 u3["1"] += gnd
-u3["7"] += NC
-u3["8"] += NC
 net("TOUCH", u1["27"], tp1["1"])
 net("MIC", u1["36"], mk1["OUT"])
 
