@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/29/2026 08:34 PM")
+    (date "09/29/2026 08:46 PM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -43,581 +43,677 @@
           (value "")))))
   (components
     (comp
+      (ref "C1")
+      (value "100n")
+      (description "Unpolarized capacitor")
+      (footprint "")
+      (fields
+        (field
+          (name "Description") "Unpolarized capacitor")
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "tZlSOsoZsx")
+        (field
+          (name "SKiDL Line") "totem.py:142"))
+      (libsource
+        (lib "Device")
+        (part "C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "e3c9bebc-68ce-5519-a7e7-c6e38e92efb9"))
+    (comp
+      (ref "C2")
+      (value "100n")
+      (description "Unpolarized capacitor")
+      (footprint "")
+      (fields
+        (field
+          (name "Description") "Unpolarized capacitor")
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "O9Ykgk0m8d")
+        (field
+          (name "SKiDL Line") "totem.py:143"))
+      (libsource
+        (lib "Device")
+        (part "C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "88eea15a-06ad-5158-9838-3c64d553f284"))
+    (comp
       (ref "DS1")
-      (value "HALO_RING_60PX")
-      (description "")
-      (footprint "")
+      (value "halo, 60 px")
+      (description "RGB LED with integrated controller")
+      (footprint "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "RGB LED with integrated controller")
         (field
-          (name "Footprint"))
+          (name "Footprint") "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf")
         (field
-          (name "SKiDL Tag") "yGCAgiXyMm")
+          (name "SKiDL Tag") "DY_KTJz9Qg")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:101"))
       (libsource
-        (lib "NO_LIB")
-        (part "HALO_RING_60PX"))
+        (lib "LED")
+        (part "WS2812B"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "7c35e5c0-052c-59cd-9de7-78c8e39df715"))
+      (tstamps "5c19fd3e-71b2-5dc0-b812-ef374471f35f"))
     (comp
-      (ref "DS2")
-      (value "CRYSTAL_7PX")
-      (description "")
-      (footprint "")
+      (ref "DS61")
+      (value "crystal, 7 px")
+      (description "RGB LED with integrated controller")
+      (footprint "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "RGB LED with integrated controller")
         (field
-          (name "Footprint"))
+          (name "Footprint") "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://cdn-shop.adafruit.com/datasheets/WS2812B.pdf")
         (field
-          (name "SKiDL Tag") "OiNpmOTgSI")
+          (name "SKiDL Tag") "rExRzmoH8M")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:102"))
       (libsource
-        (lib "NO_LIB")
-        (part "CRYSTAL_7PX"))
+        (lib "LED")
+        (part "WS2812B"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "3a53d8eb-785c-5a18-96ea-a20d00aa2b87"))
+      (tstamps "475c1831-c208-523a-9727-c91c348cf671"))
     (comp
-      (ref "DS3")
-      (value "LED_SOS")
-      (description "")
+      (ref "DS68")
+      (value "SOS")
+      (description "Light emitting diode")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Light emitting diode")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "UntnPODz84")
+          (name "SKiDL Tag") "mcN7p1oWrR")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:106"))
       (libsource
-        (lib "NO_LIB")
-        (part "LED_SOS"))
+        (lib "Device")
+        (part "LED"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "56cf15f8-30f8-5eea-9a0b-dcd76641891f"))
+      (tstamps "b9765358-5b0c-56d6-88d4-28fa46cd4e5f"))
     (comp
       (ref "J1")
-      (value "USB-C")
-      (description "")
+      (value "USB_C_Receptacle_USB2.0_16P")
+      (description "USB 2.0-only 16P Type-C Receptacle connector")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "USB 2.0-only 16P Type-C Receptacle connector")
         (field
           (name "Footprint"))
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://www.usb.org/sites/default/files/documents/usb_type-c.zip")
         (field
-          (name "SKiDL Tag") "SAepZhpt0_")
+          (name "SKiDL Tag") "5xAyyiYFI8")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:108"))
       (libsource
-        (lib "NO_LIB")
-        (part "USB-C"))
+        (lib "Connector")
+        (part "USB_C_Receptacle_USB2.0_16P"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "a263ea77-9512-5366-835a-db690978bf8f"))
+      (tstamps "5d487346-b0d7-5376-87af-1f215704d2af"))
     (comp
       (ref "J2")
-      (value "JST_BATT")
-      (description "")
+      (value "LiPo 1000mAh")
+      (description "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "c9Oz2LgBrD")
+          (name "SKiDL Tag") "puMx_KGOSP")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:115"))
       (libsource
-        (lib "NO_LIB")
-        (part "JST_BATT"))
+        (lib "Connector_Generic")
+        (part "Conn_01x02"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "b7a2d3a3-dda4-5c0f-a46c-a72e97a00fff"))
+      (tstamps "867069bd-a45e-5531-815b-b38f5804ad18"))
     (comp
       (ref "J3")
-      (value "UFL_GNSS_ANT")
-      (description "")
+      (value "u.FL GNSS")
+      (description "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "AnEXozJ2uo")
+          (name "SKiDL Tag") "0sy7DB4dtE")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:116"))
       (libsource
-        (lib "NO_LIB")
-        (part "UFL_GNSS_ANT"))
+        (lib "Connector_Generic")
+        (part "Conn_01x01"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "ae6868fc-7008-5433-8cc7-66addda1a3af"))
+      (tstamps "6b9ae8c8-e1b1-5a3b-afff-5f31df9762a9"))
     (comp
       (ref "MK1")
-      (value "MIC_MEMS")
-      (description "")
+      (value "MEMS")
+      (description "Microphone")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Microphone")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "5Ezh5TdHwM")
+          (name "SKiDL Tag") "_Eu8PFHGR4")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:120"))
       (libsource
-        (lib "NO_LIB")
-        (part "MIC_MEMS"))
+        (lib "Device")
+        (part "Microphone"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "ae521c4e-cc83-5eaa-aaef-9f42777f21f1"))
+      (tstamps "7ce9138a-f941-5a4f-82a4-ba3b68903072"))
     (comp
       (ref "Q1")
-      (value "PMOS_LED_SW")
-      (description "")
+      (value "LED supply switch")
+      (description "P-MOSFET transistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "P-MOSFET transistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "sVtuklq8BY")
+          (name "SKiDL Tag") "1xRdTL2_Zh")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:107"))
       (libsource
-        (lib "NO_LIB")
-        (part "PMOS_LED_SW"))
+        (lib "Device")
+        (part "Q_PMOS"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "5c68e4c7-0d67-589b-92b1-87a138acfc82"))
+      (tstamps "b9e9ad39-c9dc-5d04-8c69-664a675a7c81"))
     (comp
       (ref "R1")
       (value "120k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "xcrqkk0sBU")
+          (name "SKiDL Tag") "YcbicbLILO")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "cf11d43f-a21f-56d9-b786-311d3dea1e99"))
+      (tstamps "34a1f8cc-538b-5080-a619-8a0e9f05f1c7"))
     (comp
       (ref "R10")
       (value "100k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "5rDCCcFGeS")
+          (name "SKiDL Tag") "B8m6l6IT2W")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "979f52fd-625c-5838-8ed4-73963088a5b0"))
+      (tstamps "81d81d19-a2b2-597b-af6e-d03ee9198392"))
     (comp
       (ref "R11")
       (value "10k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "BPMpZ7fOhW")
+          (name "SKiDL Tag") "rxhoTOOYLf")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "076c291f-db76-5dd6-8c7c-ae520b7f082e"))
+      (tstamps "1c638ee1-99de-573a-a872-0e63bb6542cd"))
+    (comp
+      (ref "R12")
+      (value "2k2")
+      (description "Resistor")
+      (footprint "")
+      (fields
+        (field
+          (name "Description") "Resistor")
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "31ORiAHkjL")
+        (field
+          (name "SKiDL Line") "totem.py:124"))
+      (libsource
+        (lib "Device")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "4236f128-b2d6-5c86-ab37-d58f9a8cb5af"))
+    (comp
+      (ref "R13")
+      (value "10k")
+      (description "Resistor")
+      (footprint "")
+      (fields
+        (field
+          (name "Description") "Resistor")
+        (field
+          (name "Footprint"))
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "vBrgbCiBiZ")
+        (field
+          (name "SKiDL Line") "totem.py:124"))
+      (libsource
+        (lib "Device")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "cf4ffe06-75f8-559b-b21f-7815d0cd70b9"))
     (comp
       (ref "R2")
       (value "108k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "hpJJJRNgCP")
+          (name "SKiDL Tag") "N4kydYgavM")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "1fe17b32-bbc1-5d3a-9b6a-f5f1a3cfbe98"))
+      (tstamps "12f7cdfc-af08-5b44-a1fe-92697be101bf"))
     (comp
       (ref "R3")
       (value "100k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "jsw_dFofdF")
+          (name "SKiDL Tag") "KaJ30rIWmu")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "69badf60-e3f7-5050-b919-2037969ce8a7"))
+      (tstamps "301b9ddb-f628-5f41-9be4-5bc13211e375"))
     (comp
       (ref "R4")
       (value "150k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "1zlwn4qHUr")
+          (name "SKiDL Tag") "FLrI5KPPxq")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "67a0b7ae-69d8-5c02-991e-3d910fc56ca8"))
+      (tstamps "33dc77bc-ebc8-55ae-a448-44d9dd04c465"))
     (comp
       (ref "R5")
       (value "1k2")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "ZX_Dbx22MQ")
+          (name "SKiDL Tag") "dTcoFKoCts")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "c53438ef-69e9-5cec-80fc-471438cde678"))
+      (tstamps "c7646f50-a278-52f8-94d3-1c222b5ade31"))
     (comp
       (ref "R6")
       (value "330R")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "lbHlqP07Do")
+          (name "SKiDL Tag") "VivI4NLkHl")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "96288ca7-6a5e-56b9-8a98-562672bd1ef7"))
+      (tstamps "1c48ec5e-5885-5376-b29b-5ddfaac24fe8"))
     (comp
       (ref "R7")
       (value "4k7")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "BC2jJs9dSA")
+          (name "SKiDL Tag") "QictmM0d0i")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "e30c2ca4-6dea-50af-9e6b-375225cbe4df"))
+      (tstamps "65e1ea0a-fcef-5471-905f-b392ff460729"))
     (comp
       (ref "R8")
       (value "4k7")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "9vxPZuWuRJ")
+          (name "SKiDL Tag") "d5krGKVuGF")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "10cc7f95-d1d4-5a03-8c02-73ca14cbb29a"))
+      (tstamps "acc5390d-7611-5024-b3ae-80e44a33b719"))
     (comp
       (ref "R9")
       (value "100k")
-      (description "")
+      (description "Resistor")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Resistor")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "69JdxatX_s")
+          (name "SKiDL Tag") "RgAbvE11np")
         (field
-          (name "SKiDL Line") "totem.py:162"))
+          (name "SKiDL Line") "totem.py:124"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Device")
         (part "R"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "c7af777e-6730-5e0b-a444-cdd126cab842"))
+      (tstamps "2fd40d68-f526-544e-8cd9-7d65e42bb064"))
     (comp
       (ref "SW1")
-      (value "SW_PWR")
-      (description "")
+      (value "power")
+      (description "Push button switch, generic, two pins")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Push button switch, generic, two pins")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "zLH93ab6Tm")
+          (name "SKiDL Tag") "KWR2alGaU3")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:117"))
       (libsource
-        (lib "NO_LIB")
-        (part "SW_PWR"))
+        (lib "Switch")
+        (part "SW_Push"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "3d7b3c40-f818-5de7-b8b8-c26f2e4bd6de"))
+      (tstamps "2f93d867-bdc0-55a7-89ce-735d069a8e4d"))
     (comp
       (ref "SW2")
-      (value "SW_SOS")
-      (description "")
+      (value "SOS")
+      (description "Push button switch, generic, two pins")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Push button switch, generic, two pins")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "ybGylGny6D")
+          (name "SKiDL Tag") "Ncqhqmjv5e")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:118"))
       (libsource
-        (lib "NO_LIB")
-        (part "SW_SOS"))
+        (lib "Switch")
+        (part "SW_Push"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "dbd7aed4-5406-5f90-9789-5d26f72375c8"))
+      (tstamps "5bb6d916-7e81-5a3f-adae-5ec49878feea"))
     (comp
       (ref "TP1")
-      (value "TOUCH_PAD")
-      (description "")
+      (value "touch pad")
+      (description "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)")
       (footprint "")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "Generic connector, single row, 01x01, script generated (kicad-library-utils/schlib/autogen/connector/)")
         (field
           (name "Footprint"))
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "3v1RDhZN9N")
+          (name "SKiDL Tag") "n4jBHdQt_0")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:119"))
       (libsource
-        (lib "NO_LIB")
-        (part "TOUCH_PAD"))
+        (lib "Connector_Generic")
+        (part "Conn_01x01"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "2dc809fc-2a8d-527e-99fb-5808618dbfc8"))
+      (tstamps "4b0cfc07-304c-5913-ad7f-00988cb40007"))
     (comp
       (ref "U1")
       (value "ESP32-WROOM-32E")
-      (description "")
-      (footprint "")
+      (description "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, onboard antenna, SMD")
+      (footprint "RF_Module:ESP32-WROOM-32E")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "RF Module, ESP32-D0WD-V3 SoC, without PSRAM, Wi-Fi 802.11b/g/n, Bluetooth, BLE, 32-bit, 2.7-3.6V, onboard antenna, SMD")
         (field
-          (name "Footprint"))
+          (name "Footprint") "RF_Module:ESP32-WROOM-32E")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32e_esp32-wroom-32ue_datasheet_en.pdf")
         (field
-          (name "SKiDL Tag") "chUsKI1rGm")
+          (name "SKiDL Tag") "ONjYcNAa86")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:52"))
       (libsource
-        (lib "NO_LIB")
+        (lib "RF_Module")
         (part "ESP32-WROOM-32E"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "aeff46f3-cb5f-5151-be03-7467014bbe65"))
+      (tstamps "57f19bcb-9f44-523c-b3d5-33d680ba0fcb"))
     (comp
       (ref "U2")
       (value "MAX-M10S")
-      (description "")
-      (footprint "")
+      (description "GNSS Module MAX M10, VCC 1.65V to 3.6V")
+      (footprint "RF_GPS:ublox_MAX")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "GNSS Module MAX M10, VCC 1.65V to 3.6V")
         (field
-          (name "Footprint"))
+          (name "Footprint") "RF_GPS:ublox_MAX")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://content.u-blox.com/sites/default/files/MAX-M10S_DataSheet_UBX-20035208.pdf")
         (field
-          (name "SKiDL Tag") "4Pu69E7ufq")
+          (name "SKiDL Tag") "oD4moXWvFo")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:60"))
       (libsource
-        (lib "NO_LIB")
+        (lib "RF_GPS")
         (part "MAX-M10S"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "e1f8e4e0-0fee-56f3-be7b-6db0aeef5584"))
+      (tstamps "aef0a151-73dc-5fd1-9e72-0dbbd76a4ae9"))
     (comp
       (ref "U3")
       (value "TP4056")
@@ -631,9 +727,9 @@
         (field
           (name "Datasheet"))
         (field
-          (name "SKiDL Tag") "VbTf4mlEel")
+          (name "SKiDL Tag") "QRzvMR01vU")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:70"))
       (libsource
         (lib "NO_LIB")
         (part "TP4056"))
@@ -641,64 +737,68 @@
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "63ec9c53-5f9c-5033-8dc9-56786fe9f6e4"))
+      (tstamps "62392292-b007-52b8-83bd-92afbb9a830c"))
     (comp
       (ref "U4")
-      (value "LDO_3V3")
-      (description "")
-      (footprint "")
+      (value "AP2127K-3.3")
+      (description "300mA low dropout linear regulator, shutdown pin, 2.5V-6V input voltage, 3.3V fixed positive output, SOT-23-5")
+      (footprint "Package_TO_SOT_SMD:SOT-23-5")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "300mA low dropout linear regulator, shutdown pin, 2.5V-6V input voltage, 3.3V fixed positive output, SOT-23-5")
         (field
-          (name "Footprint"))
+          (name "Footprint") "Package_TO_SOT_SMD:SOT-23-5")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "https://www.diodes.com/assets/Datasheets/AP2127.pdf")
         (field
-          (name "SKiDL Tag") "3o_bhHYJGA")
+          (name "SKiDL Tag") "NkW6l1mFkG")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:89"))
       (libsource
-        (lib "NO_LIB")
-        (part "LDO_3V3"))
+        (lib "Regulator_Linear")
+        (part "AP2127K-3.3"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "fdceb098-0af3-507e-b3b9-2edbac7fdb96"))
+      (tstamps "b6d7e20a-424a-5ede-bd35-718b6e77eb10"))
     (comp
       (ref "U5")
       (value "ICM-20948")
-      (description "")
-      (footprint "")
+      (description "InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24")
+      (footprint "Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm")
       (fields
         (field
-          (name "Description"))
+          (name "Description") "InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24")
         (field
-          (name "Footprint"))
+          (name "Footprint") "Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm")
         (field
-          (name "Datasheet"))
+          (name "Datasheet") "http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf")
         (field
-          (name "SKiDL Tag") "KGrOYur2Ts")
+          (name "SKiDL Tag") "G02MSwhDiz")
         (field
-          (name "SKiDL Line") "totem.py:25"))
+          (name "SKiDL Line") "totem.py:92"))
       (libsource
-        (lib "NO_LIB")
+        (lib "Sensor_Motion")
         (part "ICM-20948"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "d202700e-f50e-5174-9e63-82b00b322f61")))
+      (tstamps "b7682258-e7de-5f88-8931-8caffebcca35")))
   (nets
     (net
       (code 1)
       (name "+3V3")
       (class "Default")
       (node
-        (ref "MK1")
-        (pin "VDD")
-        (pintype "POWER-IN"))
+        (ref "R12")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R13")
+        (pin "1")
+        (pintype "PASSIVE"))
       (node
         (ref "R7")
         (pin "1")
@@ -709,11 +809,19 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "3V3")
+        (pin "2")
         (pintype "POWER-IN"))
       (node
         (ref "U2")
-        (pin "VCC")
+        (pin "6")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U2")
+        (pin "7")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U2")
+        (pin "8")
         (pintype "POWER-IN"))
       (node
         (ref "U4")
@@ -721,7 +829,15 @@
         (pintype "POWER-OUT"))
       (node
         (ref "U5")
-        (pin "VDD")
+        (pin "13")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U5")
+        (pin "22")
+        (pintype "INPUT"))
+      (node
+        (ref "U5")
+        (pin "8")
         (pintype "POWER-IN")))
     (net
       (code 2)
@@ -733,48 +849,88 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "0")
-        (pintype "INPUT")))
+        (pin "25")
+        (pintype "BIDIRECTIONAL")))
     (net
       (code 3)
       (name "CRYSTAL_DATA")
       (class "Default")
       (node
-        (ref "DS2")
-        (pin "DIN")
+        (ref "DS61")
+        (pin "4")
         (pintype "INPUT"))
       (node
         (ref "U1")
-        (pin "21")
-        (pintype "OUTPUT")))
+        (pin "33")
+        (pintype "BIDIRECTIONAL")))
     (net
       (code 4)
+      (name "ESP_EN")
+      (class "Default")
+      (node
+        (ref "C2")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R13")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U1")
+        (pin "3")
+        (pintype "INPUT")))
+    (net
+      (code 5)
       (name "GND")
       (class "Default")
       (node
+        (ref "C1")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C2")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
         (ref "DS1")
-        (pin "GND")
+        (pin "3")
         (pintype "POWER-IN"))
       (node
-        (ref "DS2")
-        (pin "GND")
+        (ref "DS61")
+        (pin "3")
         (pintype "POWER-IN"))
       (node
-        (ref "DS3")
-        (pin "K")
+        (ref "DS68")
+        (pin "1")
         (pintype "PASSIVE"))
       (node
         (ref "J1")
-        (pin "GND")
-        (pintype "POWER-OUT"))
+        (pin "A1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "A12")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "B1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "B12")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "SH")
+        (pintype "PASSIVE"))
       (node
         (ref "J2")
         (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "MK1")
-        (pin "GND")
-        (pintype "POWER-IN"))
+        (pin "1")
+        (pintype "PASSIVE"))
       (node
         (ref "R10")
         (pin "2")
@@ -797,12 +953,20 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "GND")
+        (pin "[1,15,38,39]")
         (pintype "POWER-IN"))
       (node
         (ref "U2")
-        (pin "GND")
+        (pin "1")
         (pintype "POWER-IN"))
+      (node
+        (ref "U2")
+        (pin "10")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U2")
+        (pin "12")
+        (pintype "PASSIVE"))
       (node
         (ref "U3")
         (pin "1")
@@ -817,10 +981,18 @@
         (pintype "POWER-IN"))
       (node
         (ref "U5")
-        (pin "GND")
-        (pintype "POWER-IN")))
+        (pin "18")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U5")
+        (pin "20")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U5")
+        (pin "9")
+        (pintype "BIDIRECTIONAL")))
     (net
-      (code 5)
+      (code 6)
       (name "GNSS_RF")
       (class "Default")
       (node
@@ -829,34 +1001,34 @@
         (pintype "PASSIVE"))
       (node
         (ref "U2")
-        (pin "RF")
-        (pintype "PASSIVE")))
+        (pin "11")
+        (pintype "INPUT")))
     (net
-      (code 6)
+      (code 7)
       (name "GNSS_RX")
       (class "Default")
       (node
         (ref "U1")
-        (pin "17")
-        (pintype "OUTPUT"))
+        (pin "28")
+        (pintype "BIDIRECTIONAL"))
       (node
         (ref "U2")
-        (pin "RXD")
+        (pin "3")
         (pintype "INPUT")))
     (net
-      (code 7)
+      (code 8)
       (name "GNSS_TX")
       (class "Default")
       (node
         (ref "U1")
-        (pin "16")
-        (pintype "INPUT"))
+        (pin "27")
+        (pintype "BIDIRECTIONAL"))
       (node
         (ref "U2")
-        (pin "TXD")
+        (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 8)
+      (code 9)
       (name "GPIO4")
       (class "Default")
       (node
@@ -865,10 +1037,10 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "4")
+        (pin "26")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 9)
+      (code 10)
       (name "I2C0_SCL")
       (class "Default")
       (node
@@ -877,14 +1049,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "26")
-        (pintype "OUTPUT"))
+        (pin "11")
+        (pintype "BIDIRECTIONAL"))
       (node
         (ref "U5")
-        (pin "SCL")
+        (pin "23")
         (pintype "INPUT")))
     (net
-      (code 10)
+      (code 11)
       (name "I2C0_SDA")
       (class "Default")
       (node
@@ -893,14 +1065,14 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "25")
+        (pin "10")
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U5")
-        (pin "SDA")
+        (pin "24")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 11)
+      (code 12)
       (name "LED_EN")
       (class "Default")
       (node
@@ -913,22 +1085,26 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "19")
-        (pintype "OUTPUT")))
+        (pin "31")
+        (pintype "BIDIRECTIONAL")))
     (net
-      (code 12)
+      (code 13)
       (name "MIC")
       (class "Default")
       (node
         (ref "MK1")
-        (pin "OUT")
-        (pintype "OUTPUT"))
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R12")
+        (pin "2")
+        (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "36")
+        (pin "4")
         (pintype "INPUT")))
     (net
-      (code 13)
+      (code 14)
       (name "N$1")
       (class "Default")
       (node
@@ -940,7 +1116,19 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 14)
+      (code 15)
+      (name "N$2")
+      (class "Default")
+      (node
+        (ref "C1")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U5")
+        (pin "10")
+        (pintype "PASSIVE")))
+    (net
+      (code 16)
       (name "POWER_EN")
       (class "Default")
       (node
@@ -960,19 +1148,19 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 15)
+      (code 17)
       (name "RING_DATA")
       (class "Default")
       (node
         (ref "DS1")
-        (pin "DIN")
+        (pin "4")
         (pintype "INPUT"))
       (node
         (ref "U1")
-        (pin "18")
-        (pintype "OUTPUT")))
+        (pin "30")
+        (pintype "BIDIRECTIONAL")))
     (net
-      (code 16)
+      (code 18)
       (name "SOS_LED")
       (class "Default")
       (node
@@ -981,22 +1169,22 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "14")
-        (pintype "OUTPUT")))
+        (pin "13")
+        (pintype "BIDIRECTIONAL")))
     (net
-      (code 17)
+      (code 19)
       (name "SOS_LED_A")
       (class "Default")
       (node
-        (ref "DS3")
-        (pin "A")
+        (ref "DS68")
+        (pin "2")
         (pintype "PASSIVE"))
       (node
         (ref "R6")
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 18)
+      (code 20)
       (name "TOUCH")
       (class "Default")
       (node
@@ -1005,10 +1193,10 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "27")
+        (pin "12")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 19)
+      (code 21)
       (name "VBAT")
       (class "Default")
       (node
@@ -1044,7 +1232,7 @@
         (pin "1")
         (pintype "POWER-IN")))
     (net
-      (code 20)
+      (code 22)
       (name "VBAT_SENSE")
       (class "Default")
       (node
@@ -1057,16 +1245,28 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "34")
+        (pin "6")
         (pintype "INPUT")))
     (net
-      (code 21)
+      (code 23)
       (name "VBUS")
       (class "Default")
       (node
         (ref "J1")
-        (pin "VBUS")
-        (pintype "POWER-OUT"))
+        (pin "A4")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "A9")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "B4")
+        (pintype "PASSIVE"))
+      (node
+        (ref "J1")
+        (pin "B9")
+        (pintype "PASSIVE"))
       (node
         (ref "R3")
         (pin "1")
@@ -1076,7 +1276,7 @@
         (pin "4")
         (pintype "POWER-IN")))
     (net
-      (code 22)
+      (code 24)
       (name "VBUS_SENSE")
       (class "Default")
       (node
@@ -1089,19 +1289,19 @@
         (pintype "PASSIVE"))
       (node
         (ref "U1")
-        (pin "39")
+        (pin "5")
         (pintype "INPUT")))
     (net
-      (code 23)
+      (code 25)
       (name "VLED")
       (class "Default")
       (node
         (ref "DS1")
-        (pin "VDD")
+        (pin "1")
         (pintype "POWER-IN"))
       (node
-        (ref "DS2")
-        (pin "VDD")
+        (ref "DS61")
+        (pin "1")
         (pintype "POWER-IN"))
       (node
         (ref "Q1")

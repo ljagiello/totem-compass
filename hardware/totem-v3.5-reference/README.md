@@ -97,7 +97,7 @@ code rather than drawn, which makes the connectivity machine-checkable:
 SKiDL's ERC looks for pins left floating and for nets with two things driving
 them. It writes `totem.net`, a KiCad netlist, and `totem.erc`.
 
-**Current state: 0 ERC errors and 2 ERC warnings, across 22 nets.**
+**Current state: 0 ERC errors and 2 ERC warnings, across 25 nets.**
 
 Both warnings are the TP4056's `CHRG` and `STDBY` status outputs, left open
 on purpose because charging is sensed from VBUS instead. ERC is right to
@@ -129,21 +129,40 @@ clean result. **An absent report is not a passing one.** `check.py` fails
 loudly on a missing measurement for the same reason; this checker now
 insists the ERC file exists before believing it.
 
-Parts are declared with explicit pins instead of pulled from KiCad's symbol
-libraries, so the check runs without KiCad installed.
+### Real symbols, and what that bought
 
-### The drawing
+Parts come from **KiCad's own symbol libraries** wherever they exist —
+ESP32-WROOM-32E, MAX-M10S, ICM-20948, WS2812B, and the passives — so the
+netlist carries real package pin numbers rather than labels invented here.
+Only the TP4056 is still declared inline, because KiCad has no symbol for it.
 
-```
-python3 render.py     # writes totem_sheet.svg
-```
+This is not cosmetic. On the module, pins 4 and 5 are named `SENSOR_VP` and
+`SENSOR_VN` — GPIO 36 and GPIO 39, the microphone and the VBUS sense.
+Wiring against the real symbol is what puts those on the correct physical
+pins. Two things the real symbols caught that a hand-written pin list could
+not:
 
-Needs `netlistsvg` (`npm install -g netlistsvg`) and KiCad's symbol
-libraries. The sheet is **generated from the same description the ERC
-checks**, so it cannot drift away from the netlist — change `totem.py` and
-both follow. Placement is netlistsvg's own, which makes it readable but not
-arranged the way a person would arrange it. The netlist is the authority;
-the sheet is for looking at.
+- **`EN` was unconnected.** The ESP32 will not run with its enable floating,
+  and it needs the pull-up and capacitor that give it a power-on reset. The
+  hazard of a pin list written by hand is that a pin nobody thought of is
+  also a pin nobody notices is missing.
+- **`RESV` is typed NO-CONNECT** on the ICM-20948 symbol, and I had tied it
+  to ground. The symbol is authored from the datasheet, so it wins.
+
+### There is no drawn sheet, on purpose
+
+SKiDL 2.3.0 cannot draw this circuit: both `generate_svg` and
+`generate_schematic` crash in its `kicad10` backend on the real multi-unit
+symbols (`gen_svg.py:310`, `AttributeError: 'NoneType' object has no
+attribute 'net'`). An earlier drawing existed, made when the parts were
+simplified inline definitions, and it has been **deleted rather than kept**:
+it no longer matched the netlist, and a picture that disagrees with the
+netlist is worse than no picture.
+
+The trade was between a drawing with invented pin numbers and a netlist with
+real ones that an ERC can check. The netlist is the more useful artifact, and
+finding the missing `EN` connection is the proof. `totem.net` imports into
+KiCad for layout; a drawn sheet would have to be laid out there.
 
 ## Three findings worth keeping
 

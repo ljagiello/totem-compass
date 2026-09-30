@@ -1,6 +1,4 @@
-totem.log
-totem.erc
+*.log
+*.erc
 skidl_REPL.*
 __pycache__/
-totem_sheet.json
-totem_sheet_skin.svg
