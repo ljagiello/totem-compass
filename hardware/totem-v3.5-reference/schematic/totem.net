@@ -2,7 +2,7 @@
   (version "D")
   (design
     (source "totem.py")
-    (date "09/30/2026 03:58 AM")
+    (date "09/30/2026 10:28 PM")
     (tool "SKiDL (2.3.0)")
     (sheet
       (number 1)
@@ -283,6 +283,30 @@
       (component_classes)
       (tstamps "65617007-c8f1-5598-9446-09da65da9bfc"))
     (comp
+      (ref "C19")
+      (value "100n")
+      (description "Unpolarized capacitor")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Unpolarized capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C19")
+        (field
+          (name "SKiDL Line") "totem.py:54"))
+      (libsource
+        (lib "Device")
+        (part "C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "89c18bff-9d0a-560d-9afc-db5208f57a70"))
+    (comp
       (ref "C2")
       (value "1u")
       (description "Unpolarized capacitor")
@@ -306,6 +330,54 @@
         (tstamps "/"))
       (component_classes)
       (tstamps "507fddd0-e494-5270-a7e4-2511aa140519"))
+    (comp
+      (ref "C20")
+      (value "10u")
+      (description "Unpolarized capacitor")
+      (footprint "Capacitor_SMD:C_0805_2012Metric")
+      (fields
+        (field
+          (name "Description") "Unpolarized capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0805_2012Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C20")
+        (field
+          (name "SKiDL Line") "totem.py:54"))
+      (libsource
+        (lib "Device")
+        (part "C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "de69f183-3e24-5ca0-bc14-716aaad4df38"))
+    (comp
+      (ref "C21")
+      (value "100n")
+      (description "Unpolarized capacitor")
+      (footprint "Capacitor_SMD:C_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Unpolarized capacitor")
+        (field
+          (name "Footprint") "Capacitor_SMD:C_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "C21")
+        (field
+          (name "SKiDL Line") "totem.py:54"))
+      (libsource
+        (lib "Device")
+        (part "C"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "ea3a15b0-5646-5a4b-ba8f-ee6aa1cf1128"))
     (comp
       (ref "C3")
       (value "10u")
@@ -428,7 +500,7 @@
       (tstamps "16338a68-8eed-55bf-a491-963475c6f7f3"))
     (comp
       (ref "C8")
-      (value "100n")
+      (value "220n")
       (description "Unpolarized capacitor")
       (footprint "Capacitor_SMD:C_0603_1608Metric")
       (fields
@@ -465,7 +537,7 @@
         (field
           (name "SKiDL Tag") "D1")
         (field
-          (name "SKiDL Line") "totem.py:137"))
+          (name "SKiDL Line") "totem.py:152"))
       (libsource
         (lib "Diode")
         (part "1N4148W"))
@@ -489,7 +561,7 @@
         (field
           (name "SKiDL Tag") "D100")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -513,7 +585,7 @@
         (field
           (name "SKiDL Tag") "D101")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -537,7 +609,7 @@
         (field
           (name "SKiDL Tag") "D102")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -561,7 +633,7 @@
         (field
           (name "SKiDL Tag") "D103")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -585,7 +657,7 @@
         (field
           (name "SKiDL Tag") "D104")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -609,7 +681,7 @@
         (field
           (name "SKiDL Tag") "D105")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -633,7 +705,7 @@
         (field
           (name "SKiDL Tag") "D106")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -657,7 +729,7 @@
         (field
           (name "SKiDL Tag") "D107")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -681,7 +753,7 @@
         (field
           (name "SKiDL Tag") "D108")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -705,7 +777,7 @@
         (field
           (name "SKiDL Tag") "D109")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -729,7 +801,7 @@
         (field
           (name "SKiDL Tag") "D110")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -753,7 +825,7 @@
         (field
           (name "SKiDL Tag") "D111")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -777,7 +849,7 @@
         (field
           (name "SKiDL Tag") "D112")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -801,7 +873,7 @@
         (field
           (name "SKiDL Tag") "D113")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -825,7 +897,7 @@
         (field
           (name "SKiDL Tag") "D114")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -849,7 +921,7 @@
         (field
           (name "SKiDL Tag") "D115")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -873,7 +945,7 @@
         (field
           (name "SKiDL Tag") "D116")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -897,7 +969,7 @@
         (field
           (name "SKiDL Tag") "D117")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -921,7 +993,7 @@
         (field
           (name "SKiDL Tag") "D118")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -945,7 +1017,7 @@
         (field
           (name "SKiDL Tag") "D119")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -969,7 +1041,7 @@
         (field
           (name "SKiDL Tag") "D120")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -993,7 +1065,7 @@
         (field
           (name "SKiDL Tag") "D121")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1017,7 +1089,7 @@
         (field
           (name "SKiDL Tag") "D122")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1041,7 +1113,7 @@
         (field
           (name "SKiDL Tag") "D123")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1065,7 +1137,7 @@
         (field
           (name "SKiDL Tag") "D124")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1089,7 +1161,7 @@
         (field
           (name "SKiDL Tag") "D125")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1113,7 +1185,7 @@
         (field
           (name "SKiDL Tag") "D126")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1137,7 +1209,7 @@
         (field
           (name "SKiDL Tag") "D127")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1161,7 +1233,7 @@
         (field
           (name "SKiDL Tag") "D128")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1185,7 +1257,7 @@
         (field
           (name "SKiDL Tag") "D129")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1209,7 +1281,7 @@
         (field
           (name "SKiDL Tag") "D130")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1233,7 +1305,7 @@
         (field
           (name "SKiDL Tag") "D131")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1257,7 +1329,7 @@
         (field
           (name "SKiDL Tag") "D132")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1281,7 +1353,7 @@
         (field
           (name "SKiDL Tag") "D133")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1305,7 +1377,7 @@
         (field
           (name "SKiDL Tag") "D134")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1329,7 +1401,7 @@
         (field
           (name "SKiDL Tag") "D135")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1353,7 +1425,7 @@
         (field
           (name "SKiDL Tag") "D136")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1377,7 +1449,7 @@
         (field
           (name "SKiDL Tag") "D137")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1401,7 +1473,7 @@
         (field
           (name "SKiDL Tag") "D138")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1425,7 +1497,7 @@
         (field
           (name "SKiDL Tag") "D139")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1449,7 +1521,7 @@
         (field
           (name "SKiDL Tag") "D140")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1473,7 +1545,7 @@
         (field
           (name "SKiDL Tag") "D141")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1497,7 +1569,7 @@
         (field
           (name "SKiDL Tag") "D142")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1521,7 +1593,7 @@
         (field
           (name "SKiDL Tag") "D143")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1545,7 +1617,7 @@
         (field
           (name "SKiDL Tag") "D144")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1569,7 +1641,7 @@
         (field
           (name "SKiDL Tag") "D145")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1593,7 +1665,7 @@
         (field
           (name "SKiDL Tag") "D146")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1617,7 +1689,7 @@
         (field
           (name "SKiDL Tag") "D147")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1641,7 +1713,7 @@
         (field
           (name "SKiDL Tag") "D148")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1665,7 +1737,7 @@
         (field
           (name "SKiDL Tag") "D149")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1689,7 +1761,7 @@
         (field
           (name "SKiDL Tag") "D150")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1713,7 +1785,7 @@
         (field
           (name "SKiDL Tag") "D151")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1737,7 +1809,7 @@
         (field
           (name "SKiDL Tag") "D152")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1761,7 +1833,7 @@
         (field
           (name "SKiDL Tag") "D153")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1785,7 +1857,7 @@
         (field
           (name "SKiDL Tag") "D154")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1809,7 +1881,7 @@
         (field
           (name "SKiDL Tag") "D155")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1833,7 +1905,7 @@
         (field
           (name "SKiDL Tag") "D156")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1857,7 +1929,7 @@
         (field
           (name "SKiDL Tag") "D157")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1881,7 +1953,7 @@
         (field
           (name "SKiDL Tag") "D158")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1905,7 +1977,7 @@
         (field
           (name "SKiDL Tag") "D159")
         (field
-          (name "SKiDL Line") "totem.py:279"))
+          (name "SKiDL Line") "totem.py:318"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1929,7 +2001,7 @@
         (field
           (name "SKiDL Tag") "D2")
         (field
-          (name "SKiDL Line") "totem.py:138"))
+          (name "SKiDL Line") "totem.py:153"))
       (libsource
         (lib "Diode")
         (part "BAT54W"))
@@ -1953,7 +2025,7 @@
         (field
           (name "SKiDL Tag") "D200")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -1977,7 +2049,7 @@
         (field
           (name "SKiDL Tag") "D201")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2001,7 +2073,7 @@
         (field
           (name "SKiDL Tag") "D202")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2025,7 +2097,7 @@
         (field
           (name "SKiDL Tag") "D203")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2049,7 +2121,7 @@
         (field
           (name "SKiDL Tag") "D204")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2073,7 +2145,7 @@
         (field
           (name "SKiDL Tag") "D205")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2097,7 +2169,7 @@
         (field
           (name "SKiDL Tag") "D206")
         (field
-          (name "SKiDL Line") "totem.py:299"))
+          (name "SKiDL Line") "totem.py:338"))
       (libsource
         (lib "LED")
         (part "WS2812B-2020"))
@@ -2121,7 +2193,7 @@
         (field
           (name "SKiDL Tag") "D3")
         (field
-          (name "SKiDL Line") "totem.py:312"))
+          (name "SKiDL Line") "totem.py:351"))
       (libsource
         (lib "Device")
         (part "LED"))
@@ -2130,6 +2202,54 @@
         (tstamps "/"))
       (component_classes)
       (tstamps "a31abf81-24ee-5c50-91fe-d4cecac4e7dd"))
+    (comp
+      (ref "D4")
+      (value "red")
+      (description "Light emitting diode")
+      (footprint "LED_SMD:LED_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Light emitting diode")
+        (field
+          (name "Footprint") "LED_SMD:LED_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "D4")
+        (field
+          (name "SKiDL Line") "totem.py:113"))
+      (libsource
+        (lib "Device")
+        (part "LED"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "c682bab4-dac7-5b3c-8973-4e75b77a32cd"))
+    (comp
+      (ref "D5")
+      (value "green")
+      (description "Light emitting diode")
+      (footprint "LED_SMD:LED_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Light emitting diode")
+        (field
+          (name "Footprint") "LED_SMD:LED_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "D5")
+        (field
+          (name "SKiDL Line") "totem.py:114"))
+      (libsource
+        (lib "Device")
+        (part "LED"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "68f6c72b-a475-524d-bd7b-c1b998873b90"))
     (comp
       (ref "J1")
       (value "USB4135-GF-A")
@@ -2158,18 +2278,18 @@
       (ref "J2")
       (value "LiPo 1000mAh")
       (description "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)")
-      (footprint "Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal")
+      (footprint "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal")
       (fields
         (field
           (name "Description") "Generic connector, single row, 01x02, script generated (kicad-library-utils/schlib/autogen/connector/)")
         (field
-          (name "Footprint") "Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal")
+          (name "Footprint") "Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal")
         (field
           (name "Datasheet"))
         (field
           (name "SKiDL Tag") "J2")
         (field
-          (name "SKiDL Line") "totem.py:111"))
+          (name "SKiDL Line") "totem.py:126"))
       (libsource
         (lib "Connector_Generic")
         (part "Conn_01x02"))
@@ -2193,7 +2313,7 @@
         (field
           (name "SKiDL Tag") "J3")
         (field
-          (name "SKiDL Line") "totem.py:234"))
+          (name "SKiDL Line") "totem.py:249"))
       (libsource
         (lib "Connector")
         (part "Conn_Coaxial"))
@@ -2217,7 +2337,7 @@
         (field
           (name "SKiDL Tag") "MK1")
         (field
-          (name "SKiDL Line") "totem.py:330"))
+          (name "SKiDL Line") "totem.py:369"))
       (libsource
         (lib "Device")
         (part "Microphone_Condenser"))
@@ -2241,7 +2361,7 @@
         (field
           (name "SKiDL Tag") "Q1")
         (field
-          (name "SKiDL Line") "totem.py:134"))
+          (name "SKiDL Line") "totem.py:149"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2265,7 +2385,7 @@
         (field
           (name "SKiDL Tag") "Q2")
         (field
-          (name "SKiDL Line") "totem.py:135"))
+          (name "SKiDL Line") "totem.py:150"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2289,7 +2409,7 @@
         (field
           (name "SKiDL Tag") "Q3")
         (field
-          (name "SKiDL Line") "totem.py:136"))
+          (name "SKiDL Line") "totem.py:151"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2313,7 +2433,7 @@
         (field
           (name "SKiDL Tag") "Q4")
         (field
-          (name "SKiDL Line") "totem.py:267"))
+          (name "SKiDL Line") "totem.py:306"))
       (libsource
         (lib "Transistor_FET")
         (part "AO3401A"))
@@ -2337,7 +2457,7 @@
         (field
           (name "SKiDL Tag") "Q5")
         (field
-          (name "SKiDL Line") "totem.py:268"))
+          (name "SKiDL Line") "totem.py:307"))
       (libsource
         (lib "Transistor_FET")
         (part "2N7002"))
@@ -2348,7 +2468,7 @@
       (tstamps "8b3eeb49-422c-5be2-865d-3dfba2211852"))
     (comp
       (ref "R1")
-      (value "120k")
+      (value "113k")
       (description "Resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
@@ -2612,7 +2732,7 @@
       (tstamps "0ead03f1-50b6-599b-864c-cf54dd0f7185"))
     (comp
       (ref "R2")
-      (value "108k")
+      (value "102k")
       (description "Resistor")
       (footprint "Resistor_SMD:R_0603_1608Metric")
       (fields
@@ -2803,6 +2923,54 @@
       (component_classes)
       (tstamps "35cd32e0-2eec-5ec5-b4e8-e5bbdbdb9060"))
     (comp
+      (ref "R27")
+      (value "1k")
+      (description "Resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R27")
+        (field
+          (name "SKiDL Line") "totem.py:50"))
+      (libsource
+        (lib "Device")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "7b63e68b-3b47-5fd3-988e-1f6c73de73f1"))
+    (comp
+      (ref "R28")
+      (value "1k")
+      (description "Resistor")
+      (footprint "Resistor_SMD:R_0603_1608Metric")
+      (fields
+        (field
+          (name "Description") "Resistor")
+        (field
+          (name "Footprint") "Resistor_SMD:R_0603_1608Metric")
+        (field
+          (name "Datasheet"))
+        (field
+          (name "SKiDL Tag") "R28")
+        (field
+          (name "SKiDL Line") "totem.py:50"))
+      (libsource
+        (lib "Device")
+        (part "R"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "61b48c9f-00ee-57f6-8009-23b11a90f392"))
+    (comp
       (ref "R3")
       (value "100k")
       (description "Resistor")
@@ -2985,7 +3153,7 @@
         (field
           (name "SKiDL Tag") "SW1")
         (field
-          (name "SKiDL Line") "totem.py:133"))
+          (name "SKiDL Line") "totem.py:148"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3009,7 +3177,7 @@
         (field
           (name "SKiDL Tag") "SW2")
         (field
-          (name "SKiDL Line") "totem.py:218"))
+          (name "SKiDL Line") "totem.py:233"))
       (libsource
         (lib "Switch")
         (part "SW_Push"))
@@ -3020,7 +3188,7 @@
       (tstamps "7c5f82e1-e6ee-534e-8457-a60c4c3a8cf6"))
     (comp
       (ref "TP1")
-      (value "touch spring")
+      (value "touch pogo pin")
       (description "test point")
       (footprint "TestPoint:TestPoint_Pad_D2.5mm")
       (fields
@@ -3033,7 +3201,7 @@
         (field
           (name "SKiDL Tag") "TP1")
         (field
-          (name "SKiDL Line") "totem.py:322"))
+          (name "SKiDL Line") "totem.py:361"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3057,7 +3225,7 @@
         (field
           (name "SKiDL Tag") "TP2")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3081,7 +3249,7 @@
         (field
           (name "SKiDL Tag") "TP3")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3105,7 +3273,7 @@
         (field
           (name "SKiDL Tag") "TP4")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3129,7 +3297,7 @@
         (field
           (name "SKiDL Tag") "TP5")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3153,7 +3321,7 @@
         (field
           (name "SKiDL Tag") "TP6")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3177,7 +3345,7 @@
         (field
           (name "SKiDL Tag") "TP7")
         (field
-          (name "SKiDL Line") "totem.py:204"))
+          (name "SKiDL Line") "totem.py:219"))
       (libsource
         (lib "Connector")
         (part "TestPoint"))
@@ -3201,7 +3369,7 @@
         (field
           (name "SKiDL Tag") "U1")
         (field
-          (name "SKiDL Line") "totem.py:183"))
+          (name "SKiDL Line") "totem.py:198"))
       (libsource
         (lib "RF_Module")
         (part "ESP32-WROOM-32E"))
@@ -3225,7 +3393,7 @@
         (field
           (name "SKiDL Tag") "U2")
         (field
-          (name "SKiDL Line") "totem.py:223"))
+          (name "SKiDL Line") "totem.py:238"))
       (libsource
         (lib "RF_GPS")
         (part "MAX-M10S"))
@@ -3273,7 +3441,7 @@
         (field
           (name "SKiDL Tag") "U4")
         (field
-          (name "SKiDL Line") "totem.py:163"))
+          (name "SKiDL Line") "totem.py:178"))
       (libsource
         (lib "Regulator_Linear")
         (part "AP2112K-3.3"))
@@ -3284,35 +3452,75 @@
       (tstamps "b2699459-f172-5b2a-8b70-5ef993fb2f77"))
     (comp
       (ref "U5")
-      (value "ICM-20948")
-      (description "InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24")
-      (footprint "Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm")
+      (value "LSM6DSV16X")
+      (description "I2C/SPI, iNEMO inertial module: always-on 3D accelerometer and 3D gyroscope, with auxiliary SPI, 1.71V to 3.6V VCC")
+      (footprint "Package_LGA:LGA-14_3x2.5mm_P0.5mm_LayoutBorder3x4y")
       (fields
         (field
-          (name "Description") "InvenSense 9-Axis Motion Sensor, Accelerometer, Gyroscope, Compass, I2C/SPI, QFN-24")
+          (name "Description") "I2C/SPI, iNEMO inertial module: always-on 3D accelerometer and 3D gyroscope, with auxiliary SPI, 1.71V to 3.6V VCC")
         (field
-          (name "Footprint") "Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm")
+          (name "Footprint") "Package_LGA:LGA-14_3x2.5mm_P0.5mm_LayoutBorder3x4y")
         (field
-          (name "Datasheet") "http://www.invensense.com/wp-content/uploads/2016/06/DS-000189-ICM-20948-v1.3.pdf")
+          (name "Datasheet") "https://www.st.com/resource/en/datasheet/lsm6dsm.pdf")
         (field
           (name "SKiDL Tag") "U5")
         (field
-          (name "SKiDL Line") "totem.py:240"))
+          (name "SKiDL Line") "totem.py:268"))
       (libsource
         (lib "Sensor_Motion")
-        (part "ICM-20948"))
+        (part "LSM6DSM"))
       (sheetpath
         (names "/")
         (tstamps "/"))
       (component_classes)
-      (tstamps "6254ed11-c784-58f8-9988-ecfc74740e7c")))
+      (tstamps "6254ed11-c784-58f8-9988-ecfc74740e7c"))
+    (comp
+      (ref "U6")
+      (value "LIS2MDL")
+      (description "Ultra-low-power, 3-axis digital output magnetometer, LGA-12")
+      (footprint "Package_LGA:LGA-12_2x2mm_P0.5mm")
+      (fields
+        (field
+          (name "Description") "Ultra-low-power, 3-axis digital output magnetometer, LGA-12")
+        (field
+          (name "Footprint") "Package_LGA:LGA-12_2x2mm_P0.5mm")
+        (field
+          (name "Datasheet") "https://www.st.com/resource/en/datasheet/lis2mdl.pdf")
+        (field
+          (name "SKiDL Tag") "U6")
+        (field
+          (name "SKiDL Line") "totem.py:284"))
+      (libsource
+        (lib "Sensor_Magnetic")
+        (part "LIS2MDL"))
+      (sheetpath
+        (names "/")
+        (tstamps "/"))
+      (component_classes)
+      (tstamps "aee7dbbb-30a2-5780-a35b-54386b8e659f")))
   (nets
     (net
       (code 1)
       (name "+3V3")
       (class "Default")
       (node
+        (ref "C1")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
         (ref "C14")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C19")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C20")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C21")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -3333,10 +3541,6 @@
         (pintype "PASSIVE"))
       (node
         (ref "C7")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "C8")
         (pin "1")
         (pintype "PASSIVE"))
       (node
@@ -3397,15 +3601,27 @@
         (pintype "POWER-OUT"))
       (node
         (ref "U5")
-        (pin "13")
-        (pintype "POWER-IN"))
-      (node
-        (ref "U5")
-        (pin "22")
+        (pin "12")
         (pintype "INPUT"))
       (node
         (ref "U5")
+        (pin "5")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U5")
         (pin "8")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U6")
+        (pin "10")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U6")
+        (pin "3")
+        (pintype "INPUT"))
+      (node
+        (ref "U6")
+        (pin "9")
         (pintype "POWER-IN")))
     (net
       (code 2)
@@ -3473,6 +3689,30 @@
         (pintype "PASSIVE")))
     (net
       (code 6)
+      (name "CHRG")
+      (class "Default")
+      (node
+        (ref "D4")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U3")
+        (pin "7")
+        (pintype "OPEN-COLLECTOR")))
+    (net
+      (code 7)
+      (name "CHRG_LED")
+      (class "Default")
+      (node
+        (ref "D4")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R27")
+        (pin "2")
+        (pintype "PASSIVE")))
+    (net
+      (code 8)
       (name "CRYSTAL_DATA")
       (class "Default")
       (node
@@ -3484,7 +3724,7 @@
         (pin "33")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 7)
+      (code 9)
       (name "CRY_D0")
       (class "Default")
       (node
@@ -3496,7 +3736,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 8)
+      (code 10)
       (name "CRY_D1")
       (class "Default")
       (node
@@ -3508,7 +3748,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 9)
+      (code 11)
       (name "CRY_D2")
       (class "Default")
       (node
@@ -3520,7 +3760,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 10)
+      (code 12)
       (name "CRY_D3")
       (class "Default")
       (node
@@ -3532,7 +3772,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 11)
+      (code 13)
       (name "CRY_D4")
       (class "Default")
       (node
@@ -3544,7 +3784,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 12)
+      (code 14)
       (name "CRY_D5")
       (class "Default")
       (node
@@ -3556,7 +3796,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 13)
+      (code 15)
       (name "CRY_D6")
       (class "Default")
       (node
@@ -3568,7 +3808,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 14)
+      (code 16)
       (name "ESP_EN")
       (class "Default")
       (node
@@ -3588,7 +3828,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 15)
+      (code 17)
       (name "GATE_MAIN")
       (class "Default")
       (node
@@ -3604,7 +3844,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 16)
+      (code 18)
       (name "GND")
       (class "Default")
       (node
@@ -3644,7 +3884,19 @@
         (pin "2")
         (pintype "PASSIVE"))
       (node
+        (ref "C19")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
         (ref "C2")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C20")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "C21")
         (pin "2")
         (pintype "PASSIVE"))
       (node
@@ -4061,14 +4313,22 @@
         (pintype "POWER-IN"))
       (node
         (ref "U5")
-        (pin "18")
+        (pin "6")
         (pintype "POWER-IN"))
       (node
         (ref "U5")
-        (pin "20")
+        (pin "7")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U6")
+        (pin "6")
+        (pintype "POWER-IN"))
+      (node
+        (ref "U6")
+        (pin "8")
         (pintype "PASSIVE")))
     (net
-      (code 17)
+      (code 19)
       (name "GNSS_RF")
       (class "Default")
       (node
@@ -4080,7 +4340,7 @@
         (pin "11")
         (pintype "INPUT")))
     (net
-      (code 18)
+      (code 20)
       (name "GNSS_RX")
       (class "Default")
       (node
@@ -4092,7 +4352,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 19)
+      (code 21)
       (name "GNSS_TX")
       (class "Default")
       (node
@@ -4104,7 +4364,7 @@
         (pin "2")
         (pintype "OUTPUT")))
     (net
-      (code 20)
+      (code 22)
       (name "GPIO4")
       (class "Default")
       (node
@@ -4124,7 +4384,7 @@
         (pin "26")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 21)
+      (code 23)
       (name "HOLD")
       (class "Default")
       (node
@@ -4152,7 +4412,7 @@
         (pin "1")
         (pintype "PASSIVE")))
     (net
-      (code 22)
+      (code 24)
       (name "HOLD_OFF")
       (class "Default")
       (node
@@ -4164,7 +4424,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 23)
+      (code 25)
       (name "I2C0_SCL")
       (class "Default")
       (node
@@ -4177,10 +4437,14 @@
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U5")
-        (pin "23")
+        (pin "13")
+        (pintype "INPUT"))
+      (node
+        (ref "U6")
+        (pin "1")
         (pintype "INPUT")))
     (net
-      (code 24)
+      (code 26)
       (name "I2C0_SDA")
       (class "Default")
       (node
@@ -4193,11 +4457,27 @@
         (pintype "BIDIRECTIONAL"))
       (node
         (ref "U5")
-        (pin "24")
+        (pin "14")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U6")
+        (pin "4")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 25)
-      (name "IMU_AD0")
+      (code 27)
+      (name "IMU_INT1")
+      (class "Default")
+      (node
+        (ref "U1")
+        (pin "8")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U5")
+        (pin "4")
+        (pintype "OUTPUT")))
+    (net
+      (code 28)
+      (name "IMU_SA0")
       (class "Default")
       (node
         (ref "R26")
@@ -4205,10 +4485,18 @@
         (pintype "PASSIVE"))
       (node
         (ref "U5")
-        (pin "9")
-        (pintype "BIDIRECTIONAL")))
+        (pin "1")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U5")
+        (pin "2")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U5")
+        (pin "3")
+        (pintype "INPUT")))
     (net
-      (code 26)
+      (code 29)
       (name "LED_EN")
       (class "Default")
       (node
@@ -4224,7 +4512,31 @@
         (pin "31")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 27)
+      (code 30)
+      (name "MAG_C1")
+      (class "Default")
+      (node
+        (ref "C8")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U6")
+        (pin "5")
+        (pintype "POWER-OUT")))
+    (net
+      (code 31)
+      (name "MAG_DRDY")
+      (class "Default")
+      (node
+        (ref "U1")
+        (pin "9")
+        (pintype "BIDIRECTIONAL"))
+      (node
+        (ref "U6")
+        (pin "7")
+        (pintype "OUTPUT")))
+    (net
+      (code 32)
       (name "MIC")
       (class "Default")
       (node
@@ -4244,7 +4556,7 @@
         (pin "4")
         (pintype "INPUT")))
     (net
-      (code 28)
+      (code 33)
       (name "MIC_RAW")
       (class "Default")
       (node
@@ -4260,7 +4572,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 29)
+      (code 34)
       (name "PROG")
       (class "Default")
       (node
@@ -4272,19 +4584,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 30)
-      (name "REGOUT")
-      (class "Default")
-      (node
-        (ref "C1")
-        (pin "1")
-        (pintype "PASSIVE"))
-      (node
-        (ref "U5")
-        (pin "10")
-        (pintype "PASSIVE")))
-    (net
-      (code 31)
+      (code 35)
       (name "RING_D0")
       (class "Default")
       (node
@@ -4296,7 +4596,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 32)
+      (code 36)
       (name "RING_D1")
       (class "Default")
       (node
@@ -4308,7 +4608,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 33)
+      (code 37)
       (name "RING_D10")
       (class "Default")
       (node
@@ -4320,7 +4620,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 34)
+      (code 38)
       (name "RING_D11")
       (class "Default")
       (node
@@ -4332,7 +4632,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 35)
+      (code 39)
       (name "RING_D12")
       (class "Default")
       (node
@@ -4344,7 +4644,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 36)
+      (code 40)
       (name "RING_D13")
       (class "Default")
       (node
@@ -4356,7 +4656,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 37)
+      (code 41)
       (name "RING_D14")
       (class "Default")
       (node
@@ -4368,7 +4668,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 38)
+      (code 42)
       (name "RING_D15")
       (class "Default")
       (node
@@ -4380,7 +4680,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 39)
+      (code 43)
       (name "RING_D16")
       (class "Default")
       (node
@@ -4392,7 +4692,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 40)
+      (code 44)
       (name "RING_D17")
       (class "Default")
       (node
@@ -4404,7 +4704,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 41)
+      (code 45)
       (name "RING_D18")
       (class "Default")
       (node
@@ -4416,7 +4716,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 42)
+      (code 46)
       (name "RING_D19")
       (class "Default")
       (node
@@ -4428,7 +4728,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 43)
+      (code 47)
       (name "RING_D2")
       (class "Default")
       (node
@@ -4440,7 +4740,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 44)
+      (code 48)
       (name "RING_D20")
       (class "Default")
       (node
@@ -4452,7 +4752,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 45)
+      (code 49)
       (name "RING_D21")
       (class "Default")
       (node
@@ -4464,7 +4764,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 46)
+      (code 50)
       (name "RING_D22")
       (class "Default")
       (node
@@ -4476,7 +4776,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 47)
+      (code 51)
       (name "RING_D23")
       (class "Default")
       (node
@@ -4488,7 +4788,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 48)
+      (code 52)
       (name "RING_D24")
       (class "Default")
       (node
@@ -4500,7 +4800,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 49)
+      (code 53)
       (name "RING_D25")
       (class "Default")
       (node
@@ -4512,7 +4812,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 50)
+      (code 54)
       (name "RING_D26")
       (class "Default")
       (node
@@ -4524,7 +4824,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 51)
+      (code 55)
       (name "RING_D27")
       (class "Default")
       (node
@@ -4536,7 +4836,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 52)
+      (code 56)
       (name "RING_D28")
       (class "Default")
       (node
@@ -4548,7 +4848,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 53)
+      (code 57)
       (name "RING_D29")
       (class "Default")
       (node
@@ -4560,7 +4860,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 54)
+      (code 58)
       (name "RING_D3")
       (class "Default")
       (node
@@ -4572,7 +4872,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 55)
+      (code 59)
       (name "RING_D30")
       (class "Default")
       (node
@@ -4584,7 +4884,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 56)
+      (code 60)
       (name "RING_D31")
       (class "Default")
       (node
@@ -4596,7 +4896,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 57)
+      (code 61)
       (name "RING_D32")
       (class "Default")
       (node
@@ -4608,7 +4908,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 58)
+      (code 62)
       (name "RING_D33")
       (class "Default")
       (node
@@ -4620,7 +4920,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 59)
+      (code 63)
       (name "RING_D34")
       (class "Default")
       (node
@@ -4632,7 +4932,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 60)
+      (code 64)
       (name "RING_D35")
       (class "Default")
       (node
@@ -4644,7 +4944,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 61)
+      (code 65)
       (name "RING_D36")
       (class "Default")
       (node
@@ -4656,7 +4956,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 62)
+      (code 66)
       (name "RING_D37")
       (class "Default")
       (node
@@ -4668,7 +4968,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 63)
+      (code 67)
       (name "RING_D38")
       (class "Default")
       (node
@@ -4680,7 +4980,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 64)
+      (code 68)
       (name "RING_D39")
       (class "Default")
       (node
@@ -4692,7 +4992,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 65)
+      (code 69)
       (name "RING_D4")
       (class "Default")
       (node
@@ -4704,7 +5004,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 66)
+      (code 70)
       (name "RING_D40")
       (class "Default")
       (node
@@ -4716,7 +5016,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 67)
+      (code 71)
       (name "RING_D41")
       (class "Default")
       (node
@@ -4728,7 +5028,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 68)
+      (code 72)
       (name "RING_D42")
       (class "Default")
       (node
@@ -4740,7 +5040,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 69)
+      (code 73)
       (name "RING_D43")
       (class "Default")
       (node
@@ -4752,7 +5052,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 70)
+      (code 74)
       (name "RING_D44")
       (class "Default")
       (node
@@ -4764,7 +5064,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 71)
+      (code 75)
       (name "RING_D45")
       (class "Default")
       (node
@@ -4776,7 +5076,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 72)
+      (code 76)
       (name "RING_D46")
       (class "Default")
       (node
@@ -4788,7 +5088,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 73)
+      (code 77)
       (name "RING_D47")
       (class "Default")
       (node
@@ -4800,7 +5100,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 74)
+      (code 78)
       (name "RING_D48")
       (class "Default")
       (node
@@ -4812,7 +5112,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 75)
+      (code 79)
       (name "RING_D49")
       (class "Default")
       (node
@@ -4824,7 +5124,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 76)
+      (code 80)
       (name "RING_D5")
       (class "Default")
       (node
@@ -4836,7 +5136,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 77)
+      (code 81)
       (name "RING_D50")
       (class "Default")
       (node
@@ -4848,7 +5148,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 78)
+      (code 82)
       (name "RING_D51")
       (class "Default")
       (node
@@ -4860,7 +5160,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 79)
+      (code 83)
       (name "RING_D52")
       (class "Default")
       (node
@@ -4872,7 +5172,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 80)
+      (code 84)
       (name "RING_D53")
       (class "Default")
       (node
@@ -4884,7 +5184,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 81)
+      (code 85)
       (name "RING_D54")
       (class "Default")
       (node
@@ -4896,7 +5196,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 82)
+      (code 86)
       (name "RING_D55")
       (class "Default")
       (node
@@ -4908,7 +5208,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 83)
+      (code 87)
       (name "RING_D56")
       (class "Default")
       (node
@@ -4920,7 +5220,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 84)
+      (code 88)
       (name "RING_D57")
       (class "Default")
       (node
@@ -4932,7 +5232,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 85)
+      (code 89)
       (name "RING_D58")
       (class "Default")
       (node
@@ -4944,7 +5244,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 86)
+      (code 90)
       (name "RING_D59")
       (class "Default")
       (node
@@ -4956,7 +5256,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 87)
+      (code 91)
       (name "RING_D6")
       (class "Default")
       (node
@@ -4968,7 +5268,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 88)
+      (code 92)
       (name "RING_D7")
       (class "Default")
       (node
@@ -4980,7 +5280,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 89)
+      (code 93)
       (name "RING_D8")
       (class "Default")
       (node
@@ -4992,7 +5292,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 90)
+      (code 94)
       (name "RING_D9")
       (class "Default")
       (node
@@ -5004,7 +5304,7 @@
         (pin "3")
         (pintype "INPUT")))
     (net
-      (code 91)
+      (code 95)
       (name "RING_DATA")
       (class "Default")
       (node
@@ -5016,7 +5316,7 @@
         (pin "30")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 92)
+      (code 96)
       (name "RING_GATE")
       (class "Default")
       (node
@@ -5032,7 +5332,7 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 93)
+      (code 97)
       (name "RXD0")
       (class "Default")
       (node
@@ -5044,7 +5344,7 @@
         (pin "34")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 94)
+      (code 98)
       (name "SOS_LED")
       (class "Default")
       (node
@@ -5056,7 +5356,7 @@
         (pin "13")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 95)
+      (code 99)
       (name "SOS_LED_A")
       (class "Default")
       (node
@@ -5068,7 +5368,31 @@
         (pin "2")
         (pintype "PASSIVE")))
     (net
-      (code 96)
+      (code 100)
+      (name "STDBY")
+      (class "Default")
+      (node
+        (ref "D5")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "U3")
+        (pin "6")
+        (pintype "OPEN-COLLECTOR")))
+    (net
+      (code 101)
+      (name "STDBY_LED")
+      (class "Default")
+      (node
+        (ref "D5")
+        (pin "2")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R28")
+        (pin "2")
+        (pintype "PASSIVE")))
+    (net
+      (code 102)
       (name "TOUCH")
       (class "Default")
       (node
@@ -5080,7 +5404,7 @@
         (pin "12")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 97)
+      (code 103)
       (name "TXD0")
       (class "Default")
       (node
@@ -5092,7 +5416,7 @@
         (pin "35")
         (pintype "BIDIRECTIONAL")))
     (net
-      (code 98)
+      (code 104)
       (name "VBAT")
       (class "Default")
       (node
@@ -5120,7 +5444,7 @@
         (pin "5")
         (pintype "POWER-OUT")))
     (net
-      (code 99)
+      (code 105)
       (name "VBAT_SENSE")
       (class "Default")
       (node
@@ -5136,7 +5460,7 @@
         (pin "6")
         (pintype "INPUT")))
     (net
-      (code 100)
+      (code 106)
       (name "VBUS")
       (class "Default")
       (node
@@ -5152,6 +5476,14 @@
         (pin "B9")
         (pintype "PASSIVE"))
       (node
+        (ref "R27")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
+        (ref "R28")
+        (pin "1")
+        (pintype "PASSIVE"))
+      (node
         (ref "R3")
         (pin "1")
         (pintype "PASSIVE"))
@@ -5164,7 +5496,7 @@
         (pin "8")
         (pintype "INPUT")))
     (net
-      (code 101)
+      (code 107)
       (name "VBUS_SENSE")
       (class "Default")
       (node
@@ -5180,7 +5512,7 @@
         (pin "5")
         (pintype "INPUT")))
     (net
-      (code 102)
+      (code 108)
       (name "VLED")
       (class "Default")
       (node
@@ -5436,7 +5768,7 @@
         (pin "3")
         (pintype "PASSIVE")))
     (net
-      (code 103)
+      (code 109)
       (name "VSYS")
       (class "Default")
       (node

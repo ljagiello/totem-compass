@@ -99,17 +99,32 @@ net("CC2", j1["B5"], r_cc2[1])
 # must be driven — floating, the part does nothing.
 u3 = Part("Battery_Management", "TP4056-42-ESOP8", ref="U3",
           footprint="Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.29x3mm")
-leave_unused(u3, {"1", "2", "3", "4", "5", "8", "9"},
-             "STDBY and CHRG are status outputs, unused: charging is sensed from VBUS")
 r_prog = R("R5", "2k")
 c_bat = C("C11", "10u", C0805)
 vbus += u3["4"], u3["8"]
 gnd += u3["1"], u3["3"], u3["9"], r_prog[2], c_bat[2]
 net("PROG", u3["2"], r_prog[1])
 vbat += u3["5"], c_bat[1]
+# Charge status, as the reference board shows it: two 0603 indicator LEDs in
+# the crystal, below the touch post (photographed; their colours, unlit, are
+# not). CHRG and STDBY are open-drain and pull low while charging and once
+# charged, so each LED hangs from VBUS through its resistor: lit only with a
+# charger plugged in, and drawing nothing from the cell. 1k gives about 3 mA.
+d_chrg = Part("Device", "LED", ref="D4", value="red", footprint="LED_SMD:LED_0603_1608Metric")
+d_stdby = Part("Device", "LED", ref="D5", value="green", footprint="LED_SMD:LED_0603_1608Metric")
+r_chrg, r_stdby = R("R27", "1k"), R("R28", "1k")
+vbus += r_chrg[1], r_stdby[1]
+net("CHRG_LED", r_chrg[2], d_chrg["A"])
+net("STDBY_LED", r_stdby[2], d_stdby["A"])
+net("CHRG", u3["7"], d_chrg["K"])
+net("STDBY", u3["6"], d_stdby["K"])
 
+# Through-hole, side entry, as the reference board's: its two pins show as
+# solder joints 1.96 mm apart on the LED side (measured), which an SMD
+# connector would not leave. A THT part can also overhang the corner chamfer
+# as the original does, where the SMD one's rear pads could not.
 j2 = Part("Connector_Generic", "Conn_01x02", ref="J2", value="LiPo 1000mAh",
-          footprint="Connector_JST:JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal")
+          footprint="Connector_JST:JST_PH_S2B-PH-K_1x02_P2.00mm_Horizontal")
 vbat += j2[1]
 gnd += j2[2]
 
@@ -171,7 +186,7 @@ gnd += u4["GND"], c_ldo_in[2], c_ldo_out[2]
 # Cell voltage on GPIO 34: the ratio is solved from the firmware's own ADC
 # calibration (see ../README.md). Taken from VSYS, so it draws nothing when
 # the board is off; VSYS differs from the cell only by the switch's drop.
-r_bat_top, r_bat_bot = R("R1", "120k"), R("R2", "108k")
+r_bat_top, r_bat_bot = R("R1", "113k"), R("R2", "102k")
 vsys += r_bat_top[1]
 gnd += r_bat_bot[2]
 # VBUS presence on GPIO 39: high while charging, as `is_charging` expects.
@@ -237,23 +252,47 @@ net("GNSS_RF", u2["RF_IN"], j3[1])
 gnd += j3[2]
 
 # ------------------------------------------------------------------- IMU
-u5 = Part("Sensor_Motion", "ICM-20948", ref="U5",
-          footprint="Sensor_Motion:InvenSense_QFN-24_3x3mm_P0.4mm")
-leave_unused(u5, {"8", "9", "10", "13", "18", "20", "22", "23", "24"},
-             "the auxiliary I2C, FSYNC, INT1, RESV and the NC pins are unused")
-c_imu_vdd, c_imu_io, c_regout = C("C7", "100n"), C("C8", "100n"), C("C1", "100n")
+# The reference board's ICM-20948 is obsolete (DigiKey: "no longer
+# manufactured"). This design uses two current ST parts in its place, both
+# on the same I2C bus the firmware already uses (GPIO 25/26):
+#   U5 LSM6DSV16X  6-axis accelerometer + gyroscope, address 0x6A (SA0 low)
+#   U6 LIS2MDL     3-axis magnetometer, address 0x1E (fixed)
+# Each wired as its datasheet's application circuit has it: DS13510 Rev 4
+# Figure 28 (mode 1) and DS12144 Rev 6 Figure 5. Their data-ready outputs go
+# to two free ESP32 pins, IO32 and IO33, so the firmware can sample on the
+# sensors' own clock rather than poll; both pins can wake the chip.
+#
+# The LSM6DSV16X's pinout is the LSM6DSM's pin for pin (DS13510 Table 2), so
+# KiCad's LSM6DSM symbol is used with this part's value; its LGA-14 3 x 2.5
+# footprint matches the package drawing (Figure 33).
+u5 = Part("Sensor_Motion", "LSM6DSM", ref="U5", value="LSM6DSV16X",
+          footprint="Package_LGA:LGA-14_3x2.5mm_P0.5mm_LayoutBorder3x4y")
+leave_unused(u5, {"1", "2", "3", "4", "5", "6", "7", "8", "12", "13", "14"},
+             "INT2 is unused; OCS_Aux and SDO_Aux are left unconnected as mode 1 requires")
+c_imu_vdd, c_imu_io = C("C1", "100n"), C("C7", "100n")
 r_sda, r_scl = R("R7", "4.7k"), R("R8", "4.7k")
-v3v3 += u5["VDD"], u5["VDDIO"], u5["~{CS}"], c_imu_vdd[1], c_imu_io[1], r_sda[1], r_scl[1]
-# SDO/AD0 selects the I2C address; low is 0x68. Strapped through a resistor
-# rather than tied straight to ground, which is the usual way to strap a pin:
-# the address can be changed by moving one part, and ERC stops reporting a
-# bidirectional pin sitting on a power net.
-r_ad0 = R("R26", "10k")
-net("IMU_AD0", u5["SDO/AD0"], r_ad0[1])
-gnd += u5["GND"], r_ad0[2], c_imu_vdd[2], c_imu_io[2], c_regout[2]
-net("REGOUT", u5["REGOUT"], c_regout[1])
-net("I2C0_SDA", u1["IO25"], u5["SDA/SDI"], r_sda[2])
-net("I2C0_SCL", u1["IO26"], u5["SCL/SCLK"], r_scl[2])
+v3v3 += u5["VDD"], u5["VDDIO"], u5["CS"], c_imu_vdd[1], c_imu_io[1], r_sda[1], r_scl[1]
+# SA0 selects the address; low is 0x6A. Strapped through a resistor, so the
+# address can be moved by moving one part. SDx/SCx are the sensor-hub master
+# port, unused in mode 1, where Figure 28 ties them low: they share SA0's
+# strap rather than sit on the GND rail, being bidirectional pins.
+r_sa0 = R("R26", "10k")
+net("IMU_SA0", u5["SDO/SA0"], u5["SDX"], u5["SCX"], r_sa0[1])
+gnd += u5["GND"], r_sa0[2], c_imu_vdd[2], c_imu_io[2]
+net("IMU_INT1", u5["INT1"], u1["IO32"])
+
+u6 = Part("Sensor_Magnetic", "LIS2MDL", ref="U6", footprint="Package_LGA:LGA-12_2x2mm_P0.5mm")
+leave_unused(u6, {"1", "3", "4", "5", "6", "7", "8", "9", "10"}, "pins 2, 11 and 12 are NC")
+# C1 is the set/reset pulse capacitor: 220 nF, low ESR, right at pins 5-6.
+# Vdd gets 100 nF + 10 uF and Vdd_IO 100 nF, as Figure 5 has them. CS high
+# selects I2C.
+c_mag_c1, c_mag_vdd, c_mag_bulk, c_mag_io = C("C8", "220n"), C("C19", "100n"), C("C20", "10u", C0805), C("C21", "100n")
+v3v3 += u6["Vdd"], u6["Vdd_IO"], u6["~{CS}"], c_mag_vdd[1], c_mag_bulk[1], c_mag_io[1]
+gnd += u6["GND"], c_mag_c1[2], c_mag_vdd[2], c_mag_bulk[2], c_mag_io[2]
+net("MAG_C1", u6["C1"], c_mag_c1[1])
+net("MAG_DRDY", u6["DRDY"], u1["IO33"])
+net("I2C0_SDA", u1["IO25"], u5["SDA"], u6["SDA/SDI/SDO"], r_sda[2])
+net("I2C0_SCL", u1["IO26"], u5["SCL"], u6["SCL/SPC"], r_scl[2])
 
 # ------------------------------------------------------------------ ring
 # 60 x 1.5 x 1.5 mm WS2812B (XL-1515RGBC-WS2812B). Measured on the reference
@@ -314,12 +353,12 @@ net("SOS_LED", u1["IO14"], r_sos[1])
 net("SOS_LED_A", r_sos[2], d_sos["A"])
 gnd += d_sos["K"]
 
-# Touch Crystal: the electrode is a conical contact spring standing on a
-# 2.5 mm pad at the centre of the crystal cluster (photographed), pressing on
-# the crystal. An SMD pad: the ESP32 module is right behind it on the other
-# side, where a plated hole would come out under the module. The spring is a
-# part of its own, so this one stays in the bill of materials.
-tp1 = Part("Connector", "TestPoint", ref="TP1", value="touch spring",
+# Touch Crystal: the electrode is a gold spring-loaded (pogo) pin standing on
+# a 2.5 mm pad at the centre of the crystal cluster (photographed close up),
+# pressing on the crystal. Surface-mount: the ESP32 module is right behind it
+# on the other side, where a plated hole would come out under the module.
+# The pin is a part of its own, so this one stays in the bill of materials.
+tp1 = Part("Connector", "TestPoint", ref="TP1", value="touch pogo pin",
            footprint="TestPoint:TestPoint_Pad_D2.5mm")
 net("TOUCH", u1["IO27"], tp1[1])
 

@@ -97,10 +97,18 @@ RIO0 IO0 GND 1e9
 BACQ VCC GND I = v(VCC,GND) > 2.7 ? 0.031 : v(VCC,GND) / 1k
 .ends MAXM10S
 
-.subckt ICM20948 VDD GND REGOUT
-BRUN VDD GND I = v(VDD,GND) > 1.7 ? 0.003 : v(VDD,GND) / 10k
-VREG REGOUT GND 1.8
-.ends ICM20948
+* LSM6DSV16X: gyroscope and accelerometer both in high-performance mode,
+* 0.65 mA (DS13510 Rev 4, Table 4, IddHP). Below its 1.71 V minimum it is
+* treated as a resistive load.
+.subckt LSM6DSV16X VDD GND
+BRUN VDD GND I = v(VDD,GND) > 1.71 ? 0.00065 : v(VDD,GND) / 10k
+.ends LSM6DSV16X
+
+* LIS2MDL: high-resolution mode at 20 Hz, 200 uA (DS12144 Rev 6, Table 4,
+* Idd_HR).
+.subckt LIS2MDL VDD GND
+BRUN VDD GND I = v(VDD,GND) > 1.71 ? 0.0002 : v(VDD,GND) / 10k
+.ends LIS2MDL
 
 * One XL-1515RGBC-WS2812B. Its datasheet: 0.5 mA for the IC (IDD typ), 5 mA
 * per colour channel, so 15.5 mA at full white. Lit, the bench sets the

@@ -98,30 +98,38 @@ def yageo(v):
 MPN = {
     "100n": ("Samsung", "CL10B104KB8NNNC", "0603 X7R 50 V"),
     # the cell-sense divider's ratio is what the firmware's ADC calibration
-    # expects (see ../README.md); 108k is an E192 value, and 0.1% keeps the
+    # expects (see ../README.md): 113k over 102k, both E96, is within 0.08%
+    # of it (the reference board's 120k would need a 108.2k nobody makes), and 0.1% keeps the
     # ratio within 0.2% so the firmware's 3.15 / 3.45 / 3.65 V steps hold
-    "120k": ("Yageo", "RT0603BRD07120KL", "0603 0.1% thin film: cell-sense divider"),
-    "108k": ("Yageo", "RT0603BRD07108KL", "0603 0.1% thin film: cell-sense divider"),
+    "113k": ("Yageo", "RT0603BRD07113KL", "0603 0.1% thin film: cell-sense divider"),
+    "102k": ("Yageo", "RT0603BRD07102KL", "0603 0.1% thin film: cell-sense divider"),
     "1u": ("Samsung", "CL10A105KB8NNNC", "0603 X5R 50 V"),
     "10u": ("Samsung", "CL21A106KAYNNNE", "0805 X5R 25 V"),
     "1N4148W": ("Diodes Inc.", "1N4148W-7-F", ""),
     "XL-1515RGBC-WS2812B": ("XINGLIGHT", "XL-1515RGBC-WS2812B", "1.5 x 1.5 mm addressable RGB; moisture sensitive, bake per datasheet"),
     "BAT54W": ("Diodes Inc.", "BAT54W-7-F", ""),
-    "red": ("Everlight", "19-217/R6C-AL1M2VY/3T", "0603 red"),
+    # Everlight 19-217 0603s were the first choice; DigiKey lists the red one
+    # "Not Available" and the green "Discontinued" (checked 2026-09-30)
+    "red": ("Lite-On", "LTST-C191KRKT", "0603 red"),
+    "green": ("Lite-On", "LTST-C191KGKT", "0603 green"),
     "USB4135-GF-A": ("GCT", "USB4135-GF-A", "power-only USB-C, 6 pin"),
-    "LiPo 1000mAh": ("JST", "S2B-PH-SM4-TB(LF)(SN)", "battery connector; the cell is off-board (totem-offboard.csv)"),
+    "LiPo 1000mAh": ("JST", "S2B-PH-K-S(LF)(SN)", "battery connector, THT side entry; the cell is off-board (totem-offboard.csv)"),
     "u.FL": ("Hirose", "U.FL-R-SMT-1(10)", "GNSS antenna connector"),
-    "electret": ("CUI Devices", "CMC-4013-SMT-TR", ""),
+    # the CMC-4013-SMT-TR is obsolete; the -2 is the current part, same 4 mm
+    # can and -42 dB, and its pads fall inside this footprint's
+    "electret": ("Same Sky (CUI Devices)", "CMC-4013-2-SMT-TR", ""),
     "AO3401A": ("Alpha & Omega", "AO3401A", ""),
     "2N7002": ("Nexperia", "2N7002,215", ""),
-    "power": ("C&K", "PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
-    "SOS": ("C&K", "PTS645SH95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
-    "touch spring": ("-", "-", "conical contact spring on a 2.5 mm pad, height to suit the crystal; hand-fitted, see ASSEMBLY.md"),
+    "power": ("C&K", "PTS645SK95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
+    "SOS": ("C&K", "PTS645SK95SMTR92 LFS", "6x6 SMD tact, 9.5 mm; stem length to be matched to the rear cover"),
+    "touch pogo pin": ("-", "-", "SMT spring-loaded (pogo) pin on a 2.5 mm pad, length to suit the crystal; hand-fitted, see ASSEMBLY.md"),
     "ESP32-WROOM-32E": ("Espressif", "ESP32-WROOM-32E-N4", "4 MB flash, as the firmware image"),
     "MAX-M10S": ("u-blox", "MAX-M10S-00B", "moisture sensitive, bake per u-blox before reflow"),
     "TP4056-42-ESOP8": ("NanJing Top Power", "TP4056-42-ESOP8", ""),
     "AP2112K-3.3": ("Diodes Inc.", "AP2112K-3.3TRG1", ""),
-    "ICM-20948": ("TDK InvenSense", "ICM-20948", ""),
+    "LSM6DSV16X": ("STMicroelectronics", "LSM6DSV16XTR", "6-axis IMU, LGA-14L; moisture sensitive"),
+    "LIS2MDL": ("STMicroelectronics", "LIS2MDLTR", "3-axis magnetometer, LGA-12; keep it clear of magnetised tools and parts"),
+    "220n": ("Samsung", "CL10B224KB8NNNC", "0603 X7R 50 V, low ESR: the LIS2MDL's set/reset capacitor"),
 }
 
 

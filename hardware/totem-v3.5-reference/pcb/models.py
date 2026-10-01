@@ -1,18 +1,15 @@
 """Give every part a 3D model, so the board's STEP export (fab.py) is
 complete enough to check against a case.
 
-KiCad's library has no model for three of the parts here, and names the
-IMU's by a footprint variant it does not ship:
+KiCad's library has no model for two of the parts here:
 
   XL-1515 LEDs (67)  no model anywhere: a 1.55 x 1.5 x 0.65 mm box, the
                      datasheet's body (see the footprint's descr)
   MAX-M10S (U2)      the library's ublox_MAX.step is not installed: a
                      9.7 x 10.1 x 2.5 mm box, u-blox's package drawing
-  JST PH SM4 (J2)    not installed: a box on the footprint's own F.Fab
-                     body outline, 4.75 mm tall (nominal; check the part)
-  ICM-20948 (U5)     the footprint names QFN-24_3x3mm_P0.4mm_EP1.7x1.54mm,
-                     which is not shipped; the plain QFN-24 3x3 model is
-                     the same body
+
+Everything else, the LSM6DSV16X's and LIS2MDL's LGAs and the THT JST
+included, uses the model its library footprint names.
 
 The boxes are envelopes for mechanical fit, not detailed models. They are
 written as plain STEP solids to schematic/totem.3dshapes/ and referenced
@@ -37,9 +34,7 @@ LIBS = "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints"
 BOXES = {
     "LED_XL-1515RGBC-WS2812B": (os.path.join(PROJ, "totem.pretty"), (1.55, 1.5), 0.65),
     "ublox_MAX": (os.path.join(LIBS, "RF_GPS.pretty"), (9.7, 10.1), 2.5),
-    "JST_PH_S2B-PH-SM4-TB_1x02-1MP_P2.00mm_Horizontal": (os.path.join(LIBS, "Connector_JST.pretty"), None, 4.75),
 }
-QFN_MODEL = "${KICAD10_3DMODEL_DIR}/Package_DFN_QFN.3dshapes/QFN-24_3x3mm_P0.4mm.step"
 
 
 def fab_box(lib, name):
@@ -139,12 +134,9 @@ def main():
     count = {}
     for fp in B.GetFootprints():
         name = fp.GetFPID().GetLibItemName().wx_str()
-        if name in made:
-            path = made[name]
-        elif fp.GetReference() == "U5":
-            path = QFN_MODEL
-        else:
+        if name not in made:
             continue
+        path = made[name]
         # Replaced, not edited: iterating Models() hands out copies
         models = fp.Models()
         models.clear()

@@ -9,7 +9,7 @@
 *   ESP32-WROOM-32E operating range   3.0 .. 3.6 V
 *   ESP32 RF transmit, peak            500 mA  (worst case quoted for 802.11b)
 *   MAX-M10S during acquisition         ~31 mA
-*   ICM-20948 gyro + accel + mag        ~3 mA
+*   LSM6DSV16X + LIS2MDL               0.85 mA (0.65 + 0.20, their datasheets)
 *
 * The LED strips are deliberately NOT on this rail: they run from the cell.
 * See led_budget.cir for why they cannot be here.
@@ -23,7 +23,7 @@
 .param Rpass=0.2
 .param Iesp=500m
 .param Ignss=31m
-.param Iimu=3m
+.param Iimu=0.85m
 .param Vespmin=3.0
 
 Vbat vbat 0 dc 4.2

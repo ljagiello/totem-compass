@@ -25,7 +25,9 @@ nothing contradicts it.
   **To build one:** a working board designed from this page is in
   [`hardware/totem-v3.5-reference`](https://github.com/ljagiello/totem-compass/tree/main/hardware/totem-v3.5-reference).
   It has the reference board's outline and its major parts where the photographs put them;
-  its passive values and traces are its own. The file to hand to a fab and an assembler is
+  its passive values and traces are its own, and it uses parts in production where the
+  original's are not: an ST LSM6DSV16X and LIS2MDL in place of the obsolete ICM-20948, among
+  others (its README, Parts changed). The file to hand to a fab and an assembler is
   `pcb/fab/totem-v3.5-assembly-package.zip`, with
   [`ASSEMBLY.md`](https://github.com/ljagiello/totem-compass/blob/main/hardware/totem-v3.5-reference/pcb/ASSEMBLY.md)
   inside: what to order, how to assemble, bring up and program the board.
@@ -42,6 +44,8 @@ nothing contradicts it.
 | U5 | **InvenSense ICM-20948** | `I2948`, `B23LA1`, `2602` | The 9-axis part: gyroscope, accelerometer **and** magnetometer in one 3x3 mm QFN-24 on the LED side, on I²C bus 0. The firmware names it — `c_icm20948_mag.Icm20948Mag` ([Navigation](/subsystems/navigation)) — and its on-die magnetometer is an AK09916 reached through `imu.mag()`. The marking agrees: `I2948` is TDK's top mark for the ICM-20948, `2602` a 2026 week-2 date code. It is legible only at a grazing angle under flash; head-on the lid looks blank, and an earlier version of this table listed the two views as two parts (`U5`, unmarked, and `U6`, a "SOIC-14" — the QFN's edge pads seen obliquely). **There is no separate magnetometer chip on this board** |
 | D? | **Diode** | `A7`, SOD-123 | The standard marking for a 1N4148W small-signal diode |
 | Q? | **SOT-23-5** | `J22B` (also read `J2ZB`) | On the LED side beside the IMU; nets untraced |
+| Q? | **SOT-23** | `63K5`, `UMW` | On the LED side in the cluster below the crystal; UMW is the maker's mark. Part not identified, nets untraced |
+| D?, D? | **Two 0603 single-colour LEDs** | — | On the LED side, inside the crystal below the touch post, each with an 0603 resistor beside it (close-up photographs). **Inferred:** the TP4056's charge-status LEDs (`CHRG`, `STDBY`), which nothing in the firmware drives. Colours not visible unlit |
 | — | **Chip resistor** | `124` | 120 kΩ |
 | MK1 | **MEMS microphone** | — | Ported can beside the halo. Read as an ADC level, not an audio peripheral |
 | DS1…DS60 | **Halo ring** | — | 60 addressable RGB LEDs, WS2812-style, GRB order (**confirmed**). **1.5 x 1.5 mm packages**: measured 1.50 mm wide at a 1.91 mm pitch on an 18.24 mm radius (`hardware/totem-v3.5-reference/measure/`), which a 2 x 2 mm WS2812B-2020 could not fit; castellated pads on the ring's outer and inner edges, as the XL-1515RGBC-WS2812B's |
@@ -49,9 +53,9 @@ nothing contradicts it.
 | DS68 | **SOS indicator** | — | A discrete LED on its own pin, not part of either strip |
 | SW1 | **Power button** | black cap | Tactile switch. Also the power latch — see below |
 | SW2 | **SOS button** | red cap | Tactile switch |
-| TP1 | **Touch Crystal pad** | — | Capacitive pad under the light pipe |
-| J1 | **USB-C receptacle** | — | Charging only. The board has no USB-UART bridge (the one QFN is the IMU, above) and the ESP32-WROOM-32E has no USB of its own, so no data can reach the module through this port; updates come over Wi-Fi ([OTA](/subsystems/ota)) |
-| J2 | **JST battery connector** | — | Two-pin, red and black |
+| TP1 | **Touch Crystal post** | — | A gold spring-loaded (pogo) pin standing on a pad at the centre of the crystal, pressing on the light pipe (close-up photographs) |
+| J1 | **USB-C receptacle** | — | Through-hole shell: four plated slots and two round holes show on the LED side. Charging only. The board has no USB-UART bridge (the one QFN is the IMU, above) and the ESP32-WROOM-32E has no USB of its own, so no data can reach the module through this port; updates come over Wi-Fi ([OTA](/subsystems/ota)) |
+| J2 | **JST battery connector** | — | Two-pin, red and black. Through-hole: its two pins' solder joints show on the LED side, 1.96 mm apart (the PH series' 2 mm pitch) |
 | J3 | **u.FL / IPEX connector** | — | One coaxial pigtail, sitting **directly below U2** with U1 carrying its own PCB antenna. The GNSS antenna |
 | BT1 | **LiPo cell** | `805080`, `1000mAh`, `3.7Wh`, `3.7V`, dated `2023.05.18` | Single cell in the housing |
 | — | **PCB** | `Totem v3.5`, `hs-pcba.com` | Board revision and contract manufacturer |

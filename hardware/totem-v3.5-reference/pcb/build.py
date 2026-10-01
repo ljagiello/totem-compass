@@ -164,7 +164,8 @@ for z in u1.Zones():
 # ------------------------------------------------------------ legalise
 # Photo-measured parts stay put; this design's own small parts are pushed
 # apart where their courtyards overlap, and back inside the outline.
-FIXED = {"U1", "U2", "U3", "U4", "U5", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1", "C16", "C15"} | \
+FIXED = {"U1", "U2", "U3", "U4", "U5", "U6", "J1", "J2", "J3", "SW1", "SW2", "D3", "Q4", "TP1", "MK1", "C16", "C15",
+         "D4", "D5", "R27", "R28"} | \
     {r for r in placement.P if re.fullmatch(r"D(1\d\d|2\d\d)", r)}
 poly = json.load(open(os.path.join(HERE, "..", "measure", "outline2_poly.json")))
 
@@ -320,11 +321,16 @@ for i, ref in enumerate(cry):
         if best is None or s < best[0]:
             best = (s, a)
     FP[ref].SetOrientationDegrees(best[1])
-# IMU: pin 1 at the chip's upper-left seen from the radio side, pins 1..6
-# running left to right along its top edge (see the hardware README)
-cu5 = (placement.P["U5"]["x"], placement.P["U5"]["y"])
-choose(FP["U5"], 0, lambda p: p["1"][0] < cu5[0] - 0.5 and p["1"][1] > cu5[1] + 0.5
-       and p["6"][0] > p["1"][0] + 1.5 and abs(p["6"][1] - p["1"][1]) < 0.3)
+# Motion sensor and magnetometer: each with pin 1 at its upper-left seen from
+# the radio side and pins 1..4 running along its top edge (on the LED side the
+# package is seen mirrored, which puts the pin-1 column along the top rather
+# than down the left), so the two sit square to each other and to the board.
+# Their axes in the board's frame follow from that and ST's pin-1 drawings
+# (README, The board).
+for ref in ("U5", "U6"):
+    c = (placement.P[ref]["x"], placement.P[ref]["y"])
+    choose(FP[ref], 0, lambda p, c=c: p["1"][0] < c[0] - 0.4 and p["1"][1] > c[1] + 0.4
+           and abs(p["4"][1] - p["1"][1]) < 0.2 and p["4"][0] > p["1"][0] + 1.2)
 
 # microphone: round, so its turn is free; point its ring's gap (see
 # mic_footprint.py) down and toward the edge, where the radio side has room
