@@ -30,22 +30,28 @@ design's reasoning is in `../README.md`.
 | Impedance | **One controlled line:** GNSS_RF, 0.38 mm on F.Cu over In1 = 50 Ω on that stack-up. On any other stack-up, re-size it first |
 | Copper | 1 oz outer, 0.5 oz inner |
 | Minimums used | Track and space 0.13 mm; vias 0.45 mm / 0.2 mm drill (power 0.6 / 0.3); copper 0.3 mm from the edge |
-| Finish | **ENIG**: 0.4 mm-pitch QFN (U5), castellated modules (U1, U2) and 1.5 mm LEDs want flat pads |
+| Finish | **ENIG**: the 0.5 mm-pitch LGAs (U5, U6), castellated modules (U1, U2) and 1.5 mm LEDs want flat pads |
 | Mask / silk | Green / white both sides, as the reference board. Vias tented |
 | Test | Electrical test against `totem-netlist.ipc` |
 
 ## Assembly
 
-**Double-sided SMT, reflow both sides.** Assemble the **bottom (LED side)
-first**: small parts only (ring, crystal, IMU, microphone, latch). Then
-the **top (radio side)**: ESP32 module, GNSS module, charger, USB-C, JST,
-switches. The heavy parts then see one reflow, and upright.
+**Double-sided SMT, reflow both sides, and one through-hole part.**
+Assemble the **bottom (LED side) first**: small parts only (ring, crystal,
+motion sensor and magnetometer, microphone, charge LEDs, latch). Then the
+**top (radio side)**: ESP32 module, GNSS module, charger, USB-C,
+switches. The heavy parts then see one reflow, and upright. **J2**, the
+battery connector, is through-hole: hand or selective solder it last.
 
-- **Stencil:** 0.12 mm, both sides. The ring's 1.5 mm LEDs and U5's
-  0.4 mm pitch set this.
-- **Moisture:** the LEDs (D100-D159, D200-D206), U2 (MAX-M10S) and U5
-  (ICM-20948) are moisture sensitive. Bake to their datasheets if their
-  floor life has run out.
+- **Stencil:** 0.12 mm, both sides. The ring's 1.5 mm LEDs and the
+  sensors' 0.5 mm pitch set this.
+- **Moisture:** the LEDs (D100-D159, D200-D206), U2 (MAX-M10S), U5
+  (LSM6DSV16X) and U6 (LIS2MDL) are moisture sensitive. Bake to their
+  datasheets if their floor life has run out.
+- **The magnetometer (U6):** keep magnetised tools, magnetic pick-up heads
+  and magnets away from it once placed. A strong field shifts its offset
+  (its datasheet excludes drift from magnetic shock from its offset
+  figure); calibrate it in the finished unit regardless.
 - **Profile:** lead-free (SAC305). The WS2812-type LEDs are the most
   heat-sensitive parts on the board: keep the peak and time above
   liquidus within the XL-1515 datasheet's limits.
@@ -55,21 +61,23 @@ switches. The heavy parts then see one reflow, and upright.
   ring: every LED's **DI and VDD pads face out** from the ring, and its
   triangle mark is on the DO/GND side. D100 is the LED nearest the buttons,
   and the chain runs counter-clockwise seen from the LED side.
-- **Inspection:** X-ray U5 (QFN-24, 0.4 mm) and the modules' ground pads;
-  AOI the ring for tombstoned or rotated LEDs.
+- **Inspection:** X-ray U5 and U6 (LGA, no visible joints) and the
+  modules' ground pads; AOI the ring for tombstoned or rotated LEDs.
 - **Not placed:** TP2-TP7 are bare pads for a pogo jig. There is nothing to
   place on them.
 
 ### By hand, after reflow
 
-1. **TP1, the touch spring.** A conical contact spring soldered to the
-   2.5 mm pad in the centre of the crystal, LED side. Its height sets the
-   pressure on the crystal. Match it to the reference unit (see
-   "Before ordering").
-2. **Cell:** 3.7 V 1000 mAh Li-Po on J2. **J2 pin 1 is + (VBAT), pin 2 is
+1. **TP1, the touch pogo pin.** A gold surface-mount spring-loaded pin
+   soldered upright on the 2.5 mm pad in the centre of the crystal, LED
+   side, as on the reference board. Its length sets the pressure on the
+   crystal. Match it to the reference unit (see "Before ordering").
+2. **J2**, if the assembler did not fit it: S2B-PH-K-S, through-hole, its
+   opening toward the board's centre and its housing over the corner.
+3. **Cell:** 3.7 V 1000 mAh Li-Po on J2. **J2 pin 1 is + (VBAT), pin 2 is
    GND.** JST PH leads are not wired the same way by every seller, so check
    the plug before connecting.
-3. **GNSS antenna** on J3 (U.FL).
+4. **GNSS antenna** on J3 (U.FL).
 
 ## Bring-up
 
@@ -82,8 +90,10 @@ Do it without a cell first, from a current-limited bench supply.
 3. **Press SW1 (power):** VSYS comes up, and +3V3 on TP2 reads **3.3 V**.
    It stays on after release, because the latch holds itself from +3V3.
 4. **USB-C on J1**, with the supply swapped for a discharged cell: the
-   TP4056 charges at **600 mA** (R5 = 2 k). The red LED D3 is driven by
-   the firmware (SOS), not by the charger.
+   TP4056 charges at **600 mA** (R5 = 2 k). The charge LEDs in the crystal
+   show it: **D4 (red) while charging, D5 (green) once full**, both only
+   with USB-C plugged in. D3, the red LED by the SOS button, is the
+   firmware's (SOS), not the charger's.
 5. **Program** (below). The firmware then drives the ring and the crystal.
    All 67 pixels at full white is 0.62 C at the firmware's brightness. Run
    that once to check every pixel, and look for a dark one in the chain.
@@ -116,11 +126,12 @@ unit (`../README.md`, The board):
 
 - **The right edge:** its height, and the USB-C slot to the lower-right
   notch. Known only to ±1.3 mm.
-- **USB-C and JST positions against the case.** The USB-C's plug face sits
-  about 0.6 mm further in than the original's, the JST about 2 mm.
+- **USB-C position against the case.** Its plug face sits about 0.6 mm
+  further in than the original's. The JST is on the original's pin
+  positions.
 - **Switch stem length** against the rear cover. The BOM names a 9.5 mm
   PTS645.
-- **The touch spring's height.**
+- **The touch pogo pin's length** and barrel diameter.
 
 **Known limit:** the XL-1515 LEDs are rated from 3.5 V, and the ring runs
 from the cell, which the firmware takes down to 3.15 V. The reference board

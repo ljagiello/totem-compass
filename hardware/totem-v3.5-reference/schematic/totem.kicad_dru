@@ -20,3 +20,12 @@
 (rule "SOS LED between the SOS switch's legs"
     (constraint courtyard_clearance (min -1mm))
     (condition "(A.Reference == 'D3' && B.Reference == 'SW2') || (A.Reference == 'SW2' && B.Reference == 'D3')"))
+
+# The JST battery connector is through-hole and overhangs the lower-right
+# chamfer, as the reference board's does (its pins are measured from their
+# solder joints on the LED side). Its housing's silkscreen outline therefore
+# crosses the board edge; the fab clips what lies outside.
+(rule "JST housing over the corner chamfer: silkscreen"
+    (layer "F.Silkscreen")
+    (constraint silk_clearance (min -10mm))
+    (condition "A.memberOfFootprint('J2') && B.Layer == 'Edge.Cuts'"))

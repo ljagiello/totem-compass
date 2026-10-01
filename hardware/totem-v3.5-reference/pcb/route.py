@@ -99,6 +99,17 @@ ANNULUS_OK = {"VLED", "/RING_D0"}
 d_keep_tr = [ndimage.distance_transform_edt(~keep_tr[L]) * G for L in (F, B)]
 d_keep_via = ndimage.distance_transform_edt(~keep_via) * G
 d_annulus = ndimage.distance_transform_edt(~annulus) * G
+# The magnetometer: "keep currents higher than 10 mA a few millimeters away
+# from the sensor IC" (LIS2MDL DS12144, section 5.2), because a trace's own
+# field adds to the Earth's and turns into heading error. No power net's
+# track or via comes within MAG_KEEPOUT of its centre, on either side.
+MAG_KEEPOUT = 3.5
+_u6 = [(p["x"], p["y"]) for p in g["pads"] if p["ref"] == "U6"]
+if _u6:
+    _mc = np.mean(_u6, axis=0)
+    d_mag = np.maximum(np.hypot(X0 + xx * G - _mc[0], Y0 + yy * G - _mc[1]) - MAG_KEEPOUT, 0)
+else:
+    d_mag = np.full((NY, NX), 99.0)
 gnd_pour_b = raster([z for z in g["zones"] if z["name"] == "GND inside ring"][0]["poly"])
 
 nets = sorted({p["net"] for p in g["pads"] if p["net"]} | set(g["nets"]))
@@ -181,12 +192,16 @@ def free_maps(nid, w, c, pads_only=False, annulus_ok=False):
             (dist_edge >= hw + 0.3 + EDGE_MARGIN) & (d_keep_tr[L] >= hw + MARGIN)
         if L == B and not annulus_ok:
             m &= d_annulus >= hw + MARGIN       # no other net's track across the band
+        if nets[nid] in POWER:
+            m &= d_mag >= hw                    # and no supply current past the magnetometer
         fr.append(m)
         ok_v.append((d_o >= vr + max(c, 0.15) + MARGIN) & (d_p >= vr + 0.2 + MARGIN) & (d_r >= vr + 0.3 + MARGIN))
     via = ok_v[F] & ok_v[B] & (dist_edge >= vr + 0.3 + EDGE_MARGIN) & (d_keep_via >= vr + MARGIN) & ~keep & \
         (dist_pad[F] >= vr + 0.1) & (dist_pad[B] >= vr + 0.1)
     if not annulus_ok:
         via &= d_annulus >= vr + MARGIN              # nor via: a via plugs it as well
+    if nets[nid] in POWER:
+        via &= d_mag >= vr
     vm = np.zeros((NY, NX), bool)
     for x, y in ([] if pads_only else via_centres()):
         i, j = ij(x, y)
@@ -478,15 +493,17 @@ def in_gnd_pour(p):
 
 
 # GND pads the LED side's inner pour already covers need no via of their own
-# the IMU's supply pins: a local rail on the LED side to its own passives, and
-# one via from the passive; seven vias round a 3 mm QFN do not fit
-GROUPS = {"+3V3": ["U5", "C7", "R7", "R8"], "GND": ["U5", "C1", "C8", "R26"]}
+# the sensors' supply pins: a local rail on the LED side to their own
+# passives, and one via from a passive; a via per pin round a 2-3 mm LGA
+# does not fit
+GROUPS = [("+3V3", ["U5", "C1", "C7", "R7", "R8"]), ("GND", ["U5", "C1", "C7", "R26"]),
+          ("+3V3", ["U6", "C19", "C20", "C21"]), ("GND", ["U6", "C8", "C19", "C20", "C21"])]
 local = []
 grouped = set()
-for n, refs in GROUPS.items():
+for n, refs in GROUPS:
     ps = [p for p in pads_by_net.get(n, []) if p["ref"] in refs and B in p["cells"]]
     if len(ps) >= 2:
-        ps.sort(key=lambda p: p["ref"] == "U5")          # start from a passive
+        ps.sort(key=lambda p: p["ref"] in ("U5", "U6"))  # start from a passive
         local.append(new("net", n, pads=ps))
         grouped |= {id(p) for p in ps[1:]}
 fans = [new("fan", n, pad=p) for n in ("GND", "+3V3") for p in pads_by_net.get(n, [])

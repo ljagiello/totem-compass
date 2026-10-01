@@ -20,14 +20,16 @@
 * ADC's well-known input offset. That it lands there is the evidence the
 * model is the right shape.
 *
-* 120k over 108k gives k = 0.4737. 120k because a resistor marked 124 is on
-* the board; 108k is the E96 value the ratio then asks for.
+* 113k over 102k gives k = 0.4744, 0.08% from the 0.4740 the firmware's
+* calibration asks for. The reference board's top leg is marked 124 (120k),
+* but under 120k the ratio asks for 108.2k, which no standard series has,
+* and the nearest made part (109k) reads 17 mV high: over this deck's bar.
 *
 * This verifies the reconstruction, not the Totem: the real divider was
 * never traced.
 
-.param Rtop=120k
-.param Rbot=108k
+.param Rtop=113k
+.param Rbot=102k
 .param VFS=3.3
 .param Voff=97.7m
 

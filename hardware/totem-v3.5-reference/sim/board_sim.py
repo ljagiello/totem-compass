@@ -41,7 +41,8 @@ from kicad_sexp import children, parse, sval  # noqa: E402
 MODEL = {
     "ESP32-WROOM-32E": ("ESP32", ["2", "1", "3", "26", "31", "25"]),
     "MAX-M10S": ("MAXM10S", ["8", "1"]),
-    "ICM-20948": ("ICM20948", ["13", "18", "10"]),
+    "LSM6DSM": ("LSM6DSV16X", ["8", "6"]),       # the LSM6DSV16X, on the LSM6DSM symbol
+    "LIS2MDL": ("LIS2MDL", ["9", "6"]),
     "TP4056-42-ESOP8": ("TP4056", ["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
     "AP2112K-3.3": ("AP2112K", ["1", "2", "3", "4", "5"]),
     "AO3401A": ("AO3401A", ["1", "2", "3"]),
