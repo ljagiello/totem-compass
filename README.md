@@ -130,3 +130,5 @@ hosts a Smart Group and never sends demi-god commands.
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+Created by [Lukasz Jagiello](https://lukasz.jagiello.org).
