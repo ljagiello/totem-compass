@@ -73,7 +73,17 @@
   "footer": {
     "socials": {
       "github": "https://github.com/ljagiello/totem-compass"
-    }
+    },
+    "links": [
+      {
+        "items": [
+          {
+            "label": "Lukasz Jagiello",
+            "href": "https://lukasz.jagiello.org"
+          }
+        ]
+      }
+    ]
   },
   "integrations": {
     "ga4": {
