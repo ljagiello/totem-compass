@@ -131,4 +131,4 @@ hosts a Smart Group and never sends demi-god commands.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
-Created by [Lukasz Jagiello](https://lukasz.jagiello.org).
+Created by [Lukasz Jagiello](https://lukasz.jagiello.org). Write-up: [lukasz.jagiello.org/projects/totem-compass](https://lukasz.jagiello.org/projects/totem-compass).
