@@ -80,6 +80,10 @@
           {
             "label": "Lukasz Jagiello",
             "href": "https://lukasz.jagiello.org"
+          },
+          {
+            "label": "Project write-up",
+            "href": "https://lukasz.jagiello.org/projects/totem-compass"
           }
         ]
       }
